@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mostrar-aviso"
+description = "Enables the mostrar_aviso command without any pre-configured scope."
+commands.allow = ["mostrar_aviso"]
+
+[[permission]]
+identifier = "deny-mostrar-aviso"
+description = "Denies the mostrar_aviso command without any pre-configured scope."
+commands.deny = ["mostrar_aviso"]

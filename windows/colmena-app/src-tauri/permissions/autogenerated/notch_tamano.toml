@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notch-tamano"
+description = "Enables the notch_tamano command without any pre-configured scope."
+commands.allow = ["notch_tamano"]
+
+[[permission]]
+identifier = "deny-notch-tamano"
+description = "Denies the notch_tamano command without any pre-configured scope."
+commands.deny = ["notch_tamano"]

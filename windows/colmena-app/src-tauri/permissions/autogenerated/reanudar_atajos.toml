@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reanudar-atajos"
+description = "Enables the reanudar_atajos command without any pre-configured scope."
+commands.allow = ["reanudar_atajos"]
+
+[[permission]]
+identifier = "deny-reanudar-atajos"
+description = "Denies the reanudar_atajos command without any pre-configured scope."
+commands.deny = ["reanudar_atajos"]

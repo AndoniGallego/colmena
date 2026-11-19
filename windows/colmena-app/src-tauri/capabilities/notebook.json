@@ -1,0 +1,5 @@
+{
+  "identifier": "notebook",
+  "windows": ["notebook"],
+  "permissions": ["allow-guardar-notebook", "allow-leer-notebook"]
+}

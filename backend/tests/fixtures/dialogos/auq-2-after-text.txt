@@ -1,0 +1,40 @@
+
+❯ Usá la herramienta Edit para cambiar dos por DOS en notas.txt. Nada más.
+
+● Update(notas.txt)
+  ⎿  User rejected update to notas.txt
+      1  uno
+      2 -dos
+      2 +DOS
+      3  tres
+
+✻ Worked for 2s · done 0:40
+
+❯ Usá la herramienta AskUserQuestion para preguntarme qué color prefiero, con 3 opciones (Rojo, Verde, Azul, cada una
+  con descripción). Una sola pregunta, sin multiSelect.
+
+● User answered Claude's questions:
+  ⎿  · ¿Qué color preferís? → Verde
+
+● Elegiste Verde.
+
+✻ Worked for 3s · done 0:40
+
+❯ Usá la herramienta AskUserQuestion para preguntarme qué fruta prefiero, con 3 opciones (Manzana, Pera, Uva, cada una
+  con descripción). Una sola pregunta, sin multiSelect.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Fruta
+
+¿Qué fruta preferís?
+
+  1. Manzana
+     Fruta crujiente y jugosa, dulce o ácida según la variedad.
+  2. Pera
+     Fruta suave y dulce, de pulpa jugosa y textura granulada.
+  3. Uva
+     Fruta pequeña en racimos, dulce y fácil de comer de a una.
+❯ 4. Frutilla
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · ctrl+g to edit in Vim · Esc to cancel

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-guardar-atajo"
+description = "Enables the guardar_atajo command without any pre-configured scope."
+commands.allow = ["guardar_atajo"]
+
+[[permission]]
+identifier = "deny-guardar-atajo"
+description = "Denies the guardar_atajo command without any pre-configured scope."
+commands.deny = ["guardar_atajo"]

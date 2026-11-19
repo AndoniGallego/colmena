@@ -1,0 +1,374 @@
+{
+ "to_opciones": [
+  {
+   "nombre": "básico",
+   "entrada": {
+    "pregunta": " ¿Qué hacemos? ",
+    "opciones": [
+     {
+      "label": "A",
+      "detalle": "uno",
+      "recomendada": true
+     },
+     {
+      "label": "B"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "¿Qué hacemos?",
+    "opciones": [
+     {
+      "label": "A",
+      "detalle": "uno",
+      "recomendada": true
+     },
+     {
+      "label": "B",
+      "detalle": "",
+      "recomendada": false
+     }
+    ]
+   }
+  },
+  {
+   "nombre": "sin opciones",
+   "entrada": {
+    "pregunta": "¿?",
+    "opciones": []
+   },
+   "salida": null
+  },
+  {
+   "nombre": "no es objeto",
+   "entrada": [
+    1,
+    2
+   ],
+   "salida": null
+  },
+  {
+   "nombre": "opciones no es lista",
+   "entrada": {
+    "opciones": "a"
+   },
+   "salida": null
+  },
+  {
+   "nombre": "descarta labels vacíos y no objetos",
+   "entrada": {
+    "opciones": [
+     {
+      "label": "  "
+     },
+     3,
+     null,
+     [
+      "x"
+     ],
+     {
+      "label": "Sí",
+      "recomendada": "true"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "",
+    "opciones": [
+     {
+      "label": "Sí",
+      "detalle": "",
+      "recomendada": false
+     }
+    ]
+   }
+  },
+  {
+   "nombre": "tope de seis",
+   "entrada": {
+    "pregunta": "p",
+    "opciones": [
+     {
+      "label": "0"
+     },
+     {
+      "label": "1"
+     },
+     {
+      "label": "2"
+     },
+     {
+      "label": "3"
+     },
+     {
+      "label": "4"
+     },
+     {
+      "label": "5"
+     },
+     {
+      "label": "6"
+     },
+     {
+      "label": "7"
+     },
+     {
+      "label": "8"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "p",
+    "opciones": [
+     {
+      "label": "0",
+      "detalle": "",
+      "recomendada": false
+     },
+     {
+      "label": "1",
+      "detalle": "",
+      "recomendada": false
+     },
+     {
+      "label": "2",
+      "detalle": "",
+      "recomendada": false
+     },
+     {
+      "label": "3",
+      "detalle": "",
+      "recomendada": false
+     },
+     {
+      "label": "4",
+      "detalle": "",
+      "recomendada": false
+     },
+     {
+      "label": "5",
+      "detalle": "",
+      "recomendada": false
+     }
+    ]
+   }
+  },
+  {
+   "nombre": "recorta label largo",
+   "entrada": {
+    "opciones": [
+     {
+      "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "",
+    "opciones": [
+     {
+      "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "detalle": "",
+      "recomendada": false
+     }
+    ]
+   }
+  },
+  {
+   "nombre": "recorta con espacio al final del corte",
+   "entrada": {
+    "opciones": [
+     {
+      "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbb"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "",
+    "opciones": [
+     {
+      "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…",
+      "detalle": "",
+      "recomendada": false
+     }
+    ]
+   }
+  },
+  {
+   "nombre": "emoji cuenta como dos",
+   "entrada": {
+    "opciones": [
+     {
+      "label": "a🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "",
+    "opciones": [
+     {
+      "label": "a🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂…",
+      "detalle": "",
+      "recomendada": false
+     }
+    ]
+   }
+  },
+  {
+   "nombre": "detalle y pregunta largos",
+   "entrada": {
+    "pregunta": "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+    "opciones": [
+     {
+      "label": "L",
+      "detalle": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+     }
+    ]
+   },
+   "salida": {
+    "pregunta": "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp…",
+    "opciones": [
+     {
+      "label": "L",
+      "detalle": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd…",
+      "recomendada": false
+     }
+    ]
+   }
+  }
+ ],
+ "texto": [
+  {
+   "nombre": "dos tarjetas y texto",
+   "texto": "Hola\n\n```opciones\n{\"pregunta\": \"¿Uno?\", \"opciones\": [{\"label\": \"Sí\"}]}\n```\n\nY además:\n\n```opciones\n{\"pregunta\": \"¿Dos?\", \"opciones\": [{\"label\": \"No\"},]}\n```",
+   "preguntas": [
+    {
+     "pregunta": "¿Uno?",
+     "opciones": [
+      {
+       "label": "Sí",
+       "detalle": "",
+       "recomendada": false
+      }
+     ]
+    },
+    {
+     "pregunta": "¿Dos?",
+     "opciones": [
+      {
+       "label": "No",
+       "detalle": "",
+       "recomendada": false
+      }
+     ]
+    }
+   ],
+   "termina": true
+  },
+  {
+   "nombre": "texto después de la tarjeta",
+   "texto": "```opciones\n{\"opciones\": [{\"label\": \"A\"}]}\n```\nDespués te cuento.",
+   "preguntas": [
+    {
+     "pregunta": "",
+     "opciones": [
+      {
+       "label": "A",
+       "detalle": "",
+       "recomendada": false
+      }
+     ]
+    }
+   ],
+   "termina": false
+  },
+  {
+   "nombre": "comillas tipográficas",
+   "texto": "~~~opciones\n{“pregunta”: “¿Va?”, “opciones”: [{“label”: “Va”}]}\n~~~",
+   "preguntas": [
+    {
+     "pregunta": "¿Va?",
+     "opciones": [
+      {
+       "label": "Va",
+       "detalle": "",
+       "recomendada": false
+      }
+     ]
+    }
+   ],
+   "termina": true
+  },
+  {
+   "nombre": "bloque inválido no cuenta",
+   "texto": "```opciones\nno es json\n```",
+   "preguntas": [],
+   "termina": false
+  },
+  {
+   "nombre": "diagrama no es pregunta",
+   "texto": "```diagrama\n{\"nodos\": []}\n```",
+   "preguntas": [],
+   "termina": false
+  },
+  {
+   "nombre": "sin cerrar",
+   "texto": "Elegí:\n```opciones\n{\"opciones\": [{\"label\": \"A\"}]}",
+   "preguntas": [
+    {
+     "pregunta": "",
+     "opciones": [
+      {
+       "label": "A",
+       "detalle": "",
+       "recomendada": false
+      }
+     ]
+    }
+   ],
+   "termina": true
+  }
+ ],
+ "firma": [
+  {
+   "id": "s1",
+   "preguntas": [
+    {
+     "pregunta": "¿Qué hacemos?",
+     "opciones": [
+      {
+       "label": "A",
+       "detalle": "",
+       "recomendada": false
+      },
+      {
+       "label": "B",
+       "detalle": "",
+       "recomendada": false
+      }
+     ]
+    }
+   ],
+   "sig": "s1:o54vq0"
+  },
+  {
+   "id": "sesion-2",
+   "preguntas": [
+    {
+     "pregunta": "¿Seguimos? 🙂",
+     "opciones": []
+    },
+    {
+     "pregunta": "Otra",
+     "opciones": [
+      {
+       "label": "Ñandú",
+       "detalle": "",
+       "recomendada": true
+      }
+     ]
+    }
+   ],
+   "sig": "sesion-2:yec2ef"
+  }
+ ]
+}

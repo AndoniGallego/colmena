@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-guardar-origen"
+description = "Enables the guardar_origen command without any pre-configured scope."
+commands.allow = ["guardar_origen"]
+
+[[permission]]
+identifier = "deny-guardar-origen"
+description = "Denies the guardar_origen command without any pre-configured scope."
+commands.deny = ["guardar_origen"]

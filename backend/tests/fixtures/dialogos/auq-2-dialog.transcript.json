@@ -1,0 +1,42 @@
+{
+ "type": "assistant",
+ "timestamp": "2026-11-01T03:40:38.365Z",
+ "uuid": "eea40475-84ae-4793-b49f-fa6950771b3f",
+ "sessionId": "2553341c-fd0e-4e50-ae59-1fa494a6ad9b",
+ "message": {
+  "role": "assistant",
+  "content": [
+   {
+    "type": "tool_use",
+    "id": "toolu_01KrfbXwwEVfUgR4UsmJGFRp",
+    "name": "AskUserQuestion",
+    "input": {
+     "questions": [
+      {
+       "question": "¿Qué color preferís?",
+       "header": "Color",
+       "multiSelect": false,
+       "options": [
+        {
+         "label": "Rojo",
+         "description": "Color cálido e intenso, asociado a energía y pasión."
+        },
+        {
+         "label": "Verde",
+         "description": "Color de la naturaleza, asociado a calma y equilibrio."
+        },
+        {
+         "label": "Azul",
+         "description": "Color frío y sereno, asociado a confianza y tranquilidad."
+        }
+       ]
+      }
+     ]
+    },
+    "caller": {
+     "type": "direct"
+    }
+   }
+  ]
+ }
+}

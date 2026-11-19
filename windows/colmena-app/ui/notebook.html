@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Colmena</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 1.25rem;
+        color: #1a1a1a;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.5rem;
+        font-size: 1rem;
+      }
+      button {
+        margin-top: 0.75rem;
+        padding: 0.45rem 1rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      #error {
+        color: #b00020;
+        margin-top: 0.75rem;
+        min-height: 1.25rem;
+      }
+      p.hint {
+        font-size: 0.9rem;
+        color: #444;
+        margin-top: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <label for="host">Dirección de la notebook</label>
+      <input
+        id="host"
+        name="host"
+        type="text"
+        placeholder="192.168.1.50"
+        autocomplete="off"
+        required
+      />
+      <label for="usuario">Usuario</label>
+      <input
+        id="usuario"
+        name="usuario"
+        type="text"
+        placeholder="usuario"
+        autocomplete="username"
+        required
+      />
+      <p class="hint">En la red de casa. Ejemplo: 192.168.1.50 y usuario.</p>
+      <button type="submit">Guardar</button>
+    </form>
+    <div id="error" role="alert"></div>
+    <script>
+      const form = document.getElementById('form');
+      const error = document.getElementById('error');
+      const hostEl = document.getElementById('host');
+      const usuarioEl = document.getElementById('usuario');
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        error.textContent = '';
+        try {
+          const d = await window.__TAURI__.core.invoke('leer_notebook');
+          hostEl.value = d?.host ?? '';
+          usuarioEl.value = d?.usuario ?? '';
+        } catch (err) {
+          error.textContent = typeof err === 'string' ? err : String(err);
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        error.textContent = '';
+        const host = hostEl.value.trim();
+        const usuario = usuarioEl.value.trim();
+        try {
+          await window.__TAURI__.core.invoke('guardar_notebook', { host, usuario });
+        } catch (err) {
+          error.textContent = typeof err === 'string' ? err : String(err);
+        }
+      });
+    </script>
+  </body>
+</html>

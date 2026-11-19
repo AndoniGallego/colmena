@@ -1,0 +1,40 @@
+
+❯ Usá la herramienta AskUserQuestion para preguntarme qué color prefiero, con 3 opciones (Rojo, Verde, Azul, cada una
+  con descripción). Una sola pregunta, sin multiSelect.
+
+● User answered Claude's questions:
+  ⎿  · ¿Qué color preferís? → Verde
+
+● Elegiste Verde.
+
+✻ Worked for 3s · done 0:40
+
+❯ Usá la herramienta AskUserQuestion para preguntarme qué fruta prefiero, con 3 opciones (Manzana, Pera, Uva, cada una
+  con descripción). Una sola pregunta, sin multiSelect.
+
+● User answered Claude's questions:
+  ⎿  · ¿Qué fruta preferís? → Frutilla
+
+● Elegiste Frutilla, que no estaba entre las opciones, así que la escribiste vos.
+
+✻ Churned for 3s · done 0:41
+
+❯ Usá la herramienta AskUserQuestion con multiSelect=true para preguntarme qué lenguajes uso: 3 opciones (Python, PHP,
+  Go) con descripción. Una sola pregunta.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Lenguajes  ✔ Submit  →
+
+¿Qué lenguajes usás?
+
+❯ 1. [✔] Python
+         Lenguaje interpretado, versátil, muy usado en scripting, datos y backend.
+  2. [ ] PHP
+         Lenguaje orientado a web, base de PrestaShop y muchos CMS.
+  3. [ ] Go
+         Lenguaje compilado de Google, simple y con concurrencia nativa.
+  4. [ ] Type something
+     Submit
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

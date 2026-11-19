@@ -1,0 +1,40 @@
+
+❯ Usá la herramienta Bash para correr exactamente: touch d.txt. Nada más.
+
+  Ran 1 shell command
+
+● Corrí touch d.txt y no dio error, así que d.txt quedó creado. c.txt no existe, porque rechazaste ese comando.
+
+✻ Sautéed for 3s · done 0:39
+
+❯ Usá la herramienta Write para crear el archivo notas.txt con tres líneas: uno, dos, tres. Nada más.
+
+● Write(notas.txt)
+  ⎿  Wrote 3 lines to notas.txt
+      1 uno
+      2 dos
+      3 tres
+
+● Creé notas.txt con las tres líneas: uno, dos y tres.
+
+✻ Churned for 3s · done 0:40
+
+❯ Usá la herramienta Edit para cambiar dos por DOS en notas.txt. Nada más.
+
+● Update(notas.txt)
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Edit file
+ notas.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ 1  uno
+ 2 -dos
+ 2 +DOS
+ 3  tres
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to make this edit to notas.txt?
+ ❯ 1. Yes
+   2. Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)
+   3. No
+
+ Esc to cancel · Tab to amend

@@ -1,0 +1,5 @@
+{
+  "identifier": "origen",
+  "windows": ["origen"],
+  "permissions": ["allow-guardar-origen"]
+}

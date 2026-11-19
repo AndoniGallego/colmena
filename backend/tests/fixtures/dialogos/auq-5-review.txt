@@ -1,0 +1,39 @@
+
+
+✻ Churned for 3s · done 0:41
+
+❯ Usá la herramienta AskUserQuestion con multiSelect=true para preguntarme qué lenguajes uso: 3 opciones (Python, PHP,
+  Go) con descripción. Una sola pregunta.
+
+● User answered Claude's questions:
+  ⎿  · ¿Qué lenguajes usás? → Python, Go
+
+● Elegiste Python y Go.
+
+✻ Crunched for 3s · done 0:41
+
+❯ Usá la herramienta AskUserQuestion con multiSelect=true para preguntarme qué lenguajes uso: 3 opciones (Python, PHP,
+  Go) con descripción. Una sola pregunta.
+
+● User declined to answer questions
+  ⎿  · ¿Qué lenguajes usás? (Python / PHP / Go)
+
+✻ Churned for 2s · done 0:42
+
+❯ Usá la herramienta AskUserQuestion con DOS preguntas en una sola llamada: (1) '¿Qué editor usás?' con opciones Vim,
+  VSCode, Emacs (sin multiSelect) y (2) '¿Qué SO usás?' con opciones Linux, Mac (sin multiSelect). Con descripciones.
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Editor  ☒ SO  ✔ Submit  →
+
+Review your answers
+
+ ● ¿Qué editor usás?
+   → VSCode
+ ● ¿Qué SO usás?
+   → Mac
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel

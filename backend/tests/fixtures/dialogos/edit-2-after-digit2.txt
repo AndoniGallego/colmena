@@ -1,0 +1,40 @@
+
+
+● Corrí touch e.txt y no dio error, así que e.txt quedó creado.
+
+✻ Crunched for 2s · done 0:43
+
+❯ Usá la herramienta Bash para correr exactamente: touch f.txt. Nada más.
+
+  Ran 1 shell command
+
+● Corrí touch f.txt y no dio error, así que f.txt quedó creado.
+
+✻ Brewed for 2s · done 0:43
+
+❯ Usá la herramienta Bash para correr exactamente: touch g.txt. Nada más.
+
+  Ran 1 shell command
+
+● Corrí touch g.txt y no dio error, así que g.txt quedó creado.
+
+✻ Crunched for 2s · done 0:43
+
+❯ Usá la herramienta Edit para cambiar dos por DOS en notas.txt. Nada más.
+
+● Update(notas.txt)
+  ⎿  Added 1 line, removed 1 line
+      1  uno
+      2 -dos
+      2 +DOS
+      3  tres
+
+● Cambié dos por DOS en notas.txt, que ahora dice uno, DOS y tres.
+
+✻ Baked for 3s · done 0:43
+                                                                                                   ◐ medium · /effort
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Opus 5.5] proj | Ctx: 7% (70k) | MRs: 4 propio(s) / 2 a revisar | Cursor ● | Herdr ● | VPN ● | Perfil: legacy | v…
+  ⏵⏵ accept edits on (shift+tab to cycle)

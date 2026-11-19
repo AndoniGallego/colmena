@@ -1,0 +1,57 @@
+{
+ "type": "assistant",
+ "timestamp": "2026-11-01T03:42:15.369Z",
+ "uuid": "61db8c35-ecc2-43e6-b468-10a136c8974e",
+ "sessionId": "2553341c-fd0e-4e50-ae59-1fa494a6ad9b",
+ "message": {
+  "role": "assistant",
+  "content": [
+   {
+    "type": "tool_use",
+    "id": "toolu_01Fk3QUsradywAjzuqTmmk52",
+    "name": "AskUserQuestion",
+    "input": {
+     "questions": [
+      {
+       "question": "¿Qué editor usás?",
+       "header": "Editor",
+       "multiSelect": false,
+       "options": [
+        {
+         "label": "Vim",
+         "description": "Editor modal de terminal, liviano y muy configurable."
+        },
+        {
+         "label": "VSCode",
+         "description": "Editor gráfico de Microsoft con gran ecosistema de extensiones."
+        },
+        {
+         "label": "Emacs",
+         "description": "Editor extensible en Lisp, casi un entorno completo."
+        }
+       ]
+      },
+      {
+       "question": "¿Qué SO usás?",
+       "header": "SO",
+       "multiSelect": false,
+       "options": [
+        {
+         "label": "Linux",
+         "description": "Sistema operativo libre, común en desarrollo y servidores."
+        },
+        {
+         "label": "Mac",
+         "description": "macOS de Apple, basado en Unix con interfaz pulida."
+        }
+       ]
+      }
+     ]
+    },
+    "caller": {
+     "type": "direct"
+    }
+   }
+  ]
+ }
+}

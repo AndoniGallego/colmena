@@ -1,0 +1,38 @@
+[project]
+name = "orquestador"
+version = "0.1.0"
+description = "Colmena: orquestador personal de sesiones de Claude Code"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "tomli>=2.0; python_version < '3.11'",
+  "python-multipart>=0.0.32",
+  "pywebpush>=2.5.0",
+  "faster-whisper>=1.2.1",
+  "onnxruntime>=1.20,<1.29",
+  "pyte>=0.8.2",
+  "websockets>=12",
+  "httpx>=0.27",
+]
+
+[project.scripts]
+orquestador = "orquestador.cli:main"
+colmena-guardian = "orquestador.guardian.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/orquestador"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+markers = [
+  "unix: socket unix real; correr fuera del sandbox",
+  "pty: PTY real con programas falsos",
+]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-probar-atajo"
+description = "Enables the probar_atajo command without any pre-configured scope."
+commands.allow = ["probar_atajo"]
+
+[[permission]]
+identifier = "deny-probar-atajo"
+description = "Denies the probar_atajo command without any pre-configured scope."
+commands.deny = ["probar_atajo"]

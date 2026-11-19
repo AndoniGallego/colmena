@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Colmena</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 1.25rem;
+        color: #1a1a1a;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.5rem;
+        font-size: 1rem;
+      }
+      button {
+        margin-top: 0.75rem;
+        padding: 0.45rem 1rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      #error {
+        color: #b00020;
+        margin-top: 0.75rem;
+        min-height: 1.25rem;
+      }
+      p.hint {
+        font-size: 0.9rem;
+        color: #444;
+        margin-top: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <label for="origen">Dirección del servidor</label>
+      <input
+        id="origen"
+        name="origen"
+        type="url"
+        placeholder="https://pc.tail1234.ts.net:8444"
+        autocomplete="url"
+        required
+      />
+      <p class="hint">HTTPS, sin ruta extra. Ejemplo: puerto 8444 de tu PC Linux.</p>
+      <button type="submit">Guardar</button>
+    </form>
+    <div id="error" role="alert"></div>
+    <script>
+      const form = document.getElementById('form');
+      const error = document.getElementById('error');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        error.textContent = '';
+        const origen = document.getElementById('origen').value.trim();
+        try {
+          await window.__TAURI__.core.invoke('guardar_origen', { origen });
+        } catch (err) {
+          error.textContent = typeof err === 'string' ? err : String(err);
+        }
+      });
+    </script>
+  </body>
+</html>

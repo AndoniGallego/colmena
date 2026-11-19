@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-guardar-notebook"
+description = "Enables the guardar_notebook command without any pre-configured scope."
+commands.allow = ["guardar_notebook"]
+
+[[permission]]
+identifier = "deny-guardar-notebook"
+description = "Denies the guardar_notebook command without any pre-configured scope."
+commands.deny = ["guardar_notebook"]

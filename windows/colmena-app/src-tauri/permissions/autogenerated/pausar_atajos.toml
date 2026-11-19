@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pausar-atajos"
+description = "Enables the pausar_atajos command without any pre-configured scope."
+commands.allow = ["pausar_atajos"]
+
+[[permission]]
+identifier = "deny-pausar-atajos"
+description = "Denies the pausar_atajos command without any pre-configured scope."
+commands.deny = ["pausar_atajos"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notch-arrastrar"
+description = "Enables the notch_arrastrar command without any pre-configured scope."
+commands.allow = ["notch_arrastrar"]
+
+[[permission]]
+identifier = "deny-notch-arrastrar"
+description = "Denies the notch_arrastrar command without any pre-configured scope."
+commands.deny = ["notch_arrastrar"]

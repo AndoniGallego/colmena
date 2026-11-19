@@ -1,0 +1,11 @@
+{
+  "identifier": "atajos",
+  "windows": ["atajos"],
+  "permissions": [
+    "allow-leer-atajos",
+    "allow-pausar-atajos",
+    "allow-reanudar-atajos",
+    "allow-probar-atajo",
+    "allow-guardar-atajo"
+  ]
+}

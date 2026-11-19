@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-entorno-cerrar"
+description = "Enables the entorno_cerrar command without any pre-configured scope."
+commands.allow = ["entorno_cerrar"]
+
+[[permission]]
+identifier = "deny-entorno-cerrar"
+description = "Denies the entorno_cerrar command without any pre-configured scope."
+commands.deny = ["entorno_cerrar"]

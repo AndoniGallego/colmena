@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-leer-notebook"
+description = "Enables the leer_notebook command without any pre-configured scope."
+commands.allow = ["leer_notebook"]
+
+[[permission]]
+identifier = "deny-leer-notebook"
+description = "Denies the leer_notebook command without any pre-configured scope."
+commands.deny = ["leer_notebook"]

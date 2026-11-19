@@ -1,0 +1,40 @@
+
+● Write(notas.txt)
+  ⎿  Wrote 3 lines to notas.txt
+      1 uno
+      2 dos
+      3 tres
+
+● Creé notas.txt con las tres líneas: uno, dos y tres.
+
+✻ Churned for 3s · done 0:40
+
+❯ Usá la herramienta Edit para cambiar dos por DOS en notas.txt. Nada más.
+
+● Update(notas.txt)
+  ⎿  User rejected update to notas.txt
+      1  uno
+      2 -dos
+      2 +DOS
+      3  tres
+
+✻ Worked for 2s · done 0:40
+
+❯ Usá la herramienta AskUserQuestion para preguntarme qué color prefiero, con 3 opciones (Rojo, Verde, Azul, cada una
+  con descripción). Una sola pregunta, sin multiSelect.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Color
+
+¿Qué color preferís?
+
+❯ 1. Rojo
+     Color cálido e intenso, asociado a energía y pasión.
+  2. Verde
+     Color de la naturaleza, asociado a calma y equilibrio.
+  3. Azul
+     Color frío y sereno, asociado a confianza y tranquilidad.
+  4. Type something.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

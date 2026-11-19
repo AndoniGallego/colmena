@@ -1,0 +1,23 @@
+{
+ "type": "assistant",
+ "timestamp": "2026-11-01T03:38:38.705Z",
+ "uuid": "58bfce3b-b495-4302-928a-afccc0486286",
+ "sessionId": "2553341c-fd0e-4e50-ae59-1fa494a6ad9b",
+ "message": {
+  "role": "assistant",
+  "content": [
+   {
+    "type": "tool_use",
+    "id": "toolu_0134NjjyY8Npcys3UTWRvQLz",
+    "name": "Bash",
+    "input": {
+     "command": "echo hola > a.txt",
+     "description": "Crea a.txt"
+    },
+    "caller": {
+     "type": "direct"
+    }
+   }
+  ]
+ }
+}

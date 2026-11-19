@@ -1,0 +1,11 @@
+[
+  {"origen": "", "panes": []},
+  {"origen": "Imagenes ps9 (wF:p1)", "panes": ["wF:p1"]},
+  {"origen": "Solo nombre", "panes": []},
+  {"origen": "A (w1:p1), B (w2:p1) y C (w3:p2)", "panes": ["w1:p1", "w2:p1", "w3:p2"]},
+  {"origen": "A (w1:p1) y B (w2:p1)", "panes": ["w1:p1", "w2:p1"]},
+  {"origen": "Login (SSO) (w1:p1); Logout (w1:p2)", "panes": ["w1:p1", "w1:p2"]},
+  {"origen": "A (w1:p1), A de nuevo (w1:p1)", "panes": ["w1:p1"]},
+  {"origen": "A (w1:p1), B sin pane, y C (w4:p1)", "panes": ["w1:p1", "w4:p1"]},
+  {"origen": "Hoy y mañana (w1:p3)", "panes": ["w1:p3"]}
+]

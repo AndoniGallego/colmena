@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-leer-atajos"
+description = "Enables the leer_atajos command without any pre-configured scope."
+commands.allow = ["leer_atajos"]
+
+[[permission]]
+identifier = "deny-leer-atajos"
+description = "Denies the leer_atajos command without any pre-configured scope."
+commands.deny = ["leer_atajos"]

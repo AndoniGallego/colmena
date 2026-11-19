@@ -1,0 +1,42 @@
+{
+ "type": "assistant",
+ "timestamp": "2026-11-01T03:40:52.376Z",
+ "uuid": "e3116ead-11f7-44fa-9e6c-95a7e4eb29be",
+ "sessionId": "2553341c-fd0e-4e50-ae59-1fa494a6ad9b",
+ "message": {
+  "role": "assistant",
+  "content": [
+   {
+    "type": "tool_use",
+    "id": "toolu_01JAMGz4GxXiMTUCcZb4r65b",
+    "name": "AskUserQuestion",
+    "input": {
+     "questions": [
+      {
+       "question": "¿Qué fruta preferís?",
+       "header": "Fruta",
+       "multiSelect": false,
+       "options": [
+        {
+         "label": "Manzana",
+         "description": "Fruta crujiente y jugosa, dulce o ácida según la variedad."
+        },
+        {
+         "label": "Pera",
+         "description": "Fruta suave y dulce, de pulpa jugosa y textura granulada."
+        },
+        {
+         "label": "Uva",
+         "description": "Fruta pequeña en racimos, dulce y fácil de comer de a una."
+        }
+       ]
+      }
+     ]
+    },
+    "caller": {
+     "type": "direct"
+    }
+   }
+  ]
+ }
+}

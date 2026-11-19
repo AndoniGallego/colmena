@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atajos</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fondo: #ffffff;
+        --texto: #1a1a1a;
+        --suave: #5c5c5c;
+        --linea: oklch(0 0 0 / 0.1);
+        --tecla: #f3f3f1;
+        --acento: #b8860b;
+        --acento-texto: #ffffff;
+        --foco: #1a5fd0;
+        --error: #b00020;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fondo: #1c1c1e;
+          --texto: #f2f2f2;
+          --suave: #a8a8a8;
+          --linea: oklch(1 0 0 / 0.12);
+          --tecla: #2a2a2d;
+          --acento: #e0a82e;
+          --acento-texto: #1c1c1e;
+          --foco: #7aa7ff;
+          --error: #ff8a9a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        font-size: 15px;
+        margin: 0;
+        padding: 16px 20px;
+        color: var(--texto);
+        background: var(--fondo);
+        -webkit-font-smoothing: antialiased;
+      }
+      h1 {
+        font-size: 1.05rem;
+        margin: 0 0 4px;
+        text-wrap: balance;
+      }
+      p.hint {
+        margin: 0 0 12px;
+        color: var(--suave);
+        font-size: 0.85rem;
+        text-wrap: pretty;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      li.fila {
+        padding: 10px 0;
+        border-top: 1px solid var(--linea);
+      }
+      .linea {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 36px;
+      }
+      .nombre {
+        width: 70px;
+        font-weight: 600;
+      }
+      .combo {
+        flex: 1;
+        min-width: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      kbd {
+        display: inline-block;
+        font: inherit;
+        padding: 3px 9px;
+        border-radius: 6px;
+        background: var(--tecla);
+        outline: 1px solid var(--linea);
+        outline-offset: -1px;
+      }
+      .grabando {
+        color: var(--suave);
+      }
+      button {
+        font: inherit;
+        min-height: 36px;
+        padding: 0 14px;
+        border-radius: 8px;
+        border: 0;
+        color: var(--texto);
+        background: var(--tecla);
+        outline: 1px solid var(--linea);
+        outline-offset: -1px;
+        cursor: pointer;
+        touch-action: manipulation;
+        transition: scale 150ms ease-out, background-color 150ms ease-out;
+      }
+      button:active {
+        scale: 0.96;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--foco);
+        outline-offset: 2px;
+      }
+      button.principal {
+        background: var(--acento);
+        color: var(--acento-texto);
+        outline: none;
+        font-weight: 600;
+      }
+      button.principal:focus-visible {
+        outline: 2px solid var(--foco);
+        outline-offset: 2px;
+      }
+      .fabrica {
+        margin-top: 2px;
+        padding: 0;
+        min-height: 28px;
+        background: none;
+        outline: none;
+        color: var(--suave);
+        font-size: 0.82rem;
+        text-decoration: underline;
+      }
+      .fabrica:focus-visible {
+        outline: 2px solid var(--foco);
+        outline-offset: 2px;
+      }
+      .error {
+        color: var(--error);
+        font-size: 0.85rem;
+        margin-top: 4px;
+        min-height: 1.1em;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        button {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Atajos del teclado</h1>
+    <p class="hint">Valen en todo Windows. Usá al menos dos entre Ctrl, Alt y Shift, o F1 a F12 con una.</p>
+    <ul id="filas"></ul>
+    <script>
+      const invoke = window.__TAURI__.core.invoke;
+      const lista = document.getElementById('filas');
+      const MODIFICADORES = new Set([
+        'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight',
+        'MetaLeft', 'MetaRight', 'OS', 'CapsLock', 'NumLock', 'ScrollLock',
+      ]);
+
+      let filas = [];
+      // Una sola fila a la vez: { accion, modo: 'grabando' | 'confirmar', candidato }
+      let edicion = null;
+      const errores = {};
+
+      const texto = (e) => (typeof e === 'string' ? e : String(e));
+
+      async function soltarGrabacion() {
+        edicion = null;
+        try {
+          await invoke('reanudar_atajos');
+        } catch (_) {}
+      }
+
+      async function empezar(accion) {
+        const habiaOtra = edicion !== null;
+        edicion = { accion, modo: 'grabando', candidato: null };
+        errores[accion] = '';
+        pintar();
+        if (!habiaOtra) {
+          try {
+            await invoke('pausar_atajos');
+          } catch (e) {
+            errores[accion] = texto(e);
+            edicion = null;
+            pintar();
+          }
+        }
+      }
+
+      async function cancelar() {
+        if (!edicion) return;
+        const accion = edicion.accion;
+        errores[accion] = '';
+        await soltarGrabacion();
+        pintar();
+        enfocarCambiar(accion);
+      }
+
+      async function guardar() {
+        if (!edicion || edicion.modo !== 'confirmar') return;
+        const { accion, candidato } = edicion;
+        try {
+          filas = await invoke('guardar_atajo', { accion, atajo: candidato });
+          errores[accion] = '';
+          await soltarGrabacion();
+          pintar();
+          enfocarCambiar(accion);
+        } catch (e) {
+          errores[accion] = texto(e);
+          edicion = { accion, modo: 'grabando', candidato: null };
+          pintar();
+        }
+      }
+
+      async function fabrica(accion) {
+        const fila = filas.find((f) => f.accion === accion);
+        if (!fila) return;
+        try {
+          filas = await invoke('guardar_atajo', { accion, atajo: fila.defecto });
+          errores[accion] = '';
+        } catch (e) {
+          errores[accion] = texto(e);
+        }
+        pintar();
+      }
+
+      function enfocarCambiar(accion) {
+        const b = lista.querySelector(`[data-cambiar="${accion}"]`);
+        if (b) b.focus();
+      }
+
+      function boton(texto, clase, onclick, extra) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = texto;
+        if (clase) b.className = clase;
+        b.addEventListener('click', onclick);
+        Object.assign(b.dataset, extra || {});
+        return b;
+      }
+
+      function pintar() {
+        lista.textContent = '';
+        for (const f of filas) {
+          const li = document.createElement('li');
+          li.className = 'fila';
+          const linea = document.createElement('div');
+          linea.className = 'linea';
+          const nombre = document.createElement('span');
+          nombre.className = 'nombre';
+          nombre.textContent = f.nombre;
+          const combo = document.createElement('span');
+          combo.className = 'combo';
+          const activa = edicion && edicion.accion === f.accion ? edicion : null;
+          if (activa && activa.modo === 'grabando') {
+            combo.className += ' grabando';
+            combo.textContent = 'Apretá la combinación…';
+          } else if (activa) {
+            const k = document.createElement('kbd');
+            k.textContent = activa.candidato;
+            combo.appendChild(k);
+          } else {
+            const k = document.createElement('kbd');
+            k.textContent = f.atajo;
+            combo.appendChild(k);
+          }
+          linea.append(nombre, combo);
+          if (activa && activa.modo === 'confirmar') {
+            linea.append(
+              boton('Guardar', 'principal', guardar, { guardar: f.accion }),
+              boton('Cancelar', '', cancelar),
+            );
+          } else if (activa) {
+            linea.append(boton('Cancelar', '', cancelar));
+          } else {
+            linea.append(boton('Cambiar', '', () => empezar(f.accion), { cambiar: f.accion }));
+          }
+          li.append(linea);
+          if (!activa && (f.atajo !== f.defecto || f.ocupado)) {
+            li.append(boton('Volver al de fábrica', 'fabrica', () => fabrica(f.accion)));
+          }
+          const aviso = document.createElement('div');
+          aviso.className = 'error';
+          aviso.setAttribute('role', 'alert');
+          let msg = errores[f.accion] || '';
+          if (!msg && f.ocupado && !activa) msg = 'Lo usa otro programa: no está activo';
+          aviso.textContent = msg;
+          li.append(aviso);
+          lista.append(li);
+        }
+        const g = lista.querySelector('[data-guardar]');
+        if (g) g.focus();
+      }
+
+      window.addEventListener('keydown', async (ev) => {
+        if (!edicion) return;
+        if (ev.code === 'Escape' && !ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey) {
+          ev.preventDefault();
+          cancelar();
+          return;
+        }
+        if (edicion.modo !== 'grabando') return;
+        ev.preventDefault();
+        if (MODIFICADORES.has(ev.code) || ev.repeat) return;
+        const ed = edicion;
+        const accion = ed.accion;
+        if (ev.metaKey) {
+          errores[accion] = 'La tecla Windows no se puede usar: probá con Ctrl, Alt o Shift';
+          pintar();
+          return;
+        }
+        try {
+          const candidato = await invoke('probar_atajo', {
+            accion,
+            ctrl: ev.ctrlKey,
+            alt: ev.altKey,
+            shift: ev.shiftKey,
+            code: ev.code,
+          });
+          if (edicion !== ed) return;
+          errores[accion] = '';
+          edicion = { accion, modo: 'confirmar', candidato };
+        } catch (e) {
+          if (edicion !== ed) return;
+          errores[accion] = texto(e);
+        }
+        pintar();
+      });
+
+      // Pausados, los atajos globales no andan: si la ventana pierde el foco, se cancela y vuelven.
+      window.addEventListener('blur', () => {
+        if (edicion) cancelar();
+      });
+
+      // Al reabrir la ventana o volver a ella, las filas reflejan el estado real.
+      window.addEventListener('focus', async () => {
+        if (edicion) return;
+        try {
+          filas = await invoke('leer_atajos');
+          if (!edicion) pintar();
+        } catch (_) {}
+      });
+
+      window.addEventListener('pagehide', () => {
+        invoke('reanudar_atajos').catch(() => {});
+      });
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        try {
+          filas = await invoke('leer_atajos');
+        } catch (e) {
+          lista.textContent = texto(e);
+          return;
+        }
+        pintar();
+      });
+    </script>
+  </body>
+</html>

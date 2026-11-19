@@ -1,0 +1,15 @@
+[Unit]
+Description=Herdr server (restaura workspaces y agentes al arrancar)
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=LANG=en_US.UTF-8
+ExecStart=%h/.local/bin/herdr server
+ExecStop=%h/.local/bin/herdr server stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

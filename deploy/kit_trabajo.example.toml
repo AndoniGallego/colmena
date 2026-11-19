@@ -1,0 +1,10 @@
+# Ejemplo genérico: copiá la tabla al final de data/config.toml y ajustá los nombres de tu kit de trabajo.
+# Todas las claves son opcionales; las que falten usan el valor genérico.
+[kit_trabajo]
+prefijo_vars = "MIKIT"                          # lee MIKIT_CTX_WARN_PCT, MIKIT_VPN_INTERFACE, ...
+carpeta_titulos = ".mikit-session-title"        # bajo ~/.claude
+script_flujo_git = "mikit-git-flow.sh"          # bajo ~/.local/bin
+comando_flujo = "/mikit-flujo"
+agente_tickets = "lector-de-tickets"
+apoyo_entornos = ["datos"]
+units = ["mikit-update-all.path", "mikit-update-all.service"]

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0c0e0d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f1efe7" media="(prefers-color-scheme: light)" />
+    <link rel="manifest" href="/manifest.webmanifest?v=colmena" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=colmena" />
+    <title>Colmena</title>
+    <script>
+      try {
+        if (JSON.parse(localStorage.getItem('orq.theme')) === 'light') document.documentElement.dataset.theme = 'light'
+      } catch (e) {}
+    </script>
+    <style>
+      html { background: #0c0e0d; }
+      html[data-theme='light'] { background: #f1efe7; }
+    </style>
+    <link rel="icon" href="/favicon.ico?v=colmena" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=colmena" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=colmena" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

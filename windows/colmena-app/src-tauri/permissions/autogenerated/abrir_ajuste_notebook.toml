@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-abrir-ajuste-notebook"
+description = "Enables the abrir_ajuste_notebook command without any pre-configured scope."
+commands.allow = ["abrir_ajuste_notebook"]
+
+[[permission]]
+identifier = "deny-abrir-ajuste-notebook"
+description = "Denies the abrir_ajuste_notebook command without any pre-configured scope."
+commands.deny = ["abrir_ajuste_notebook"]

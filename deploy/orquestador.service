@@ -1,0 +1,15 @@
+[Unit]
+Description=Colmena: tablero de sesiones de Claude
+After=network.target colmena-guardian.service herdr-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Proyectos/orquestador
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=%h/.config/orquestador/orquestador.env
+ExecStart=%h/.local/bin/uv run orquestador
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
