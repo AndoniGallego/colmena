@@ -12,7 +12,7 @@ const { default: TrabajadoresCursor } = await import('./TrabajadoresCursor.vue')
 const t = (over: Partial<TrabajadorCursor> = {}): TrabajadorCursor => ({
   id: 'a'.repeat(32), nombre: 'Renombrar helpers', estado: 'corriendo', ruta: '/home/u/repo-cursor-x', rama: 'cursor/renombrar-ab12',
   base: '0'.repeat(40), inicio: 1000, fin: null, codigo: null, archivos: [], resumen: '', pedido: 'Renombrá foo',
-  origen: { tipo: 'claude', nombre: 'PS9 plugins' }, log_recortado: false, ...over,
+  origen: { tipo: 'claude', nombre: 'Tienda plugins' }, log_recortado: false, ...over,
 })
 
 function falsa(lista: TrabajadorCursor[], extra: Partial<CursorApi> = {}): CursorApi {
@@ -57,7 +57,7 @@ describe('TrabajadoresCursor', () => {
     expect(txt).toContain('Trabajando')
     expect(txt).toContain('2 min')
     expect(txt).toContain('cursor/renombrar-ab12')
-    expect(txt).toContain('PS9 plugins')
+    expect(txt).toContain('Tienda plugins')
     expect(txt).toContain('Terminó')
     expect(txt).toContain('10 min')
     expect(txt).toContain('2 archivos')

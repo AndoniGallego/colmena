@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { execBody, handoffName, isExecutable, missingExecFields, parseOrigenes, parseTraspaso, splitPane, toTraspaso } from './traspaso'
 
 const json = {
-  origen: 'Imagenes ps9 (wF:p1)',
+  origen: 'Imagenes CDN (wF:p1)',
   destino_tipo: 'tab_nuevo',
-  destino: 'Imagenes ps9 / tab nuevo',
+  destino: 'Imagenes CDN / tab nuevo',
   por_que: 'el hilo ya está largo',
   brief_path: '/tmp/brief.md',
   resumen_brief: 'Migrar CloudFront',
@@ -141,16 +141,16 @@ describe('campos de ejecución', () => {
 
 describe('origen con varias sesiones', () => {
   it('separa nombre e id de una sesión', () => {
-    expect(splitPane('Imagenes ps9 (wF:p1)')).toEqual({ name: 'Imagenes ps9', pane: 'wF:p1' })
+    expect(splitPane('Imagenes CDN (wF:p1)')).toEqual({ name: 'Imagenes CDN', pane: 'wF:p1' })
     expect(splitPane('Login federado')).toEqual({ name: 'Login federado', pane: '' })
     expect(splitPane('(wF:p1)')).toEqual({ name: '(wF:p1)', pane: '' })
   })
 
   it('parte la lista por comas sin cortar dentro de paréntesis', () => {
-    expect(parseOrigenes('Modulo Acme PS9 (wC:p1), Artefacto Raro (wD:p1), Imagenes ps9 (wF:p1), Login federado (wG:p1)')).toEqual([
-      { name: 'Modulo Acme PS9', pane: 'wC:p1' },
+    expect(parseOrigenes('Modulo carrito (wC:p1), Artefacto Raro (wD:p1), Imagenes CDN (wF:p1), Login federado (wG:p1)')).toEqual([
+      { name: 'Modulo carrito', pane: 'wC:p1' },
       { name: 'Artefacto Raro', pane: 'wD:p1' },
-      { name: 'Imagenes ps9', pane: 'wF:p1' },
+      { name: 'Imagenes CDN', pane: 'wF:p1' },
       { name: 'Login federado', pane: 'wG:p1' },
     ])
     expect(parseOrigenes('Uno (a, b), Dos')).toEqual([{ name: 'Uno', pane: 'a, b' }, { name: 'Dos', pane: '' }])
@@ -158,7 +158,7 @@ describe('origen con varias sesiones', () => {
 
   it('acepta "y" antes de la última y un origen solo', () => {
     expect(parseOrigenes('A (wC:p1), B (wD:p1) y C (wE:p1)').map((o) => o.name)).toEqual(['A', 'B', 'C'])
-    expect(parseOrigenes('Imagenes ps9 (wF:p1)')).toEqual([{ name: 'Imagenes ps9', pane: 'wF:p1' }])
+    expect(parseOrigenes('Imagenes CDN (wF:p1)')).toEqual([{ name: 'Imagenes CDN', pane: 'wF:p1' }])
     expect(parseOrigenes('')).toEqual([])
   })
 

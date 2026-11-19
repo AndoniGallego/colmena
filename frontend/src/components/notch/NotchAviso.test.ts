@@ -34,9 +34,9 @@ vi.mock('../../state/pedidosPestana', () => ({
   pedidosPestana: { porId: {} },
   pedidoPestanaPorId: () => ({
     id: '550e8400-e29b-41d4-a716-446655440000',
-    carpeta: '/home/usuario/ps9',
+    carpeta: '/home/usuario/tienda',
     mensaje: 'Contexto largo',
-    origen: { pane_id: 'w:p', nombre: 'ps9 sonarqube' },
+    origen: { pane_id: 'w:p', nombre: 'tienda sonarqube' },
     ts: 1_800_000_000,
     vence: 1_800_000_900,
   }),
@@ -168,7 +168,7 @@ describe('NotchAviso', () => {
     expect(html).not.toMatch(/\bsimple\b/)
     expect(html).toMatch(/class="[^"]*\bnotch\b[^"]*"/)
     expect(html).not.toMatch(/Pedido de pestaña/i)
-    expect(html).toContain('ps9 sonarqube')
+    expect(html).toContain('tienda sonarqube')
     expect(html).toContain('aria-label="Cerrar aviso"')
   })
 

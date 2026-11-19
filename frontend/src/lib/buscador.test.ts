@@ -125,7 +125,7 @@ describe('catálogo', () => {
     updated_at: '', focused_tab_id: null, self_pane_id: null,
     workspaces: [
       {
-        id: 'w1', number: 1, label: 'Imagenes ps9', status: 'working',
+        id: 'w1', number: 1, label: 'Imagenes CDN', status: 'working',
         tabs: [
           { id: 't1', label: 'infra', agents: [{ pane_id: 'p1', kind: 'claude', status: 'working', session_id: 's1', title: 'CloudFront', doing: 'editando', pending: '', asks_user: false, last_activity: null }], terminales: [{ pane_id: 'p9', terminal_id: 'x', titulo: 'logs', cwd: '/srv', proceso: 'tail', estado: 'corriendo', protegida: false }] },
           { id: 't2', label: 'theme', agents: [{ pane_id: 'p2', kind: 'claude', status: 'idle', session_id: null, title: 'Sin id', doing: '', pending: '', asks_user: false, last_activity: null }] },

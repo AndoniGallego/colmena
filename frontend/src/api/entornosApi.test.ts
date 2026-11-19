@@ -10,9 +10,9 @@ import {
 
 describe('entornosApi', () => {
   const baseEntorno = { salud: null, apagado: false, servicios: [] as { servicio: string; estado: 'corriendo'; codigo: null; hace_s: null }[] }
-  const ps9 = {
-    nombre: 'ps9',
-    carpeta: '~/proyectos/acme/ps9',
+  const tienda = {
+    nombre: 'tienda',
+    carpeta: '~/proyectos/tienda-demo',
     principal: 8080,
     puertos: [
       { puerto: 8080, servicio: 'web', puerto_contenedor: 80, abrible: true },
@@ -58,10 +58,10 @@ describe('entornosApi', () => {
   it('normaliza la respuesta y descarta lo inválido', () => {
     const r = normalizarEntornos({
       entornos: [
-        ps9,
-        { ...ps9, nombre: '../x' },
+        tienda,
+        { ...tienda, nombre: '../x' },
         {
-          ...ps9,
+          ...tienda,
           nombre: 'ok',
           principal: 9999,
           puertos: [{ puerto: 70000 }, { puerto: 'x' }],
@@ -69,8 +69,8 @@ describe('entornosApi', () => {
       ],
       error: null,
     })
-    expect(r.entornos.map((e) => e.nombre)).toEqual(['ps9', 'ok'])
-    expect(r.entornos[0]).toEqual(ps9)
+    expect(r.entornos.map((e) => e.nombre)).toEqual(['tienda', 'ok'])
+    expect(r.entornos[0]).toEqual(tienda)
     expect(r.entornos[1]).toMatchObject({ principal: null, puertos: [] })
     expect(normalizarEntornos(null)).toEqual({ entornos: [], error: null })
   })
@@ -142,7 +142,7 @@ describe('entornosApi', () => {
   })
 
   const pedidoBase = (): PedidoPrueba => ({
-    nombre: 'ps9',
+    nombre: 'tienda',
     puerto: 8080,
     metodo: 'GET',
     ruta: '/',
@@ -211,9 +211,9 @@ describe('entornosApi', () => {
 
   it('pide /api/entornos con la cookie y un 401 es ApiError', async () => {
     const ok = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ entornos: [ps9], error: 'x' }), { status: 200 }),
+      new Response(JSON.stringify({ entornos: [tienda], error: 'x' }), { status: 200 }),
     )
-    expect(await listarEntornos(ok)).toEqual({ entornos: [ps9], error: 'x' })
+    expect(await listarEntornos(ok)).toEqual({ entornos: [tienda], error: 'x' })
     expect(ok).toHaveBeenCalledWith('/api/entornos', expect.objectContaining({ credentials: 'same-origin' }))
     const no = vi.fn().mockResolvedValue(new Response('{"detail":"no"}', { status: 401 }))
     await expect(listarEntornos(no)).rejects.toMatchObject({ status: 401 })

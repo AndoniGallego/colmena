@@ -5,6 +5,9 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import hoverSoloMouse from './postcss/hoverSoloMouse'
 import { fusionarManifest, leerManifestPieza, type ManifestPieza } from './src/lib/manifestPiezas'
+import { baseDeBuild, rebasarManifest } from './src/lib/modoDemo'
+
+declare const process: { env: Record<string, string | undefined> }
 
 const BUILD = Date.now().toString(36)
 
@@ -27,11 +30,13 @@ const swVersion = () => {
 const piezasManifest = () => {
   let outDir = 'dist'
   let root = '.'
+  let base = '/'
   return {
     name: 'piezas-manifest',
     apply: 'build' as const,
-    configResolved(c: { root: string; build: { outDir: string } }) {
+    configResolved(c: { root: string; base: string; build: { outDir: string } }) {
       root = c.root
+      base = c.base
       outDir = resolve(c.root, c.build.outDir)
     },
     closeBundle() {
@@ -41,12 +46,13 @@ const piezasManifest = () => {
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((d) => leerManifestPieza(d.name, readFileSync(join(dir, d.name, 'manifest.json'), 'utf8')))
       const f = join(outDir, 'manifest.webmanifest')
-      writeFileSync(f, JSON.stringify(fusionarManifest(JSON.parse(readFileSync(f, 'utf8')), extras), null, 2) + '\n')
+      writeFileSync(f, JSON.stringify(rebasarManifest(fusionarManifest(JSON.parse(readFileSync(f, 'utf8')), extras), base), null, 2) + '\n')
     },
   }
 }
 
 export default defineConfig(({ command }) => ({
+  base: baseDeBuild(process.env),
   define: { __APP_BUILD__: JSON.stringify(command === 'build' ? BUILD : 'dev') },
   plugins: [vue(), swVersion(), piezasManifest()],
   css: { postcss: { plugins: [hoverSoloMouse()] } },

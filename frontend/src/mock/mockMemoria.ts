@@ -10,22 +10,22 @@ export const PIDE_MEMORIA = /decidimos|en qué quedó|levantamos|record[aá]s|me
 
 export function pasosMemoria(): PasoMemoria[] {
   return [
-    { name: 'mcp__memoria__buscar_memoria', summary: 'ps9 local docker egress' },
-    { name: 'mcp__memoria__buscar_sesiones', summary: 'entorno local ps9 docker' },
-    { name: 'mcp__memoria__leer_sesion', summary: 'Entorno local PS9 · 2026-10-01' },
+    { name: 'mcp__memoria__buscar_memoria', summary: 'tienda local docker egress' },
+    { name: 'mcp__memoria__buscar_sesiones', summary: 'entorno local tienda docker' },
+    { name: 'mcp__memoria__leer_sesion', summary: 'Entorno local Tienda · 2026-10-01' },
   ]
 }
 
 export function respuestaMemoria(): string {
   const sinEngram = engramCaido()
   const fuentes = [
-    { tipo: 'sesion', session_id: SID, turno: 128, titulo: 'Entorno local PS9', fecha: '2026-10-01' },
+    { tipo: 'sesion', session_id: SID, turno: 128, titulo: 'Entorno local Tienda', fecha: '2026-10-01' },
     { tipo: 'sesion', session_id: SID2, turno: 42, titulo: 'Límites de RAM en compose', fecha: '2026-10-02' },
     ...(sinEngram ? [] : [{ tipo: 'engram', id: 412, titulo: 'Docker sin egress', fecha: '2026-09-18', proyecto: 'acme' }]),
   ]
   return [
     sinEngram ? '_Engram no está disponible ahora; te contesto solo con las sesiones._\n' : '',
-    'El entorno local de PS9 lo levantamos el **1 de octubre** con el `compose.local` y un override de límites de RAM, porque con los valores por defecto el contenedor de PHP se moría al compilar.',
+    'El entorno local de la tienda lo levantamos el **1 de octubre** con el `compose.local` y un override de límites de RAM, porque con los valores por defecto el contenedor de PHP se moría al compilar.',
     '',
     'Lo que trabó al principio fue que los contenedores no salían a internet: el host tenía el reenvío de red apagado. Se arregló prendiéndolo y reiniciando Docker; no hizo falta tocar la imagen.',
     '',
@@ -38,7 +38,7 @@ export function respuestaMemoria(): string {
 }
 
 const CITAS: Record<string, string> = {
-  [`${SID}:128`]: 'Listo, quedó arriba. Pasos: 1) docker compose -f compose.local.yml up -d; 2) override de memoria (php 4g, mysql 2g); 3) bajé db y mailhog de tienda-c porque chocaban los puertos 3306 y 8025. La password de la base quedó en «oculto».',
+  [`${SID}:128`]: 'Listo, quedó arriba. Pasos: 1) docker compose -f compose.local.yml up -d; 2) override de memoria (php 4g, mysql 2g); 3) bajé db y mailhog de api porque chocaban los puertos 3306 y 8025. La password de la base quedó en «oculto».',
   [`${SID2}:42`]: 'Bajé el límite de PHP a 3g: con 4g la notebook se quedaba sin memoria cuando también corría el categorizador. Con 3g compila igual, tarda unos segundos más.',
   'e:412': 'Docker sin egress: net.ipv4.ip_forward=0 en el host bloquea la salida de todos los contenedores. Solución: sysctl -w net.ipv4.ip_forward=1 y reiniciar docker.',
 }
@@ -79,7 +79,7 @@ export function createMockMemoria(): Pick<Api, 'getMemoriaEstado' | 'reindexarMe
       }
       const texto = CITAS[`${ref.session_id}:${ref.turno}`]
       if (!texto) throw new ApiError(404, 'no encontrada')
-      const titulo = ref.session_id === SID ? 'Entorno local PS9' : 'Límites de RAM en compose'
+      const titulo = ref.session_id === SID ? 'Entorno local Tienda' : 'Límites de RAM en compose'
       return { tipo: 'sesion', session_id: ref.session_id, turno: ref.turno, titulo, fecha: ref.session_id === SID ? '2026-10-01' : '2026-10-02', rol: 'claude', texto }
     },
   }

@@ -14,15 +14,15 @@ const term = (pane: string, titulo: string, cwd: string, proceso: string, estado
   protegida,
 })
 
-const LARGO = 'usuario@usuario-notebook: ~/proyectos/acme/ps9/app_prestashop/store/modules'
+const LARGO = 'usuario@usuario-notebook: ~/proyectos/tienda-demo/src/modules'
 
 const PLAN: Record<string, Terminal[]> = {
   'w1:t2': [term('w1:pT1', LARGO, '~/proyectos/acme', 'bash', 'prompt')],
   'w1:t3': [term('w1:pT3', 'claude', '~/Proyectos/orquestador', 'claude', 'corriendo')],
   'wA:t1': [term('wA:pT1', 'npm run dev', '~/Proyectos/orquestador/frontend', 'node', 'corriendo'), term('wA:pT2', 'bash', '~/Proyectos/acmekit', 'bash', 'prompt')],
-  'wP:t1': [term('wP:pT1', 'tail -f deploy.log', '~/proyectos/acme/ps9/var/log', 'tail', 'corriendo')],
-  'w8:t2': [term('w8:pT1', 'bash', '~/proyectos/acme/ps9', 'bash', 'prompt')],
-  'w5:tH': [term('w5:pH1', 'docker compose logs', '~/proyectos/acme/tienda-a', 'docker', 'corriendo'), term('w5:pH2', 'psql', '~/proyectos/acme/tienda-a', 'psql', 'corriendo')],
+  'wP:t1': [term('wP:pT1', 'tail -f deploy.log', '~/proyectos/tienda-demo/var/log', 'tail', 'corriendo')],
+  'w8:t2': [term('w8:pT1', 'bash', '~/proyectos/tienda-demo', 'bash', 'prompt')],
+  'w5:tH': [term('w5:pH1', 'docker compose logs', '~/proyectos/tienda-demo', 'docker', 'corriendo'), term('w5:pH2', 'psql', '~/proyectos/tienda-demo', 'psql', 'corriendo')],
   'wS:t2': [term('wS:pT1', 'salida hostil de prueba', '~/Proyectos/orquestador', 'cat', 'corriendo')],
   'w9:t2': [term('w9:pT1', 'bash', '~/Proyectos/gastos-casa', 'bash', 'prompt')],
 }
@@ -91,8 +91,8 @@ const BODY: Record<string, () => string> = {
   'wA:pT1': vite,
   'wA:pT2': () => bash('~/Proyectos/acmekit'),
   'wP:pT1': tail,
-  'w8:pT1': () => bash('~/proyectos/acme/ps9'),
-  'w5:pH1': () => Array.from({ length: 30 }, (_, i) => `${sgr('36', 'tienda-a-web-1')}  | GET /health 200 ${i}ms`).join('\r\n') + '\r\n',
+  'w8:pT1': () => bash('~/proyectos/tienda-demo'),
+  'w5:pH1': () => Array.from({ length: 30 }, (_, i) => `${sgr('36', 'web-1')}  | GET /health 200 ${i}ms`).join('\r\n') + '\r\n',
   'w5:pH2': () => `psql (16.2)\r\ntienda_b=# `,
   'wS:pT1': hostile,
   'w9:pT1': () => bash('~/Proyectos/gastos-casa'),
@@ -241,7 +241,7 @@ export async function mockComando(body: ComandoBody, token: string): Promise<voi
 
 const MOCK_CARPETAS = [
   { ruta: '~/Proyectos/orquestador', nombre: 'orquestador', repo: true },
-  { ruta: '~/proyectos/acme/ps9', nombre: 'ps9', repo: true },
+  { ruta: '~/proyectos/tienda-demo', nombre: 'tienda-demo', repo: true },
   { ruta: '~/Proyectos/acmekit', nombre: 'acmekit', repo: true },
 ]
 

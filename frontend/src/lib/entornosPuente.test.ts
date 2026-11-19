@@ -6,14 +6,14 @@ describe('entornosPuente', () => {
     const invoke = vi.fn().mockResolvedValue({ notebook: 'usuario@192.168.1.50', tuneles: {} })
     const p = crearPuenteEntornos({ __TAURI__: { core: { invoke } } } as unknown as Window)
     await p.estado()
-    await p.abrir('ps9', [8080, 8092], 8080)
-    await p.cerrar('ps9')
+    await p.abrir('tienda', [8080, 8092], 8080)
+    await p.cerrar('tienda')
     await p.ajusteNotebook()
     expect(p.enPrograma).toBe(true)
     expect(invoke.mock.calls).toEqual([
       ['entornos_estado'],
-      ['entorno_abrir', { nombre: 'ps9', puertos: [8080, 8092], principal: 8080 }],
-      ['entorno_cerrar', { nombre: 'ps9' }],
+      ['entorno_abrir', { nombre: 'tienda', puertos: [8080, 8092], principal: 8080 }],
+      ['entorno_cerrar', { nombre: 'tienda' }],
       ['abrir_ajuste_notebook'],
     ])
   })
@@ -23,7 +23,7 @@ describe('entornosPuente', () => {
     const p = crearPuenteEntornos({ __TAURI__: { core: { invoke } } } as unknown as Window)
     await expect(p.abrir('../x', [8080], 8080)).rejects.toThrow('nombre inválido')
     expect(invoke).not.toHaveBeenCalled()
-    await expect(p.abrir('ps9', [8080], 8080)).rejects.toThrow('el puerto 8080 ya está en uso en esta PC')
+    await expect(p.abrir('tienda', [8080], 8080)).rejects.toThrow('el puerto 8080 ya está en uso en esta PC')
   })
 
   it('cerrar y ajusteNotebook pasan el rechazo de invoke como Error con el mismo texto', async () => {
@@ -36,7 +36,7 @@ describe('entornosPuente', () => {
     })
     const p = crearPuenteEntornos({ __TAURI__: { core: { invoke } } } as unknown as Window)
     let cerrarErr: unknown
-    await p.cerrar('ps9').catch((e) => {
+    await p.cerrar('tienda').catch((e) => {
       cerrarErr = e
     })
     expect(cerrarErr).toBeInstanceOf(Error)
@@ -48,6 +48,6 @@ describe('entornosPuente', () => {
     const p = crearPuenteEntornos({} as Window)
     expect(p.enPrograma).toBe(false)
     expect(await p.estado()).toEqual({ notebook: '', tuneles: {} })
-    await expect(p.abrir('ps9', [8080], 8080)).rejects.toThrow(SOLO_APP)
+    await expect(p.abrir('tienda', [8080], 8080)).rejects.toThrow(SOLO_APP)
   })
 })

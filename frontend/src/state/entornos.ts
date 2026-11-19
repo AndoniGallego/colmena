@@ -152,6 +152,6 @@ export const esRutaEntornos = (pathname: string) => pathname === '/entornos' || 
 
 export function abrirDesdeRuta(): void {
   if (!esRutaEntornos(location.pathname)) return
-  history.replaceState(history.state, '', '/' + location.search + location.hash)
+  history.replaceState(history.state, '', import.meta.env.BASE_URL + location.search + location.hash)
   openEntornos()
 }

@@ -9,8 +9,8 @@ describe('novedadesFilas', () => {
   })
 
   it('parseFilasNovedades separa texto y ref', () => {
-    const out = parseFilasNovedades(['PS9 terminó: «listo» ⟦sesión:w9:p1|sid=s9⟧', 'sin ref'])
-    expect(out[0].texto).toBe('PS9 terminó: «listo»')
+    const out = parseFilasNovedades(['Tienda terminó: «listo» ⟦sesión:w9:p1|sid=s9⟧', 'sin ref'])
+    expect(out[0].texto).toBe('Tienda terminó: «listo»')
     expect(out[0].ref).toEqual({ pane_id: 'w9:p1', session_id: 's9' })
     expect(out[1].ref).toBeNull()
   })

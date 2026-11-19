@@ -12,8 +12,8 @@ import {
   setDepsEntornos,
 } from './entornos'
 
-const ps9 = {
-  nombre: 'ps9',
+const tienda = {
+  nombre: 'tienda',
   carpeta: '',
   principal: 8080,
   salud: null,
@@ -31,7 +31,7 @@ function fake(over: Partial<PuenteEntornos> = {}) {
     ajusteNotebook: vi.fn().mockResolvedValue(undefined),
     ...over,
   }
-  setDepsEntornos({ listar: vi.fn().mockResolvedValue({ entornos: [ps9], error: null }), puente })
+  setDepsEntornos({ listar: vi.fn().mockResolvedValue({ entornos: [tienda], error: null }), puente })
   return puente
 }
 
@@ -53,7 +53,7 @@ describe('entornos state', () => {
   it('carga la lista y el estado de los túneles', async () => {
     fake()
     await cargarEntornos()
-    expect(entornos).toMatchObject({ enPrograma: true, notebook: 'usuario@192.168.1.50', lista: [ps9], error: '', cargando: false })
+    expect(entornos).toMatchObject({ enPrograma: true, notebook: 'usuario@192.168.1.50', lista: [tienda], error: '', cargando: false })
   })
 
   it('en el navegador no pide estado', async () => {
@@ -65,21 +65,21 @@ describe('entornos state', () => {
 
   it('abrir manda los puertos del túnel y el principal', async () => {
     const p = fake()
-    await abrirEntorno(ps9)
-    expect(p.abrir).toHaveBeenCalledWith('ps9', [8080, 8092, 8093], 8080)
+    await abrirEntorno(tienda)
+    expect(p.abrir).toHaveBeenCalledWith('tienda', [8080, 8092, 8093], 8080)
     expect(p.estado).toHaveBeenCalled()
     expect(entornos.abriendo).toEqual([])
   })
 
   it('un puerto abre el navegador en ese puerto', async () => {
     const p = fake()
-    await abrirPuerto(ps9, 8092)
-    expect(p.abrir).toHaveBeenCalledWith('ps9', [8080, 8092, 8093], 8092)
+    await abrirPuerto(tienda, 8092)
+    expect(p.abrir).toHaveBeenCalledWith('tienda', [8080, 8092, 8093], 8092)
   })
 
   it('dos clics abren un solo túnel', async () => {
     const p = fake()
-    await Promise.all([abrirEntorno(ps9), abrirEntorno(ps9)])
+    await Promise.all([abrirEntorno(tienda), abrirEntorno(tienda)])
     expect(p.abrir).toHaveBeenCalledTimes(1)
   })
 
@@ -87,20 +87,20 @@ describe('entornos state', () => {
     fake({
       abrir: vi.fn().mockRejectedValue(new ErrorUsuario('el puerto 8080 ya está en uso en esta PC')),
     })
-    await abrirEntorno(ps9)
-    expect(entornos.errores.ps9).toBe('el puerto 8080 ya está en uso en esta PC')
-    await cerrarEntorno('ps9')
-    expect(entornos.errores.ps9).toBeUndefined()
+    await abrirEntorno(tienda)
+    expect(entornos.errores.tienda).toBe('el puerto 8080 ya está en uso en esta PC')
+    await cerrarEntorno('tienda')
+    expect(entornos.errores.tienda).toBeUndefined()
   })
 
   it('si cerrar falla guarda el error y refresca túneles', async () => {
     const cerrar = vi.fn().mockRejectedValue(new ErrorUsuario('no se pudo cerrar'))
-    const estado = vi.fn().mockResolvedValue({ notebook: 'u@h', tuneles: { ps9: { estado: 'abierto', puertos: [8080], error: null } } })
+    const estado = vi.fn().mockResolvedValue({ notebook: 'u@h', tuneles: { tienda: { estado: 'abierto', puertos: [8080], error: null } } })
     fake({ cerrar, estado })
-    await cerrarEntorno('ps9')
-    expect(cerrar).toHaveBeenCalledWith('ps9')
+    await cerrarEntorno('tienda')
+    expect(cerrar).toHaveBeenCalledWith('tienda')
     expect(estado).toHaveBeenCalled()
-    expect(entornos.errores.ps9).toBe('no se pudo cerrar')
+    expect(entornos.errores.tienda).toBe('no se pudo cerrar')
   })
 
   it('reconoce la ruta /entornos', () => {
@@ -123,8 +123,8 @@ describe('entornos state', () => {
         }),
     )
     fake({ cerrar })
-    const pending = cerrarEntorno('ps9')
-    expect(entornos.cerrando).toEqual(['ps9'])
+    const pending = cerrarEntorno('tienda')
+    expect(entornos.cerrando).toEqual(['tienda'])
     resolveCerrar()
     await pending
     expect(entornos.cerrando).toEqual([])

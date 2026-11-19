@@ -4,6 +4,8 @@ import { enAppWindows } from '../lib/appWindows'
 import { detalleTecnico, ErrorUsuario, mensajeError } from '../lib/errores'
 import { detectEnv, deviceName, normalizePrefs, resolveSupport, subscribeRequest, urlBase64ToBytes, type PushPrefs } from '../lib/push'
 import { piezas } from '../piezas'
+import { DEMO } from '../lib/demoActual'
+import { usarMock } from '../lib/modoDemo'
 
 export type PushStatus = 'checking' | 'unsupported' | 'install' | 'denied' | 'off' | 'on' | 'programa'
 
@@ -16,8 +18,8 @@ try {
 const PROGRAMA = enAppWindows(location.search, sessionStore)
 
 const PREFS_KEY = 'orq.push.prefs'
-const MOCK = import.meta.env.DEV && new URLSearchParams(location.search).has('mock')
-const scenario = MOCK ? (new URLSearchParams(location.search).get('push') ?? 'off') : ''
+const MOCK = usarMock({ demo: DEMO, dev: import.meta.env.DEV, search: location.search })
+const scenario = DEMO ? 'unsupported' : MOCK ?(new URLSearchParams(location.search).get('push') ?? 'off') : ''
 
 function loadPrefs(): PushPrefs {
   const extras = piezas().flatMap((p) => (p.notificaciones ? [p.notificaciones.pref.key] : []))

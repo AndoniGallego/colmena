@@ -16,7 +16,7 @@ const crudo = {
   archivos: ['a.py', 3, 'b.py'],
   resumen: 'Hice algo',
   pedido: 'Renombrá',
-  origen: { tipo: 'claude', nombre: 'PS9' },
+  origen: { tipo: 'claude', nombre: 'Tienda' },
   log_recortado: false,
 }
 
@@ -28,7 +28,7 @@ describe('cursorApi', () => {
     expect(t.id).toBe(TID)
     expect(t.estado).toBe('ok')
     expect(t.archivos).toEqual(['a.py', 'b.py'])
-    expect(t.origen).toEqual({ tipo: 'claude', nombre: 'PS9' })
+    expect(t.origen).toEqual({ tipo: 'claude', nombre: 'Tienda' })
     expect(normalizarTrabajador({ ...crudo, id: 'x' })).toBeNull()
     expect(normalizarTrabajador({ ...crudo, estado: 'raro' })).toBeNull()
     expect(normalizarTrabajador(null)).toBeNull()

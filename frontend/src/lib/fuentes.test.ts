@@ -24,7 +24,7 @@ const bloque = (body: string) => `Lo levantamos con el override.\n\n\`\`\`fuente
 describe('toFuentes', () => {
   it('acepta sesiones y engram válidos y descarta el resto', () => {
     const { items } = toFuentes([
-      { tipo: 'sesion', session_id: SID, turno: 128, titulo: 'Entorno local PS9', fecha: '2026-10-01' },
+      { tipo: 'sesion', session_id: SID, turno: 128, titulo: 'Entorno local Tienda', fecha: '2026-10-01' },
       { tipo: 'engram', id: 412, titulo: 'Docker sin egress', fecha: '2026-09-18', proyecto: 'acme' },
       { tipo: 'sesion', session_id: '../etc/passwd', turno: 1 },
       { tipo: 'sesion', session_id: SID, turno: -1 },
@@ -82,8 +82,8 @@ describe('splitFuentes', () => {
 describe('pasos de memoria', () => {
   it('arma etiquetas legibles', () => {
     expect(pasoMemoria('mcp__memoria__buscar_sesiones', 'docker egress')).toEqual({ icon: 'search', label: 'Buscando en tus sesiones: «docker egress»' })
-    expect(pasoMemoria('mcp__memoria__buscar_memoria', 'ps9 local').icon).toBe('brain')
-    expect(pasoMemoria('mcp__memoria__leer_sesion', 'Entorno local PS9 · 2026-10-01').label).toBe('Leyendo «Entorno local PS9» (1 oct)')
+    expect(pasoMemoria('mcp__memoria__buscar_memoria', 'tienda local').icon).toBe('brain')
+    expect(pasoMemoria('mcp__memoria__leer_sesion', 'Entorno local Tienda · 2026-10-01').label).toBe('Leyendo «Entorno local Tienda» (1 oct)')
     expect(pasoMemoria('mcp__memoria__leer_sesion', 'aaaaaaaa').label).toBe('Leyendo una sesión')
     expect(pasoMemoria('mcp__memoria__memoria_reciente', '').label).toBe('Mirando lo último en Engram')
   })

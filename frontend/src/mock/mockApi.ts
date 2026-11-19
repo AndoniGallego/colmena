@@ -89,25 +89,25 @@ const MOCK_DIALOGS: Record<string, unknown> = {
     tipo: 'permiso',
     huella: 'mock-bash',
     pane_id: 'w5:pF',
-    permiso: { herramienta: 'Bash', detalle: 'docker compose -f marketplace-tienda-a/docker-compose.yml up -d --build && curl -s http://localhost:8082/health', descripcion: 'Levanta tienda-a en el puerto 8082 y verifica que responda', completo: true, opciones: ['si', 'si_siempre', 'si_auto', 'no'], regla: 'docker compose *', mas_en_terminal: false },
+    permiso: { herramienta: 'Bash', detalle: 'docker compose -f demo-web/docker-compose.yml up -d --build && curl -s http://localhost:8082/health', descripcion: 'Levanta web en el puerto 8082 y verifica que responda', completo: true, opciones: ['si', 'si_siempre', 'si_auto', 'no'], regla: 'docker compose *', mas_en_terminal: false },
   },
   edit: {
     tipo: 'permiso',
     huella: 'mock-edit',
     pane_id: 'w5:pF',
-    permiso: { herramienta: 'Edit', detalle: '- ports: ["8080:80"]\n+ ports: ["8082:80"]', descripcion: '', completo: true, opciones: ['si', 'si_ediciones', 'no'], regla: null, mas_en_terminal: false, archivo: '/home/usuario/proyectos/acme/deprecated/marketplace-tienda-a/docker-compose.yml', replace_all: false },
+    permiso: { herramienta: 'Edit', detalle: '- ports: ["8080:80"]\n+ ports: ["8082:80"]', descripcion: '', completo: true, opciones: ['si', 'si_ediciones', 'no'], regla: null, mas_en_terminal: false, archivo: '/home/usuario/proyectos/acme/deprecated/demo-web/docker-compose.yml', replace_all: false },
   },
   question: {
     tipo: 'pregunta',
     huella: 'mock-question',
     pane_id: 'w5:pF',
-    pregunta: { preguntas: [{ header: 'Puerto', texto: '¿Paso el compose de tienda-a a 8082 o bajo tienda-c mientras tanto?', multi: false, otro: true, opciones: [{ label: 'Pasar tienda-a a 8082', descripcion: 'Cambia el mapeo de puertos y deja tienda-c como está.' }, { label: 'Bajar tienda-c', descripcion: 'Libera el 8080 pero corta la demo de tienda-c.' }, { label: 'Dejarlo así', descripcion: '' }] }] },
+    pregunta: { preguntas: [{ header: 'Puerto', texto: '¿Paso el compose de web a 8082 o bajo api mientras tanto?', multi: false, otro: true, opciones: [{ label: 'Pasar web a 8082', descripcion: 'Cambia el mapeo de puertos y deja api como está.' }, { label: 'Bajar api', descripcion: 'Libera el 8080 pero corta la demo de api.' }, { label: 'Dejarlo así', descripcion: '' }] }] },
   },
   multi: {
     tipo: 'pregunta',
     huella: 'mock-multi',
     pane_id: 'w5:pF',
-    pregunta: { preguntas: [{ header: 'Lenguajes', texto: '¿Qué lenguajes usás en el módulo?', multi: true, otro: false, opciones: [{ label: 'Python', descripcion: 'Backend y scripts' }, { label: 'PHP', descripcion: 'PrestaShop' }, { label: 'Go', descripcion: '' }] }] },
+    pregunta: { preguntas: [{ header: 'Lenguajes', texto: '¿Qué lenguajes usás en el módulo?', multi: true, otro: false, opciones: [{ label: 'Python', descripcion: 'Backend y scripts' }, { label: 'PHP', descripcion: 'Web' }, { label: 'Go', descripcion: '' }] }] },
   },
   several: {
     tipo: 'pregunta',
@@ -141,8 +141,8 @@ const mockPedidos = new Map<string, PedidoPermiso>(
 )
 
 const MD_LONG = '## Qué es\nEs una web que corre en la notebook y te muestra todas tus sesiones de Claude en un solo lugar. Al lado tiene un chat con un Claude que las conoce. Ese Claude no puede tocar nada por su cuenta.'
-const MD_LIST = '**Resumen:** quedaron 3 cambios en `app_prestashop/modules/pagos/src/Infrastructure/Gateway/WebpayPlusGatewayClient.php`:\n- timeouts a 8 s\n- reintento con backoff\n- logs sin PAN'
-const MD_CODE = 'Corrí `composer run tests` y falló 1:\n```\nFAILURES! Tests: 214, Assertions: 530, Failures: 1.\n```\nRevisar /home/usuario/proyectos/acme/ps9/modules/stockreservation/tests/Unit/ReservationExpiryTest.php'
+const MD_LIST = '**Resumen:** quedaron 3 cambios en `src/pagos/Infrastructure/Gateway/PasarelaGatewayClient.php`:\n- timeouts a 8 s\n- reintento con backoff\n- logs sin PAN'
+const MD_CODE = 'Corrí `composer run tests` y falló 1:\n```\nFAILURES! Tests: 214, Assertions: 530, Failures: 1.\n```\nRevisar /home/usuario/proyectos/tienda-demo/modules/reservas/tests/Unit/ReservationExpiryTest.php'
 
 function withCtx(board: Board): Board {
   for (const w of board.workspaces) for (const t of w.tabs) for (const x of t.agents) { x.ctx = MOCK_CTX[x.pane_id] ?? null; if (MOCK_ESTADO[x.pane_id]) x.estado = MOCK_ESTADO[x.pane_id] }
@@ -164,27 +164,27 @@ function seed(): Board {
         ]),
         pinned: true,
       },
-      ws('wC', 2, 'Modulo Acme PS9', 'working', [{ id: 'wC:t1', label: '1', agents: [a('wC:p1', 'working', 'Módulo Acme en monorepo ps9', '', 'Corriendo los tests de integración del hook de carrito; faltan 2 suites.', 1)] }]),
-      ws('w5', 3, 'Levantado de Monorepos', 'blocked', [
-        { id: 'w5:tF', label: 'PS9 Inv', agents: [a('w5:pF', 'blocked', 'Monorepos de mi-grupo/development en PS9', '', 'El compose de tienda-a sigue mapeando 8080:80 y choca con tienda-c. ¿Lo paso a 8082 o bajo tienda-c mientras tanto?', 7, true)] },
+      ws('wC', 2, 'Modulo carrito', 'working', [{ id: 'wC:t1', label: '1', agents: [a('wC:p1', 'working', 'Módulo de carrito en la tienda', '', 'Corriendo los tests de integración del hook de carrito; faltan 2 suites.', 1)] }]),
+      ws('w5', 3, 'Levantado de entornos', 'blocked', [
+        { id: 'w5:tF', label: 'Entornos', agents: [a('w5:pF', 'blocked', 'Entornos locales de la tienda y la API', '', 'El compose de web sigue mapeando 8080:80 y choca con api. ¿Lo paso a 8082 o bajo api mientras tanto?', 7, true)] },
         { id: 'w5:tH', label: '2', agents: [] },
       ]),
-      ws('w8', 4, 'Investigacion Modulos', 'idle', [
+      ws('w8', 4, 'Investigacion UI', 'idle', [
         { id: 'w8:t1', label: 'Home', agents: [{ ...a('w8:p1', 'idle', 'Tab Personalización de la Home', '', 'Dejé el mapa de hooks de displayHome con los 4 módulos que lo pisan. ¿Cuál absorbe el carrusel?', 38, true), preguntas: 2 }] },
-        { id: 'w8:t2', label: 'Grove', agents: [a('w8:p2', 'done', 'Revisión de componentes Grove', '', 'Listo: reporte de los 12 componentes con props faltantes, en plans/grove-gaps.md.', 64)] },
+        { id: 'w8:t2', label: 'UI', agents: [a('w8:p2', 'done', 'Revisión de componentes UI', '', 'Listo: reporte de los 12 componentes con props faltantes, en plans/ui-gaps.md.', 64)] },
       ]),
       ws('wA', 5, 'Acmekit', 'idle', [{ id: 'wA:t1', label: '1', agents: [a('wA:p1', 'idle', 'Nueva ubicación de acmekit', '', 'Remote actualizado a innovacion/kit; quedó pendiente avisar al equipo por Slack.', 180)] }]),
-      ws('wP', 6, 'Pagos Webpay', 'idle', [{ id: 'wP:t1', label: '1', agents: [a('wP:p1', 'idle', 'Reintentos del gateway Webpay Plus', '', MD_LIST, 95, false, true)] }]),
+      ws('wP', 6, 'API de pagos', 'idle', [{ id: 'wP:t1', label: '1', agents: [a('wP:p1', 'idle', 'Reintentos del cliente de pasarela', '', MD_LIST, 95, false, true)] }]),
       ws('wS', 7, 'Stock reservations', 'idle', [
-        { id: 'wS:t1', label: 'tests', agents: [a('wS:p1', 'idle', 'Expiración de reservas bajo carga concurrente en stockreservation', '', MD_CODE, 130)] },
+        { id: 'wS:t1', label: 'tests', agents: [a('wS:p1', 'idle', 'Expiración de reservas bajo carga concurrente en reservas', '', MD_CODE, 130)] },
         { id: 'wS:t2', label: '2', agents: [] },
       ]),
-      ws('wF', 8, 'Imagenes ps9', 'idle', [{ id: 'wF:t1', label: '1', agents: [a('wF:p1', 'idle', 'CloudFront para imágenes en PS9', '', 'Tengo la distribución armada en el plan; falta confirmar si las imágenes de producto van por el mismo bucket que los assets del theme. ¿Te sirve que lo separe?', 12, true)] }]),
+      ws('wF', 8, 'Imagenes CDN', 'idle', [{ id: 'wF:t1', label: '1', agents: [a('wF:p1', 'idle', 'CloudFront para imágenes de la tienda', '', 'Tengo la distribución armada en el plan; falta confirmar si las imágenes de producto van por el mismo bucket que los assets del theme. ¿Te sirve que lo separe?', 12, true)] }]),
       ws('wG', 9, 'Login federado', 'idle', [{
         id: 'wG:t1',
         label: '1',
         agents: [{
-          ...a('wG:p1', 'idle', 'Login federado en tienda PrestaShop', '', 'El turno terminó; siguen corriendo tareas en segundo plano.', 2),
+          ...a('wG:p1', 'idle', 'Login federado en la tienda', '', 'El turno terminó; siguen corriendo tareas en segundo plano.', 2),
           fondo: [
             { id: 'mock-cursor', tipo: 'cursor', texto: 'tarjetas del tablero', desde: 1 },
             { id: 'mock-agente', tipo: 'agente', texto: 'auditoría de estilos', desde: 2 },
@@ -205,10 +205,10 @@ function seed(): Board {
 const ANSWER_ALT = (dest: string) => `Ok, lo cambio a ${dest}. Ajusto el brief para que no asuma el contexto del tab actual.
 
 \`\`\`traspaso
-{"origen": "Imagenes ps9 (wF:p1)", "destino_tipo": "${dest.includes('workspace') ? 'workspace_nuevo' : dest.includes('existente') ? 'existente' : 'tab_nuevo'}", "destino": "${dest.includes('workspace') ? 'workspace nuevo: CloudFront PS9' : 'Investigacion Modulos (w8:p1)'}", "por_que": "Pedido tuyo: queda aislado del resto.", "brief_path": "/home/usuario/.local/share/orquestador/handoffs/2026-10-30-cloudfront-imagenes.md", "resumen_brief": "Mismo brief, sin referencias al hilo original.", "pane_id": "w8:p1", "workspace_id": "wF", "label": "CloudFront PS9", "cwd": "/home/usuario/proyectos/acme", "agent_name": "cloudfront-ps9"}
+{"origen": "Imagenes CDN (wF:p1)", "destino_tipo": "${dest.includes('workspace') ? 'workspace_nuevo' : dest.includes('existente') ? 'existente' : 'tab_nuevo'}", "destino": "${dest.includes('workspace') ? 'workspace nuevo: CloudFront Tienda' : 'Investigacion UI (w8:p1)'}", "por_que": "Pedido tuyo: queda aislado del resto.", "brief_path": "/home/usuario/.local/share/orquestador/handoffs/2026-10-30-cloudfront-imagenes.md", "resumen_brief": "Mismo brief, sin referencias al hilo original.", "pane_id": "w8:p1", "workspace_id": "wF", "label": "CloudFront Tienda", "cwd": "/home/usuario/proyectos/acme", "agent_name": "cloudfront-tienda"}
 \`\`\``
 
-const BRIEF = `# Brief: CloudFront para imágenes de PS9
+const BRIEF = `# Brief: CloudFront para imágenes de la tienda
 
 ## Contexto
 Distribución armada con dos orígenes (\`img/p/\` y \`themes/\`). Falta decidir si se separan buckets.
@@ -225,17 +225,17 @@ Confirmar con el usuario si las imágenes de producto van por el mismo bucket qu
 const fence = (lang: string, v: unknown) => '```' + lang + '\n' + JSON.stringify(v) + '\n```'
 
 const DIAGRAMA_SEQ = {
-  titulo: 'Cómo PS9 consulta stock y precios',
-  resumen: 'PS9 no habla directo con los servicios: pasa siempre por el módulo intermedio, que reintenta si el servicio A falla.',
+  titulo: 'Cómo la tienda consulta stock y precios',
+  resumen: 'La tienda no habla directo con los servicios: pasa siempre por el módulo intermedio, que reintenta si el servicio A falla.',
   tipo: 'secuencia',
   actores: [
-    { id: 'ps9', nombre: 'PS9', icono: '🛒' },
+    { id: 'tienda', nombre: 'Tienda', icono: '🛒' },
     { id: 'mod', nombre: 'Módulo intermedio', icono: '🧩' },
     { id: 'sa', nombre: 'Servicio A', icono: '📦' },
     { id: 'sb', nombre: 'Servicio B', icono: '💲' },
   ],
   pasos: [
-    { de: 'ps9', a: 'mod', texto: 'Pide stock y precio de un SKU', detalle: 'El hook de producto llama al módulo con el SKU de la ficha. PS9 nunca conoce las URLs de los servicios.', datos: '{ "sku": "ABC-123", "qty": 2 }', tipo: 'llamada' },
+    { de: 'tienda', a: 'mod', texto: 'Pide stock y precio de un SKU', detalle: 'El hook de producto llama al módulo con el SKU de la ficha. La tienda nunca conoce las URLs de los servicios.', datos: '{ "sku": "ABC-123", "qty": 2 }', tipo: 'llamada' },
     { de: 'mod', a: 'sa', texto: 'Consulta stock', detalle: 'Usa el token del servicio A con timeout de 800 ms.', datos: 'GET /stock/ABC-123', tipo: 'llamada' },
     { de: 'sa', a: 'mod', texto: 'Falla: 503', detalle: 'El servicio A está saturado y devuelve un error temporal.', datos: '503 Service Unavailable', tipo: 'error' },
     { de: 'mod', texto: 'Espera y reintenta', detalle: 'Backoff de 300 ms, hasta 2 reintentos. Si fallan todos, devuelve el último stock cacheado.', tipo: 'evento' },
@@ -243,7 +243,7 @@ const DIAGRAMA_SEQ = {
     { de: 'sa', a: 'mod', texto: 'Devuelve el stock', datos: '{ "disponible": 14 }', tipo: 'respuesta' },
     { de: 'mod', a: 'sb', texto: 'Consulta el precio', detalle: 'El servicio B no depende del A, así que en producción esto corre en paralelo con el stock.', datos: 'GET /precio/ABC-123', tipo: 'llamada' },
     { de: 'sb', a: 'mod', texto: 'Devuelve el precio', datos: '{ "precio": 1890.5, "moneda": "ARS" }', tipo: 'respuesta' },
-    { de: 'mod', a: 'ps9', texto: 'Responde con todo junto', detalle: 'Un solo payload normalizado; PS9 solo lo pinta.', datos: '{ "disponible": 14, "precio": 1890.5 }', tipo: 'respuesta' },
+    { de: 'mod', a: 'tienda', texto: 'Responde con todo junto', detalle: 'Un solo payload normalizado; la tienda solo lo pinta.', datos: '{ "disponible": 14, "precio": 1890.5 }', tipo: 'respuesta' },
   ],
   notas: ['Los timeouts y reintentos viven solo en el módulo.', 'Si el servicio B cae, la ficha se muestra sin precio actualizado.'],
 }
@@ -269,7 +269,7 @@ const OPCIONES_A = { pregunta: '¿Qué hacemos con el sumario de la fila?', opci
 const OPCIONES_B = { pregunta: '¿Y el aviso al celular?', opciones: [{ label: 'Solo si termina', detalle: 'Una notificación por sesión que cierra', recomendada: true }, { label: 'En cada hito', detalle: 'Más ruido, pero no te perdés nada' }] }
 
 const ANSWER_MULTI = `Para cerrar el rediseño de la fila necesito dos decisiones tuyas.\n\n${fence('opciones', OPCIONES_A)}\n\n${fence('opciones', OPCIONES_B)}\n\nRespondé las dos juntas con el botón.`
-const ANSWER_DIAGRAMA_SEQ = `Te lo dibujé entero. Tocá cualquier paso para ver el detalle, o recorrelo de a uno.\n\n${fence('diagrama', DIAGRAMA_SEQ)}\n\nLo importante: PS9 solo conoce al módulo.`
+const ANSWER_DIAGRAMA_SEQ = `Te lo dibujé entero. Tocá cualquier paso para ver el detalle, o recorrelo de a uno.\n\n${fence('diagrama', DIAGRAMA_SEQ)}\n\nLo importante: la tienda solo conoce al módulo.`
 const ANSWER_DIAGRAMA = `Así está armado, de punta a punta. Tocá cualquier cosa para ver para qué sirve.\n\n${fence('diagrama', DIAGRAMA_ARQ)}\n\nY la versión corta:\n\n${fence('diagrama', DIAGRAMA_CHICO)}`
 const ANSWER_DIAGRAMA_PROC = `Va el paso a paso del bife.\n\n${fence('diagrama', DIAGRAMA_PROC)}`
 const ANSWER_DIAGRAMAS_REALES = `Te dejo los tres juntos.\n\n${fence('diagrama', DIAGRAMA_MENSAJE_LLANO)}\n\nEl mismo, como estaba antes.\n\n${fence('diagrama', DIAGRAMA_MENSAJE)}\n\nY el del bife, con el control del punto.\n\n${fence('diagrama', DIAGRAMA_BIFE)}\n\nY uno largo, para ver cómo serpentea.\n\n${fence('diagrama', DIAGRAMA_LARGO)}`
@@ -278,12 +278,12 @@ const PRUEBAS_MOCK = { titulo: 'Login federado', resumen: 'Probado contra Keyclo
 const ANSWER_PRUEBAS = `Corrí las pruebas del login.\n\n${fence('pruebas', PRUEBAS_MOCK)}\n\nQuedó una falla para mirar.`
 
 const DIGEST_TURNS = [
-  { role: 'user' as const, text: 'armá la distribución de CloudFront para las imágenes de PS9' },
-  { role: 'claude' as const, text: 'Revisé el bucket actual: las imágenes de producto viven en `img/p/` y los assets del theme en `themes/`. Propongo una distribución con dos orígenes y behaviors por prefijo.\n\nRutas tocadas: `/home/usuario/proyectos/acme/ps9/infra/terraform/modules/cloudfront/distribution_images_and_theme_assets.tf` y `/home/usuario/proyectos/acme/ps9/infra/terraform/environments/uat/main.tf`.' },
+  { role: 'user' as const, text: 'armá la distribución de CloudFront para las imágenes de la tienda' },
+  { role: 'claude' as const, text: 'Revisé el bucket actual: las imágenes de producto viven en `img/p/` y los assets del theme en `themes/`. Propongo una distribución con dos orígenes y behaviors por prefijo.\n\nRutas tocadas: `/home/usuario/proyectos/tienda-demo/infra/terraform/modules/cloudfront/distribution_images_and_theme_assets.tf` y `/home/usuario/proyectos/tienda-demo/infra/terraform/environments/uat/main.tf`.' },
   { role: 'user' as const, text: 'dale, y cuidá los headers de cache' },
-  { role: 'claude' as const, text: '## Plan\nListo el plan en `plans/cloudfront-ps9.md`:\n\n- `img/p/*` → TTL 30 días, invalidación por prefijo\n- `themes/*` → versionado por hash\n- headers: `Cache-Control: public, max-age=2592000, immutable`\n\n```hcl\nordered_cache_behavior {\n  path_pattern     = "img/p/*"\n  target_origin_id = "s3-products-images-uat-us-east-1"\n  min_ttl          = 0\n  default_ttl      = 2592000\n}\n```\n\nFalta confirmar si separamos buckets.' },
+  { role: 'claude' as const, text: '## Plan\nListo el plan en `plans/cloudfront-tienda.md`:\n\n- `img/p/*` → TTL 30 días, invalidación por prefijo\n- `themes/*` → versionado por hash\n- headers: `Cache-Control: public, max-age=2592000, immutable`\n\n```hcl\nordered_cache_behavior {\n  path_pattern     = "img/p/*"\n  target_origin_id = "s3-products-images-uat-us-east-1"\n  min_ttl          = 0\n  default_ttl      = 2592000\n}\n```\n\nFalta confirmar si separamos buckets.' },
   { role: 'user' as const, text: 'separalos, pero que el de theme siga versionado' },
-  { role: 'claude' as const, text: 'Hecho. Dos buckets, `acme-ps9-img` y `acme-ps9-theme`, cada uno con su origen y su OAC. Corrí `terraform validate` y da verde; el `plan` muestra 6 recursos nuevos y 0 destruidos.\n\nQuedan dos decisiones tuyas:\n1. ¿Invalidación automática en cada deploy del theme?\n2. ¿Dominio propio `img.acme.com` o el de CloudFront?' },
+  { role: 'claude' as const, text: 'Hecho. Dos buckets, `demo-tienda-img` y `demo-tienda-theme`, cada uno con su origen y su OAC. Corrí `terraform validate` y da verde; el `plan` muestra 6 recursos nuevos y 0 destruidos.\n\nQuedan dos decisiones tuyas:\n1. ¿Invalidación automática en cada deploy del theme?\n2. ¿Dominio propio `img.acme.com` o el de CloudFront?' },
 ]
 
 
@@ -294,8 +294,8 @@ const svgUrl = (a: string, b: string, label: string) =>
   )}`
 
 const FLOW: Array<[string, Array<[string, string]>, string]> = [
-  ['Revisá por qué falla el callback OIDC cuando viene return_to', [['Grep', 'return_to'], ['Read', '/home/usuario/proyectos/acme/ps9/modules/oidc/src/Controller/CallbackController.php'], ['Read', '/home/usuario/proyectos/acme/ps9/modules/oidc/src/Service/ReturnToResolver.php']], 'El callback descarta `return_to` cuando la sesión se regenera antes de leerlo. Lo guardo en el `state` firmado en lugar de la sesión.\n\n```php\n$state = $this->signer->sign([\'nonce\' => $nonce, \'return_to\' => $returnTo]);\n```'],
-  ['Dale, y que valide que sea una ruta interna', [['Edit', '/home/usuario/proyectos/acme/ps9/modules/oidc/src/Service/ReturnToResolver.php'], ['Edit', '/home/usuario/proyectos/acme/ps9/modules/oidc/src/Controller/CallbackController.php'], ['Write', '/home/usuario/proyectos/acme/ps9/modules/oidc/tests/Unit/ReturnToResolverTest.php'], ['Bash', 'composer run tests -- --filter ReturnToResolverTest'], ['Bash', 'composer run cs-fix'], ['Read', '/home/usuario/proyectos/acme/ps9/modules/oidc/composer.json'], ['Grep', 'ReturnToResolver'], ['Bash', 'git diff --stat'], ['Edit', '/home/usuario/proyectos/acme/ps9/modules/oidc/README.md'], ['Bash', 'composer run tests'], ['Glob', 'modules/oidc/**/*.php'], ['Bash', 'git status --short']], '## Listo\nAhora `return_to` solo acepta rutas relativas de la tienda; cualquier otra cosa cae en `/`.\n\n- 9 casos nuevos de test (rutas absolutas, `//host`, esquemas raros)\n- suite del módulo en verde: **38 tests, 0 fallas**\n\n| Entrada | Resultado |\n|---|---|\n| `/mi-cuenta` | `/mi-cuenta` |\n| `//evil.example` | `/` |\n| `https://evil.example` | `/` |'],
+  ['Revisá por qué falla el callback OIDC cuando viene return_to', [['Grep', 'return_to'], ['Read', '/home/usuario/proyectos/tienda-demo/modules/oidc/src/Controller/CallbackController.php'], ['Read', '/home/usuario/proyectos/tienda-demo/modules/oidc/src/Service/ReturnToResolver.php']], 'El callback descarta `return_to` cuando la sesión se regenera antes de leerlo. Lo guardo en el `state` firmado en lugar de la sesión.\n\n```php\n$state = $this->signer->sign([\'nonce\' => $nonce, \'return_to\' => $returnTo]);\n```'],
+  ['Dale, y que valide que sea una ruta interna', [['Edit', '/home/usuario/proyectos/tienda-demo/modules/oidc/src/Service/ReturnToResolver.php'], ['Edit', '/home/usuario/proyectos/tienda-demo/modules/oidc/src/Controller/CallbackController.php'], ['Write', '/home/usuario/proyectos/tienda-demo/modules/oidc/tests/Unit/ReturnToResolverTest.php'], ['Bash', 'composer run tests -- --filter ReturnToResolverTest'], ['Bash', 'composer run cs-fix'], ['Read', '/home/usuario/proyectos/tienda-demo/modules/oidc/composer.json'], ['Grep', 'ReturnToResolver'], ['Bash', 'git diff --stat'], ['Edit', '/home/usuario/proyectos/tienda-demo/modules/oidc/README.md'], ['Bash', 'composer run tests'], ['Glob', 'modules/oidc/**/*.php'], ['Bash', 'git status --short']], '## Listo\nAhora `return_to` solo acepta rutas relativas de la tienda; cualquier otra cosa cae en `/`.\n\n- 9 casos nuevos de test (rutas absolutas, `//host`, esquemas raros)\n- suite del módulo en verde: **38 tests, 0 fallas**\n\n| Entrada | Resultado |\n|---|---|\n| `/mi-cuenta` | `/mi-cuenta` |\n| `//evil.example` | `/` |\n| `https://evil.example` | `/` |'],
   ['Mirá este error que me tira el checkout con el login federado', [['Read', '/home/usuario/Proyectos/orquestador/data/uploads/' + SHOT_ID]], 'Veo el error: el token expira mientras el cliente completa el pago. Es independiente del `return_to`; lo anoto como pendiente aparte.'],
   ['Probalo contra Keycloak local', [['Bash', 'docker compose -f docker/keycloak/compose.yml up -d'], ['Bash', 'curl -s localhost:8081/realms/acme/.well-known/openid-configuration'], ['Bash', 'php bin/console oidc:smoke --realm=acme']], 'Funciona contra Keycloak local: login, redirect y vuelta a `/mi-cuenta` con la sesión intacta.\n\n¿Querés que lo suba ya al MR o prefieres revisarlo primero?'],
 ]
@@ -319,7 +319,7 @@ function transcriptFor(sid: string): TranscriptItem[] {
     }
   }
   out.push({ kind: 'claude', text: 'Antes de seguir necesito que elijas cómo lo encaro.\n\n```opciones\n{\"pregunta\": \"¿Qué hacemos con el sumario de la fila?\", \"opciones\": [{\"label\": \"Recortarlo\", \"detalle\": \"Solo lo último, más un botón para abrir el chat\", \"recomendada\": true}, {\"label\": \"Sacarlo\", \"detalle\": \"La fila abre directo el chat\"}, {\"label\": \"Dejarlo como está\"}]}\n```\n\nSi ninguna te cierra, decime y lo pensamos de nuevo.', name: '', summary: '', ts: tick() })
-  out.push({ kind: 'user', text: 'explicame cómo PS9 se comunica con los servicios', name: '', summary: '', ts: tick() })
+  out.push({ kind: 'user', text: 'explicame cómo Tienda se comunica con los servicios', name: '', summary: '', ts: tick() })
   out.push({ kind: 'tool', text: '', name: 'Artifact', summary: 'tablero-reservas.html', ts: tick(), lib_ids: [MOCK_LIB_IDS.html, MOCK_LIB_IDS.image] })
   out.push({ kind: 'imagenes', text: '', name: '', summary: '', ts: tick(), fotos: [{ id: MOCK_LIB_IDS.captura1 }] })
   out.push({ kind: 'claude', text: ANSWER_DIAGRAMA_SEQ, name: '', summary: '', ts: tick(), lib_ids: [MOCK_LIB_IDS.secuencia] })
@@ -376,7 +376,7 @@ function mockAvisos(): Aviso[] {
     mk(5, hoyAt(11, 2), 'blocked', 'Acme espera una aprobación', 'Quiere ejecutar un comando fuera del proyecto.', { session_id: 'mock-wG-p1' }),
     mk(6, hoyAt(12, 45), 'test', 'Colmena', 'Las notificaciones funcionan.', { entregado: false }),
     mk(7, hoyAt(13, 10), 'done', 'Orquestador terminó', 'Revisá la sesión en Colmena.', { session_id: 'mock-wG-p1', entregado: false }),
-    mk(8, hoyAt(13, 40), 'mr', 'Falló el pipeline', 'ps9 !412: feat: checkout con cuotas sin interés', { mr: '101:412' }),
+    mk(8, hoyAt(13, 40), 'mr', 'Falló el pipeline', 'tienda !412: feat: checkout con cuotas sin interés', { mr: '101:412' }),
     ...avisosMockExtra,
   ].sort((a, b) => a.id - b.id)
 }
@@ -405,10 +405,10 @@ export function createMockApi(onUnauthorized: () => void): Api {
     }
     const panes = tabs.flatMap((t): ClosePane[] =>
       t.agents.length
-        ? t.agents.map((x) => ({ pane_id: x.pane_id, kind: x.kind, status: x.status, titulo: x.title, session_id: x.session_id, cwd: '/home/usuario/proyectos/acme/ps9', proceso: null }))
+        ? t.agents.map((x) => ({ pane_id: x.pane_id, kind: x.kind, status: x.status, titulo: x.title, session_id: x.session_id, cwd: '/home/usuario/proyectos/tienda-demo', proceso: null }))
         : t.terminales?.length
           ? t.terminales.map((x) => ({ pane_id: x.pane_id, kind: null, status: null, titulo: x.titulo, session_id: null, cwd: x.cwd, proceso: x.estado === 'prompt' ? null : x.proceso }))
-          : [{ pane_id: `${t.id}:term`, kind: null, status: null, titulo: '', session_id: null, cwd: '/home/usuario/proyectos/acme/ps9', proceso: t.id === 'wS:t2' ? 'node' : 'bash' }],
+          : [{ pane_id: `${t.id}:term`, kind: null, status: null, titulo: '', session_id: null, cwd: '/home/usuario/proyectos/tienda-demo', proceso: t.id === 'wS:t2' ? 'node' : 'bash' }],
     )
     const bloqueantes = panes.filter((x) => x.status && x.status !== 'idle' && x.status !== 'done').map((x) => ({ pane_id: x.pane_id, status: x.status! }))
     const label = tipo === 'workspace' ? w.label : tabs[0].label
@@ -711,7 +711,7 @@ export function createMockApi(onUnauthorized: () => void): Api {
       const all = transcriptFor(sid)
       const end = Math.min(before ?? all.length, all.length)
       const start = Math.max(0, end - limit)
-      return { items: structuredClone(all.slice(start, end)), before: start > 0 ? start : null, title: ag.title, status: ag.status, pane_id: ag.pane_id, status_line: { model: 'Opus 5.5', ticket: 'ABC-123 - Contador carrito tienda-a', ctx_pct: 34, ctx_level: 'caution', vpn: 'up' } }
+      return { items: structuredClone(all.slice(start, end)), before: start > 0 ? start : null, title: ag.title, status: ag.status, pane_id: ag.pane_id, status_line: { model: 'Opus 5.5', ticket: 'ABC-123 - Contador carrito web', ctx_pct: 34, ctx_level: 'caution', vpn: 'up' } }
     },
     async getVozEstado() {
       await sleep(120)

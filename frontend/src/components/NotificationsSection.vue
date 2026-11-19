@@ -5,6 +5,7 @@ import { piezas } from '../piezas'
 import { gsap, isSoft, ring, useGsap } from '../motion'
 import Icon from './Icon.vue'
 import InlineAlert from './InlineAlert.vue'
+import { DEMO } from '../lib/demoActual'
 
 const { run } = useGsap()
 const root = ref<HTMLElement | null>(null)
@@ -135,7 +136,8 @@ onMounted(() => void refreshPush())
         <p v-if="pushState.status === 'checking'" class="n-skel" aria-hidden="true" />
 
         <p v-else-if="pushState.status === 'unsupported'" class="n-note">
-          Este navegador no puede recibir avisos. Hace falta abrir Colmena por HTTPS desde un navegador compatible.
+          <template v-if="DEMO">La demo no manda avisos al dispositivo.</template>
+          <template v-else>Este navegador no puede recibir avisos. Hace falta abrir Colmena por HTTPS desde un navegador compatible.</template>
         </p>
 
         <div v-else-if="pushState.status === 'install'" class="n-card">

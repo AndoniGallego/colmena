@@ -13,7 +13,7 @@ describe('toEnviado', () => {
 
 describe('toConsultado', () => {
   it('lee estado, motivo y detalle; un estado desconocido es incierto y sin id no hay tarjeta', () => {
-    expect(toConsultado({ id: ID, pane_id: 'p1', destino: 'PS9', estado: 'rechazada', motivo: 'No le pregunté' })).toMatchObject({ estado: 'rechazada', motivo: 'No le pregunté' })
+    expect(toConsultado({ id: ID, pane_id: 'p1', destino: 'Tienda', estado: 'rechazada', motivo: 'No le pregunté' })).toMatchObject({ estado: 'rechazada', motivo: 'No le pregunté' })
     expect(toConsultado({ id: ID, estado: 'raro' })!.estado).toBe('incierto')
     expect(toConsultado({ estado: 'ok' })).toBeNull()
   })

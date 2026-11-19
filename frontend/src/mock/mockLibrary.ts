@@ -48,8 +48,8 @@ const base = (kind: LibKind, over: Partial<LibItem>): LibItem => ({
   kind,
   source: 'SendUserFile',
   session_id: 'mock-wC-p1',
-  session_titulo: 'Módulo Acme en monorepo ps9',
-  project: 'ps9',
+  session_titulo: 'Módulo de carrito en la tienda',
+  project: 'tienda',
   subagent: '',
   ts: hoursAgo(1),
   title: '',
@@ -72,9 +72,9 @@ const base = (kind: LibKind, over: Partial<LibItem>): LibItem => ({
 })
 
 const SESS = {
-  a: { session_id: 'mock-wC-p1', session_titulo: 'Módulo Acme en monorepo ps9' },
+  a: { session_id: 'mock-wC-p1', session_titulo: 'Módulo de carrito en la tienda' },
   b: { session_id: 'mock-w1-p1', session_titulo: 'Orquestador de sesiones web con chat integrado' },
-  c: { session_id: 'mock-w8-p2', session_titulo: 'Revisión de componentes Grove' },
+  c: { session_id: 'mock-w8-p2', session_titulo: 'Revisión de componentes UI' },
 }
 
 export const MOCK_LIB_IDS = {
@@ -115,7 +115,7 @@ function build(): LibItem[] {
     base('image', { ...SESS.b, ts: hoursAgo(2.5), title: 'Captura del checkout', caption: 'Error de expiración de token', nombre: 'checkout.png', mime: 'image/png', size: 220_000, src: SVG(12, 'Checkout') }),
     base('svg', { ...SESS.a, ts: hoursAgo(4), title: 'Diagrama de módulos', nombre: 'modulos.svg', mime: 'image/svg+xml', src: SVG(260, 'Módulos') }),
     base('gif', { ...SESS.c, ts: hoursAgo(6), title: 'Animación del carrusel', nombre: 'carrusel.gif', mime: 'image/gif', size: 900_000, src: GIF }),
-    base('pdf', { ...SESS.c, ts: hoursAgo(7), title: 'Reporte de componentes', nombre: 'grove-gaps.pdf', mime: 'application/pdf', size: 1_400_000, servible: false, motivo: 'Sin vista previa en la demo' }),
+    base('pdf', { ...SESS.c, ts: hoursAgo(7), title: 'Reporte de componentes', nombre: 'ui-gaps.pdf', mime: 'application/pdf', size: 1_400_000, servible: false, motivo: 'Sin vista previa en la demo' }),
     base('video', { ...SESS.b, ts: hoursAgo(26), title: 'Grabación del chat', nombre: 'chat.webm', mime: 'video/webm', size: 4_800_000, servible: false, motivo: 'Sin vista previa en la demo' }),
     base('text', { ...SESS.a, ts: hoursAgo(27), title: 'Handoff de la sesión', nombre: 'handoff.md', mime: 'text/markdown', size: 800 }),
     base('diagrama', { ...SESS.a, source: 'chat', ts: hoursAgo(28), title: 'Login con SSO', diagrama_raw: DIAGRAMA_LOGIN, servible: false }),
@@ -161,7 +161,7 @@ export function createMockLibrary() {
     sessions(): LibSession[] {
       return Object.values(SESS).map((s) => {
         const own = items.filter((i) => i.session_id === s.session_id)
-        return { session_id: s.session_id, titulo: s.session_titulo, proyecto: 'ps9', n: own.length, ultimo_ts: own[0]?.ts ?? '' }
+        return { session_id: s.session_id, titulo: s.session_titulo, proyecto: 'tienda', n: own.length, ultimo_ts: own[0]?.ts ?? '' }
       })
     },
     quitar(ids: string[]): number {

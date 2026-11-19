@@ -66,15 +66,15 @@ const render = () => renderToString(createSSRApp({ render: () => h(EntornosView)
 const vacioExtra = { salud: null, apagado: false, servicios: [] as { servicio: string; estado: 'corriendo'; codigo: null; hace_s: null }[] }
 
 const tiendaA = {
-  nombre: 'tienda-a',
-  carpeta: '~/proyectos/acme/tienda-a',
+  nombre: 'tienda-b',
+  carpeta: '~/proyectos/tienda-demo',
   principal: 8088,
   puertos: [{ puerto: 8088, servicio: 'tienda-b', puerto_contenedor: 3000, abrible: true }],
   ...vacioExtra,
 }
-const ps9v = {
-  nombre: 'ps9',
-  carpeta: '~/proyectos/acme/ps9',
+const tiendav = {
+  nombre: 'tienda',
+  carpeta: '~/proyectos/tienda-demo',
   principal: 8080,
   puertos: [
     { puerto: 8080, servicio: 'web', puerto_contenedor: 80, abrible: true },
@@ -86,13 +86,13 @@ const ps9v = {
 const base = () => ({
   enPrograma: true,
   notebook: 'usuario@192.168.1.50',
-  lista: [ps9v, tiendaA],
+  lista: [tiendav, tiendaA],
   error: '',
   cargando: false,
   abriendo: [],
   cerrando: [],
   errores: {},
-  tuneles: { ps9: { estado: 'abierto', puertos: [8080], error: null } },
+  tuneles: { tienda: { estado: 'abierto', puertos: [8080], error: null } },
 })
 
 describe('EntornosView', () => {
@@ -112,7 +112,7 @@ describe('EntornosView', () => {
   })
 
   it('desconectando deshabilita el botón', async () => {
-    Object.assign(estado, base(), { cerrando: ['ps9'] })
+    Object.assign(estado, base(), { cerrando: ['tienda'] })
     const html = await render()
     expect(html).toContain('Desconectando…')
   })
@@ -139,13 +139,13 @@ describe('EntornosView', () => {
     expect(html).toContain('Para abrir entornos usá la app de Windows')
     expect(html).not.toContain('Conectar')
     expect(html).not.toContain('cambiar')
-    expect(html).toContain('ps9')
+    expect(html).toContain('tienda')
     expect(html).toContain('web')
     expect(html).toContain(':8080')
   })
 
   it('muestra conectando y el error de puerto ocupado', async () => {
-    Object.assign(estado, base(), { tuneles: {}, abriendo: ['ps9'], errores: { 'tienda-a': 'el puerto 8088 ya está en uso en esta PC' } })
+    Object.assign(estado, base(), { tuneles: {}, abriendo: ['tienda'], errores: { 'tienda-b': 'el puerto 8088 ya está en uso en esta PC' } })
     const html = await render()
     expect(html).toContain('Conectando…')
     expect(html).toContain('Falló')
@@ -153,7 +153,7 @@ describe('EntornosView', () => {
   })
 
   it('cada tarjeta expone data-fase acorde al túnel', async () => {
-    Object.assign(estado, base(), { tuneles: {}, abriendo: ['ps9'], errores: { 'tienda-a': 'el puerto 8088 ya está en uso en esta PC' } })
+    Object.assign(estado, base(), { tuneles: {}, abriendo: ['tienda'], errores: { 'tienda-b': 'el puerto 8088 ya está en uso en esta PC' } })
     const html = await render()
     expect(html).toMatch(/data-fase="abriendo"/)
     expect(html).toMatch(/data-fase="error"/)
@@ -183,14 +183,14 @@ describe('EntornosView', () => {
   it('con fase abierto solo muestra Desconectar', async () => {
     Object.assign(estado, base())
     const html = await render()
-    const ps9 = html.split('</article>').find((s) => s.includes('>ps9<'))
-    expect(ps9).toContain('Desconectar')
-    expect(ps9).not.toContain('Conectar')
+    const tienda = html.split('</article>').find((s) => s.includes('>tienda<'))
+    expect(tienda).toContain('Desconectar')
+    expect(tienda).not.toContain('Conectar')
   })
 
   it('explica el error de ssh y deja el original en Ver detalle', async () => {
     Object.assign(estado, base(), {
-      tuneles: { ps9: { estado: 'error', puertos: [8080], error: 'usuario@192.168.1.50: Permission denied (publickey).' } },
+      tuneles: { tienda: { estado: 'error', puertos: [8080], error: 'usuario@192.168.1.50: Permission denied (publickey).' } },
     })
     const html = await render()
     expect(html).toContain('No llego a la notebook. ¿Estás en la red de casa y la dirección es la correcta?')
@@ -199,7 +199,7 @@ describe('EntornosView', () => {
   })
 
   it('sin original en el error no muestra Ver detalle', async () => {
-    Object.assign(estado, base(), { errores: { 'tienda-a': 'el puerto 8088 ya está en uso en esta PC' }, tuneles: {} })
+    Object.assign(estado, base(), { errores: { 'tienda-b': 'el puerto 8088 ya está en uso en esta PC' }, tuneles: {} })
     const html = await render()
     expect(html).toContain('el puerto 8088 ya está en uso en esta PC')
     expect(html).not.toContain('Ver detalle')
@@ -214,7 +214,7 @@ describe('EntornosView', () => {
 
   it('semáforo de salud con data-salud y aria-label', async () => {
     Object.assign(estado, base(), {
-      lista: [{ ...ps9v, salud: 'verde' }, { ...tiendaA, salud: 'amarillo' }, { ...tiendaA, nombre: 'rojo-x', salud: 'rojo' }],
+      lista: [{ ...tiendav, salud: 'verde' }, { ...tiendaA, salud: 'amarillo' }, { ...tiendaA, nombre: 'rojo-x', salud: 'rojo' }],
     })
     const html = await render()
     expect(html).toContain('class="en-salud"')
@@ -230,7 +230,7 @@ describe('EntornosView', () => {
     Object.assign(estado, base(), {
       lista: [
         {
-          ...ps9v,
+          ...tiendav,
           salud: 'verde',
           servicios: [
             { servicio: 'web', estado: 'corriendo', codigo: null, hace_s: null },
@@ -249,7 +249,7 @@ describe('EntornosView', () => {
     Object.assign(estado, base(), {
       lista: [
         {
-          ...ps9v,
+          ...tiendav,
           servicios: [{ servicio: 'hs-api', estado: 'caido', codigo: 1, hace_s: 300 }],
         },
       ],
@@ -262,7 +262,7 @@ describe('EntornosView', () => {
   it('apagados van al details y no en la grilla principal', async () => {
     Object.assign(estado, base(), {
       lista: [
-        { ...ps9v, apagado: true, salud: 'rojo' },
+        { ...tiendav, apagado: true, salud: 'rojo' },
         { ...tiendaA, apagado: false },
       ],
       tuneles: {},
@@ -270,16 +270,16 @@ describe('EntornosView', () => {
     const html = await render()
     expect(html).toContain('Apagados (1)')
     const main = html.split('Apagados (1)')[0] ?? ''
-    expect(main).not.toContain('>ps9<')
-    expect(html).toContain('>tienda-a<')
+    expect(main).not.toContain('>tienda<')
+    expect(html).toContain('>tienda-b<')
   })
 
   it('botón Probar solo en tarjetas activas con puerto abrible', async () => {
     Object.assign(estado, base(), {
       lista: [
-        ps9v,
+        tiendav,
         { ...tiendaA, puertos: [{ puerto: 1, servicio: 'x', puerto_contenedor: null, abrible: false }] },
-        { ...ps9v, nombre: 'apag', apagado: true },
+        { ...tiendav, nombre: 'apag', apagado: true },
       ],
       tuneles: {},
     })
@@ -287,7 +287,7 @@ describe('EntornosView', () => {
     expect((html.match(/Probar/g) ?? []).length).toBe(1)
     const apagados = html.split('Apagados')[1] ?? ''
     expect(apagados).not.toContain('Probar')
-    const sinAbrible = html.split('>tienda-a<')[1]?.split('</article>')[0] ?? ''
+    const sinAbrible = html.split('>tienda-b<')[1]?.split('</article>')[0] ?? ''
     expect(sinAbrible).not.toContain('Probar')
   })
 

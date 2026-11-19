@@ -2,7 +2,7 @@ import { coverHues } from './biblioteca'
 
 export const hueDe = (workspace: string) => coverHues(workspace || '·')[0]
 
-/** "PS9 · Backend" → "PS9 · Back": the phone chip only has room for a hint of the name. */
+/** "Tienda · Backend" → "Tienda · Back": the phone chip only has room for a hint of the name. */
 export function nombreCorto(nombre: string): string {
   const parts = nombre.split(' · ').map((p) => p.trim()).filter(Boolean)
   if (parts.length < 2) return nombre.length > 12 ? `${nombre.slice(0, 11).trimEnd()}…` : nombre

@@ -15,11 +15,11 @@ describe('filasHistorial', () => {
 
   it('las decisiones del usuario salen como "Vos" con el texto de la decisión', () => {
     const [a, b, c] = filasHistorial([
-      { quien: 'usuario', decision: 'rechazar', herramienta: 'Bash', entrada: { command: 'rm -rf x' }, hora: h, sesion: 'PS9 · Back' },
+      { quien: 'usuario', decision: 'rechazar', herramienta: 'Bash', entrada: { command: 'rm -rf x' }, hora: h, sesion: 'Tienda · Back' },
       { quien: 'usuario', decision: 'siempre', herramienta: 'Edit', entrada: { file_path: '/a/b.php' }, hora: h },
       { quien: 'politica', categoria: 'auto', herramienta: 'Read', hora: h, session_id: 'abcdefghijkl' },
     ])
-    expect(a).toMatchObject({ quien: 'Vos', decision: 'Rechazado', herramienta: 'Bash', detalle: 'rm -rf x', sesion: 'PS9 · Back' })
+    expect(a).toMatchObject({ quien: 'Vos', decision: 'Rechazado', herramienta: 'Bash', detalle: 'rm -rf x', sesion: 'Tienda · Back' })
     expect(b).toMatchObject({ decision: 'Permitido siempre', detalle: '/a/b.php' })
     expect(c).toMatchObject({ quien: 'Política (antes)', decision: 'Aprobado', sesion: 'abcdefgh' })
   })

@@ -48,13 +48,13 @@ function mk(o: Partial<Mr> & { pid: number; iid: number; repo: string }): Mr {
 
 function seed(): Mr[] {
   return [
-    mk({ pid: 101, iid: 412, repo: 'ps9', titulo: 'feat: checkout con cuotas sin interés', rama: 'feature/PS9-88', target: 'develop', pipeline: { estado: 'fallo', id: 9_912, url: '' }, reviewers: [persona('tomas.diaz')], hilos_sin_resolver: 2, comentarios_nuevos: 1, actualizado: hace(4) }),
-    mk({ pid: 101, iid: 409, repo: 'ps9', titulo: 'fix: login federado respeta return_to', rama: 'feature/PS9-81', target: 'develop', pipeline: { estado: 'corriendo', id: 9_901, url: '' }, reviewers: [persona('valeria.gomez')], actualizado: hace(18) }),
+    mk({ pid: 101, iid: 412, repo: 'tienda', titulo: 'feat: checkout con cuotas sin interés', rama: 'feature/DEMO-88', target: 'develop', pipeline: { estado: 'fallo', id: 9_912, url: '' }, reviewers: [persona('tomas.diaz')], hilos_sin_resolver: 2, comentarios_nuevos: 1, actualizado: hace(4) }),
+    mk({ pid: 101, iid: 409, repo: 'tienda', titulo: 'fix: login federado respeta return_to', rama: 'feature/DEMO-81', target: 'develop', pipeline: { estado: 'corriendo', id: 9_901, url: '' }, reviewers: [persona('valeria.gomez')], actualizado: hace(18) }),
     mk({ pid: 230, iid: 77, repo: 'kit', titulo: 'chore: mover el kit a innovacion/kit', rama: 'feature/kit-remote', reviewers: [persona('diego.ramos')], aprobaciones: { dadas: 1, requeridas: 1, faltan: 0, por: [persona('diego.ramos')], yo: false, puedo: false }, actualizado: hace(55) }),
-    mk({ pid: 140, iid: 31, repo: 'tienda-a', titulo: 'Draft: feat: carrusel de recomendaciones IA', rama: 'feature/DEMO-98', draft: true, conflictos: true, pipeline: { estado: 'sin', id: 0, url: '' }, actualizado: hace(300), pausado: true }),
+    mk({ pid: 140, iid: 31, repo: 'web', titulo: 'Draft: feat: carrusel de recomendaciones IA', rama: 'feature/DEMO-98', draft: true, conflictos: true, pipeline: { estado: 'sin', id: 0, url: '' }, actualizado: hace(300), pausado: true }),
     mk({ pid: 160, iid: 533, repo: 'datos', titulo: 'DEMO-101: endpoint GET /carousel/recommendations/:id para el carrusel de recomendaciones de la home (proveedor simulado + servicio de modelos)', rama: 'feature/DEMO-101-recomendaciones-carrusel-home-proveedor-modelos-red-privada', target: 'master', rol: 'revisor', autor: persona('lucia.perez'), reviewers: [YO, persona('diego.ramos')], puede_mergear: false, aprobaciones: { dadas: 0, requeridas: 1, faltan: 1, por: [], yo: false, puedo: true }, hilos_sin_resolver: 1, comentarios_nuevos: 2, actualizado: hace(12) }),
-    mk({ pid: 150, iid: 205, repo: 'tienda-c', titulo: 'fix: categorizador sigue el redirect a https', rama: 'feature/DEMO-97', rol: 'revisor', autor: persona('lucia.perez'), reviewers: [YO], puede_mergear: false, aprobaciones: { dadas: 0, requeridas: 1, faltan: 1, por: [], yo: false, puedo: true }, hilos_sin_resolver: 1, actualizado: hace(25) }),
-    mk({ pid: 120, iid: 88, repo: 'tienda-d', titulo: 'feat: reservas de stock con lock optimista', rama: 'feature/DEMO-99', rol: 'revisor', autor: persona('camila.torres'), reviewers: [YO, persona('tomas.diaz')], pipeline: { estado: 'ok', id: 7_788, url: '' }, aprobaciones: { dadas: 1, requeridas: 2, faltan: 1, por: [YO], yo: true, puedo: true }, actualizado: hace(130) }),
+    mk({ pid: 150, iid: 205, repo: 'api', titulo: 'fix: categorizador sigue el redirect a https', rama: 'feature/DEMO-97', rol: 'revisor', autor: persona('lucia.perez'), reviewers: [YO], puede_mergear: false, aprobaciones: { dadas: 0, requeridas: 1, faltan: 1, por: [], yo: false, puedo: true }, hilos_sin_resolver: 1, actualizado: hace(25) }),
+    mk({ pid: 120, iid: 88, repo: 'docs', titulo: 'feat: reservas de stock con lock optimista', rama: 'feature/DEMO-99', rol: 'revisor', autor: persona('camila.torres'), reviewers: [YO, persona('tomas.diaz')], pipeline: { estado: 'ok', id: 7_788, url: '' }, aprobaciones: { dadas: 1, requeridas: 2, faltan: 1, por: [YO], yo: true, puedo: true }, actualizado: hace(130) }),
   ]
 }
 
@@ -335,20 +335,20 @@ export function createMockMrs(): MrsApi {
     },
     async opciones(sessionId) {
       await sleep(400)
-      const repos = ['ps9', 'tienda-e', 'tienda-d', 'tienda-a', 'tienda-c'].map((r) => ({
+      const repos = ['tienda', 'admin', 'docs', 'web', 'api'].map((r) => ({
         path: `/home/usuario/proyectos/acme/${r}`,
         proyecto: `mi-grupo/development/${r}`,
         nombre: r,
-        rama: r === 'ps9' ? 'feature/PS9-90' : 'main',
-        ramas: r === 'ps9' ? ['feature/PS9-90', 'feature/PS9-88', 'local/experimento', 'develop', 'main'] : ['main'],
+        rama: r === 'tienda' ? 'feature/DEMO-90' : 'main',
+        ramas: r === 'tienda' ? ['feature/DEMO-90', 'feature/DEMO-88', 'local/experimento', 'develop', 'main'] : ['main'],
       }))
       repos.push({ path: '/home/usuario/proyectos/acme/extras/kit', proyecto: 'mi-grupo/development/innovacion/kit', nombre: 'kit', rama: 'feature/kit-mrs', ramas: ['feature/kit-mrs', 'main'] })
-      return { repos, sugerido: sessionId ? { repo: '/home/usuario/proyectos/acme/ps9', rama: 'feature/PS9-90' } : { repo: '', rama: '' }, equipo: EQUIPO }
+      return { repos, sugerido: sessionId ? { repo: '/home/usuario/proyectos/tienda-demo', rama: 'feature/DEMO-90' } : { repo: '', rama: '' }, equipo: EQUIPO }
     },
     async rama(_repo, rama) {
       await sleep(380)
       if (rama.startsWith('local/')) return { pusheada: false, target: 'develop', existente: null }
-      if (rama === 'feature/PS9-88') return { pusheada: true, target: 'develop', existente: { ref: '101:412', iid: 412, url: '' } }
+      if (rama === 'feature/DEMO-88') return { pusheada: true, target: 'develop', existente: { ref: '101:412', iid: 412, url: '' } }
       return { pusheada: true, target: rama.startsWith('feature/kit') ? 'main' : 'develop', existente: null }
     },
     async redactar(_repo, rama) {
@@ -361,7 +361,7 @@ export function createMockMrs(): MrsApi {
     async crear(body) {
       await sleep(900)
       const iid = 413 + items.length
-      items = [mk({ pid: 101, iid, repo: body.repo.split('/').pop() || 'ps9', titulo: body.titulo, rama: body.rama, target: body.target, reviewers: body.reviewers.map(persona), pipeline: { estado: 'corriendo', id: 9_999, url: '' }, actualizado: hace(0) }), ...items]
+      items = [mk({ pid: 101, iid, repo: body.repo.split('/').pop() || 'tienda', titulo: body.titulo, rama: body.rama, target: body.target, reviewers: body.reviewers.map(persona), pipeline: { estado: 'corriendo', id: 9_999, url: '' }, actualizado: hace(0) }), ...items]
       return { ref: `101:${iid}`, url: '' }
     },
   }

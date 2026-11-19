@@ -62,7 +62,7 @@ describe('limpiarFilaNovedad', () => {
   it('saca sig, pedido_id e ids crudos de pane', () => {
     const raw = 'Login (w1:p2) pregunta: «¿listo?» (sig=abc123)'
     expect(limpiarFilaNovedad(raw)).toBe('Login pregunta: «¿listo?»')
-    const perm = 'PS9 · Back (g26:p28) espera permiso: «make test» (pedido_id=pid-1, gris: dudoso)'
-    expect(limpiarFilaNovedad(perm)).toBe('PS9 · Back espera permiso: «make test»')
+    const perm = 'Tienda · Back (g26:p28) espera permiso: «make test» (pedido_id=pid-1, gris: dudoso)'
+    expect(limpiarFilaNovedad(perm)).toBe('Tienda · Back espera permiso: «make test»')
   })
 })

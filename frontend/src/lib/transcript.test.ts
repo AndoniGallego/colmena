@@ -98,7 +98,7 @@ describe('groupThread', () => {
 
 describe('toolLine', () => {
   it('shortens paths for file tools', () => {
-    expect(toolLine('Read', '/home/usuario/proyectos/acme/ps9/modules/x/File.php')).toMatchObject({ verb: 'Leyó', target: '…/modules/x/File.php' })
+    expect(toolLine('Read', '/home/usuario/proyectos/tienda-demo/modules/x/File.php')).toMatchObject({ verb: 'Leyó', target: '…/modules/x/File.php' })
   })
   it('keeps commands whole', () => {
     expect(toolLine('Bash', 'git status --short')).toMatchObject({ verb: 'Corrió', target: 'git status --short' })

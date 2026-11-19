@@ -5,12 +5,12 @@ import { parseSegments } from './segments'
 
 const seq = {
   titulo: 'Stock',
-  resumen: 'PS9 pide stock',
+  resumen: 'Tienda pide stock',
   tipo: 'secuencia',
-  actores: [{ id: 'ps9', nombre: 'PS9', icono: '🛒' }, { id: 'mod', nombre: 'Módulo' }],
+  actores: [{ id: 'tienda', nombre: 'Tienda', icono: '🛒' }, { id: 'mod', nombre: 'Módulo' }],
   pasos: [
-    { de: 'ps9', a: 'mod', texto: 'Pide stock', detalle: 'GET /stock', datos: '{sku}', tipo: 'llamada' },
-    { de: 'mod', a: 'ps9', texto: 'Devuelve', tipo: 'respuesta' },
+    { de: 'tienda', a: 'mod', texto: 'Pide stock', detalle: 'GET /stock', datos: '{sku}', tipo: 'llamada' },
+    { de: 'mod', a: 'tienda', texto: 'Devuelve', tipo: 'respuesta' },
     { de: 'mod', texto: 'Cachea' },
   ],
   notas: ['Una nota'],
@@ -20,13 +20,13 @@ describe('toPasos secuencia', () => {
   it('parses a valid sequence and resolves actors to indexes', () => {
     const f = toPasos(seq)!
     expect(f.tipo).toBe('secuencia')
-    expect(f.actores).toEqual([{ id: 'ps9', nombre: 'PS9', icono: '🛒' }, { id: 'mod', nombre: 'Módulo', icono: '' }])
+    expect(f.actores).toEqual([{ id: 'tienda', nombre: 'Tienda', icono: '🛒' }, { id: 'mod', nombre: 'Módulo', icono: '' }])
     expect(f.pasos.map((p) => [p.de, p.a, p.tipo])).toEqual([[0, 1, 'llamada'], [1, 0, 'respuesta'], [1, 1, 'evento']])
     expect(f.notas).toEqual(['Una nota'])
   })
 
   it('drops steps that point at unknown actors and rejects when none is left', () => {
-    const f = toPasos({ ...seq, pasos: [{ de: 'ps9', a: 'nadie', texto: 'x' }, { de: 'ps9', a: 'mod', texto: 'ok' }] })!
+    const f = toPasos({ ...seq, pasos: [{ de: 'tienda', a: 'nadie', texto: 'x' }, { de: 'tienda', a: 'mod', texto: 'ok' }] })!
     expect(f.pasos).toHaveLength(1)
     expect(toPasos({ ...seq, pasos: [{ de: 'zzz', texto: 'x' }] })).toBeNull()
   })
@@ -41,7 +41,7 @@ describe('toPasos secuencia', () => {
   })
 
   it('treats unknown step types as llamada', () => {
-    expect(toPasos({ ...seq, pasos: [{ de: 'ps9', a: 'mod', texto: 'x', tipo: 'raro' }] })!.pasos[0].tipo).toBe('llamada')
+    expect(toPasos({ ...seq, pasos: [{ de: 'tienda', a: 'mod', texto: 'x', tipo: 'raro' }] })!.pasos[0].tipo).toBe('llamada')
   })
 })
 
@@ -180,7 +180,7 @@ describe('resumen del recorrido', () => {
 
   it('lists the actors of a sequence in order of appearance', () => {
     const f = toPasos(seq)!
-    expect(actoresEnOrden(f).map((a) => f.actores[a].id)).toEqual(['ps9', 'mod'])
+    expect(actoresEnOrden(f).map((a) => f.actores[a].id)).toEqual(['tienda', 'mod'])
     expect(resumenPasos(f).linea).toBe('3 pasos')
   })
 })

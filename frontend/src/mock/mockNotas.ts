@@ -7,7 +7,7 @@ function ejemplo(): Nota[] {
     { id: 'n1', tipo: 'recordatorio', texto: 'Revisar el MR de la política de permisos antes de mañana', hecha_at: null, creada_at: hace(20), editada_at: hace(20), origen: null },
     { id: 'n2', tipo: 'recordatorio', texto: 'Probar el túnel desde la PC', hecha_at: hace(30), creada_at: hace(300), editada_at: hace(30), origen: null },
     { id: 'n3', tipo: 'apunte', texto: 'El puerto 8080 de la tienda local no sale por Tailscale, solo por el túnel de casa', hecha_at: null, creada_at: hace(600), editada_at: hace(600), origen: null },
-    { id: 'n4', tipo: 'apunte', texto: 'Acordarse de preguntarle a Bruno por el flujo de pedidos', hecha_at: null, creada_at: hace(1500), editada_at: hace(1500), origen: { sid: '5f0c2a71-8e4b-4d0a-9a51-2c7e3b9d1f64', nombre: 'Entorno local PS9', ts: hace(1500) } },
+    { id: 'n4', tipo: 'apunte', texto: 'Acordarse de preguntarle a Bruno por el flujo de pedidos', hecha_at: null, creada_at: hace(1500), editada_at: hace(1500), origen: { sid: '5f0c2a71-8e4b-4d0a-9a51-2c7e3b9d1f64', nombre: 'Entorno local Tienda', ts: hace(1500) } },
   ]
 }
 

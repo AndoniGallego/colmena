@@ -14,6 +14,8 @@ import { instalarCopiaCodigo } from './lib/codeCopy'
 import { esRutaNotch } from './lib/notchPuente'
 import { precargarChat } from './lib/precarga'
 import { correrGancho, piezas } from './piezas'
+import { bloquearRedEnDemo, DEMO } from './lib/demoActual'
+import { registrarServiceWorker, usarMock } from './lib/modoDemo'
 
 if (import.meta.env.DEV) void import('./lib/vitalsDev').then((m) => m.medirVitalsDev())
 
@@ -23,7 +25,8 @@ instalarCopiaCodigo(document)
 const notch = esRutaNotch(location.pathname)
 
 let api: Api = createHttpApi(onUnauthorized, () => piezas().flatMap((p) => (p.avisos ? [p.avisos.kind] : [])))
-if (import.meta.env.DEV && new URLSearchParams(location.search).has('mock')) {
+if (DEMO) bloquearRedEnDemo()
+if (usarMock({ demo: DEMO, dev: import.meta.env.DEV, search: location.search })) {
   for (const p of piezas()) await correrGancho(p, 'mock')
   const { createMockApi } = await import('./mock/mockApi')
   api = createMockApi(onUnauthorized)
@@ -49,6 +52,6 @@ if (notch) {
 
 void boot()
 
-if (!notch && import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureContext) {
-  window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js'))
+if (registrarServiceWorker({ demo: DEMO, prod: import.meta.env.PROD, notch, tieneSW: 'serviceWorker' in navigator, seguro: window.isSecureContext })) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`))
 }

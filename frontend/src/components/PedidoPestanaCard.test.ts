@@ -12,7 +12,7 @@ const base: PedidoPestana = {
   id: '550e8400-e29b-41d4-a716-446655440000',
   carpeta: '/home/usuario/proyecto',
   mensaje: 'Arrancá con este contexto',
-  origen: { pane_id: 'w1:p1', nombre: 'PS9 plugins', session_id: '' },
+  origen: { pane_id: 'w1:p1', nombre: 'Tienda plugins', session_id: '' },
   ts: 1_800_000_000,
   vence: 1_800_000_900,
 }
@@ -76,7 +76,7 @@ async function renderCardProps(
 describe('PedidoPestanaCard', () => {
   it('muestra sesión, carpeta, mensaje y botones', async () => {
     const html = await renderCard(base)
-    expect(html).toContain('PS9 plugins')
+    expect(html).toContain('Tienda plugins')
     expect(html).toContain('/home/usuario/proyecto')
     expect(html).toContain('Arrancá con este contexto')
     expect(html).toContain('Abrir')
@@ -87,7 +87,7 @@ describe('PedidoPestanaCard', () => {
     const html = await renderCardProps(base, { notch: true, compact: true })
     expect(html).toMatch(/\bnotch\b/)
     expect(html).not.toMatch(/Pedido de pestaña/i)
-    expect(html).toContain('PS9 plugins')
+    expect(html).toContain('Tienda plugins')
     expect(html).toContain('Abrir')
     expect(html).toContain('No')
   })

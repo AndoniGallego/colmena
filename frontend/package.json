@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
+    "build:demo": "vue-tsc --noEmit && VITE_DEMO=1 vite build --outDir dist-demo --emptyOutDir && cp dist-demo/index.html dist-demo/404.html",
     "preview": "vite preview",
     "test": "vitest run"
   },

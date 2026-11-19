@@ -41,6 +41,8 @@ import { initAvisos } from './state/avisos'
 import { initPedidosPestana } from './state/pedidosPestana'
 import { initOrdenTablero } from './state/ordenTablero'
 import AmbientBackdrop from './components/AmbientBackdrop.vue'
+import DemoAviso from './components/DemoAviso.vue'
+import { DEMO } from './lib/demoActual'
 import { gsap, haptic, isSoft, unlocked, useGsap } from './motion'
 import { useKeyboard } from './lib/keyboard'
 import Divisor from './components/Divisor.vue'
@@ -298,6 +300,7 @@ onMounted(() => {
 
 <template>
   <AmbientBackdrop />
+  <DemoAviso v-if="DEMO" />
   <Transition :name="coldLink ? 'screen-cold' : 'screen'" mode="out-in">
     <div v-if="auth === 'checking'" key="checking" class="splash">
       <LogoLoader />
