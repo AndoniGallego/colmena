@@ -54,6 +54,8 @@ Colmena puts all your sessions in one dashboard that works on desktop and phone.
 - **GitLab MRs (optional):** your GitLab merge requests, only if you configure it.
 - **Claude kit (optional):** rules, skills and hooks for the sessions, with a Kit view that shows whether it is up to date and fixes it with a button.
 - **Windows app (optional):** a notch at the top of the screen showing session status, where you answer notifications and questions, plus an Environments window to open the notebook's Docker stores through an SSH tunnel.
+- **Meeting copilot (Windows app):** listens to a video call through Windows Live Captions, spots the questions and requests, and answers them from your own repos, read-only, in a window that hides when you share your screen. Each line can be investigated, dismissed or turned into a note; the meeting is saved in the Library with a summary.
+- **Step-by-step guide (Windows app):** press Ctrl+Alt+V, ask how to do something on screen and a small bee walks you through it, pointing at each button.
 - **Export to share:** builds a clean copy of the project, without your data.
 
 ## Requirements
@@ -131,6 +133,8 @@ From Windows you can do the same with Edge or Chrome (install it as an app), or 
 
 - **Notch:** a pill at the top center of the screen. Each cell of the honeycomb is a session, colored by its state. Click to expand: you see the sessions, answer questions (with options or free text), approve permissions and the tab request with Open or No. Notifications come out of the notch instead of the browser notification.
 - **Environments:** a window that lists the Docker environments running on the notebook and opens them with a button. The app builds an SSH tunnel with their ports and opens the page in the PC's browser. It only works from the Windows app; in the browser the view is read-only.
+- **Meeting copilot:** press Listen in the notch and Colmena opens Windows Live Captions and reads them. A separate, always-on-top "Meeting" window lists the questions and requests it detects; tap one to have a read-only Claude session answer it from the repos you chose. "Show me" captures the window in front and marks on screen where to look. Ending closes the captions (only if Colmena opened them) and saves the meeting in the Library with the conversation and a summary. The notch and the window are hidden while you share your screen.
+- **Step-by-step guide:** Ctrl+Alt+V opens a small box where you ask how to do something. A bee flies to each control and a speech bubble tells you what to do; press the shortcut again to go to the next step. You can turn the bee and the bubble off from the tray.
 - It is controlled from the tray (show or hide, open Colmena, Environments, notch monitor, notebook address, start with Windows).
 
 The first time it asks for Colmena's HTTPS address (the one in `ORQ_APP_ORIGIN`). How to build the installer, step by step: [`windows/colmena-app/COMPILAR.md`](windows/colmena-app/COMPILAR.md) (in Spanish).

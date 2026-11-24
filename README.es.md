@@ -42,6 +42,8 @@ Nada queda expuesto a internet: se entra por Tailscale y con PIN.
 - **MRs de GitLab (opcional):** los merge requests de GitLab, solo si lo configurás.
 - **Kit para Claude (opcional):** reglas, skills y hooks para las sesiones, con una vista Kit que muestra si está al día y lo arregla con un botón.
 - **App de Windows (opcional):** un notch arriba de la pantalla con el estado de las sesiones, donde contestás avisos y preguntas, y una ventana Entornos para abrir las tiendas Docker de la notebook por un túnel SSH.
+- **Copiloto de reuniones (app de Windows):** escucha una videollamada a través de los Subtítulos en vivo de Windows, detecta las preguntas y los pedidos y los responde desde tus repos, en modo solo lectura, en una ventana que se oculta cuando compartís pantalla. Cada línea se puede investigar, descartar o pasar a una nota; la reunión queda en la Biblioteca con un resumen.
+- **Guía paso a paso (app de Windows):** apretás Ctrl+Alt+V, preguntás cómo hacer algo en pantalla y una abejita te lleva paso a paso, señalando cada botón.
 - **Exportar para compartir:** arma una copia limpia del proyecto, sin tus datos. Ver [Compartir Colmena](#compartir-colmena).
 
 ## Requisitos
@@ -119,6 +121,8 @@ En `windows/colmena-app/` hay una app para Windows hecha con Tauri. No hace falt
 
 - **Notch:** una pastilla arriba al centro de la pantalla. Cada celda del panal es una sesión pintada según su estado. Al hacer clic se despliega: ves las sesiones, contestás preguntas (con opciones o texto libre), aprobás permisos y el pedido de pestaña con Abrir o No. Los avisos salen del notch en lugar del aviso del navegador.
 - **Entornos:** una ventana que lista los entornos Docker que corren en la notebook y los abre con un botón. La app arma un túnel SSH con sus puertos y abre la página en el navegador de la PC. Solo funciona desde la app de Windows; en el navegador la vista es de solo lectura.
+- **Copiloto de reuniones:** tocás Escuchar en el notch y Colmena abre los Subtítulos en vivo de Windows y los lee. Una ventana "Reunión" aparte, siempre arriba, lista las preguntas y pedidos que detecta; tocás uno y una sesión de Claude de solo lectura lo responde desde los repos que elegiste. "Mostrame" captura la ventana que tenés al frente y marca en pantalla dónde mirar. Al terminar cierra los subtítulos (solo si los abrió Colmena) y guarda la reunión en la Biblioteca con la charla y un resumen. El notch y la ventana se ocultan mientras compartís pantalla.
+- **Guía paso a paso:** Ctrl+Alt+V abre una cajita donde preguntás cómo hacer algo. Una abejita vuela hasta cada control y un globo te dice qué hacer; con el mismo atajo pasás al paso siguiente. La abejita y el globo se apagan desde la bandeja.
 - Se maneja desde la bandeja (mostrar u ocultar, abrir Colmena, Entornos, monitor del notch, dirección de la notebook, arrancar con Windows).
 
 La primera vez te pide la dirección HTTPS de Colmena (la de `ORQ_APP_ORIGIN`). Cómo armar el instalador, paso a paso: [`windows/colmena-app/COMPILAR.md`](windows/colmena-app/COMPILAR.md).
