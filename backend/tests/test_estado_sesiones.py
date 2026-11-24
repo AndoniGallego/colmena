@@ -318,3 +318,28 @@ def test_aplicar_fuente_herdr_aplica_ganchos_solo_guardian():
     agents = out["workspaces"][0]["tabs"][0]["agents"]
     assert agents[0]["status"] == "idle"
     assert agents[1]["status"] == "blocked"
+
+
+def test_al_stop_recibe_el_texto_crudo(agg):
+    a, _ = agg
+    visto = []
+    a.al_stop.append(lambda pane, texto: visto.append((pane, texto)))
+    crudo = "y" * 900
+    a.recibir(ev("Stop", last_assistant_message=crudo), "w1:p1")
+    assert visto == [("w1:p1", crudo)]
+    assert len(a.estado_de("w1:p1").ultimo_mensaje) == 500
+
+
+def test_al_stop_que_falla_no_frena_el_stop(agg, caplog):
+    a, _ = agg
+
+    def roto(pane, texto):
+        raise RuntimeError("boom")
+
+    visto = []
+    a.al_stop.extend([roto, lambda p, t: visto.append(t)])
+    a.recibir(ev("Stop", last_assistant_message="listo"), "w1:p1")
+    assert a.estado_de("w1:p1").estado == "done"
+    assert visto == ["listo"]
+    assert "boom" in caplog.text or "al_stop" in caplog.text
+

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from orquestador.ganchos.canal import mismo_uid, preparar_directorio
-from orquestador.guardian.lanzador import MODOS_POR_LANZAMIENTO
+from orquestador.guardian.lanzador import MODOS_INTERNOS, MODOS_POR_LANZAMIENTO
 from orquestador.guardian.nucleo import Escucha, Guardian
 from orquestador.guardian.protocolo import (
     INTERNO,
@@ -202,11 +202,19 @@ class ServidorGuardian:
             if resume is not None and not isinstance(resume, str):
                 raise ErrorProtocolo(INVALIDO, "resume inválido", pedido_id)
             modo = args.get("modo")
-            if modo is not None and (not isinstance(modo, str) or modo not in MODOS_POR_LANZAMIENTO):
+            # Los modos internos pasan la forma; el núcleo los acepta solo en la carpeta del Copiloto.
+            if modo is not None and (not isinstance(modo, str) or modo not in MODOS_POR_LANZAMIENTO | MODOS_INTERNOS):
                 raise ErrorProtocolo(INVALIDO, "modo inválido", pedido_id)
-            if modo is None:
+            dirs_extra = args.get("dirs_extra")
+            if dirs_extra is not None and (
+                not isinstance(dirs_extra, list) or not all(isinstance(d, str) for d in dirs_extra)
+            ):
+                raise ErrorProtocolo(INVALIDO, "dirs_extra inválido", pedido_id)
+            if modo is None and not dirs_extra:
                 return await g.arrancar_claude(sesion_id, nombre, resume=resume)
-            return await g.arrancar_claude(sesion_id, nombre, resume=resume, modo=modo)
+            if not dirs_extra:
+                return await g.arrancar_claude(sesion_id, nombre, resume=resume, modo=modo)
+            return await g.arrancar_claude(sesion_id, nombre, resume=resume, modo=modo, dirs_extra=dirs_extra)
         if op == "renombrar":
             objetivo_id = _exigir_str(args, "objetivo_id", pedido_id)
             nombre = _exigir_str(args, "nombre", pedido_id)

@@ -66,7 +66,7 @@ type GruposProps = {
   fuera: number
 }
 
-const render = async (props: { grupos: GruposProps; now: number; initialOtrasDesplegadas?: boolean }) => {
+const render = async (props: { grupos: GruposProps; now: number; initialOtrasDesplegadas?: boolean; reunionDisponible?: boolean }) => {
   const { default: NotchPanel } = await import('./NotchPanel.vue')
   return renderToString(createSSRApp({ render: () => h(NotchPanel, props) }))
 }
@@ -160,5 +160,11 @@ describe('NotchPanel', () => {
     expect(html).toContain('Anotar')
     expect(html).toContain('Sin notas. Anotá lo que no te querés olvidar.')
     expect(html).not.toContain('panal')
+  })
+
+  it('el botón Reunión aparece solo en la app de Windows', async () => {
+    const grupos = { teToca: [], trabajando: [], termino: [], otras: [], fuera: 0 }
+    expect(await render({ grupos, now: NOW })).not.toContain('Reunión')
+    expect(await render({ grupos, now: NOW, reunionDisponible: true })).toContain('>Reunión</button>')
   })
 })

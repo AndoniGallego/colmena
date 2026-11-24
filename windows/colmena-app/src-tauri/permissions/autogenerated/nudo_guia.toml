@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-guia"
+description = "Enables the nudo_guia command without any pre-configured scope."
+commands.allow = ["nudo_guia"]
+
+[[permission]]
+identifier = "deny-nudo-guia"
+description = "Denies the nudo_guia command without any pre-configured scope."
+commands.deny = ["nudo_guia"]

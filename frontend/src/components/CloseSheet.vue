@@ -171,7 +171,7 @@ function onLeave(el: Element, done: () => void) {
               <InlineAlert v-if="close.notice">{{ close.notice }}</InlineAlert>
               <p v-if="close.preview?.cierra_workspace" class="notice"><Icon name="warn" :size="13" /> Es el único tab: se cierra también el workspace</p>
 
-              <div v-if="loading" class="skeleton" aria-label="Cargando" aria-busy="true"><i /><i /></div>
+              <div v-if="loading" class="skeleton" aria-label="Cargando" aria-busy="true"><i class="sk-sweep" /><i class="sk-sweep" /></div>
               <ClosePaneList v-if="showList" :panes="close.preview!.panes" :bloqueantes="blockers" actions />
 
               <p v-if="showList" class="note">
@@ -244,8 +244,7 @@ function onLeave(el: Element, done: () => void) {
 .skeleton i {
   height: 40px;
   border-radius: var(--r-md);
-  background: linear-gradient(90deg, var(--bg-2), var(--surface-hover), var(--bg-2)) 0 0 / 200% 100%;
-  animation: ui-shimmer 1.2s linear infinite;
+  --sk-bg: linear-gradient(90deg, var(--bg-2), var(--surface-hover), var(--bg-2));
 }
 .btn-danger:disabled {
   background: var(--surface-2);

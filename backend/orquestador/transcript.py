@@ -322,7 +322,7 @@ def mr_creados_glab_en_transcript(path: Path) -> list[tuple[str, int]]:
     return found
 
 
-PENDING_TAIL_BYTES = 4 * 1024 * 1024
+PENDING_TAIL_BYTES = 1024 * 1024
 PENDING_MAX = 8
 
 

@@ -420,8 +420,18 @@ onBeforeUnmount(() => {
     0 0 10px color-mix(in srgb, var(--st-done) 45%, transparent);
 }
 .en-luz[data-fase='abriendo'] {
+  position: relative;
   background: var(--st-working);
   animation: en-pulse 1.1s var(--ease-out) infinite;
+}
+.en-luz[data-fase='abriendo']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--st-working);
+  pointer-events: none;
+  animation: en-pulse-halo 1.1s var(--ease-out) infinite;
 }
 .en-luz[data-fase='error'] {
   background: var(--danger);
@@ -444,14 +454,29 @@ onBeforeUnmount(() => {
 .en-skel {
   height: 140px;
   border-radius: var(--r-card);
-  background: linear-gradient(
+  --sk-bg: linear-gradient(
     90deg,
     var(--surface-2) 0%,
     color-mix(in srgb, var(--surface) 40%, var(--surface-2)) 50%,
     var(--surface-2) 100%
   );
-  background-size: 200% 100%;
-  animation: en-shimmer 1.3s linear infinite;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.en-skel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -400%;
+  width: 600%;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--sk-bg);
+  background-size: 33.3333% 100%;
+  animation: sk-slide 1.3s linear infinite;
+  --sk-dx: 66.6667%;
 }
 .en-grid {
   display: grid;
@@ -482,8 +507,8 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: -400%;
+  width: 600%;
   height: 2px;
   background: linear-gradient(
     90deg,
@@ -492,7 +517,7 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--accent) 60%, white) 55%,
     transparent
   );
-  background-size: 200% 100%;
+  background-size: 33.3333% 100%;
   animation: en-sweep 1.4s linear infinite;
   pointer-events: none;
 }
@@ -685,19 +710,25 @@ onBeforeUnmount(() => {
   0%,
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-working) 25%, transparent);
   }
   50% {
     transform: scale(1.08);
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--st-working) 12%, transparent);
+  }
+}
+@keyframes en-pulse-halo {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(2.1111);
+    opacity: 0.12;
   }
 }
 @keyframes en-sweep {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
+  to {
+    transform: translateX(66.6667%);
   }
 }
 @keyframes en-glow {
@@ -725,14 +756,6 @@ onBeforeUnmount(() => {
     transform: scale(1);
   }
 }
-@keyframes en-shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
 
 .girando {
   animation: en-giro 0.9s linear infinite;
@@ -747,16 +770,18 @@ onBeforeUnmount(() => {
 :root[data-motion='soft'] .en-card[data-fase='abriendo']::before,
 :root[data-motion='soft'] .en-card[data-fase='abierto'],
 :root[data-motion='soft'] .en-chip.on,
-:root[data-motion='soft'] .en-skel,
+:root[data-motion='soft'] .en-skel::after,
+:root[data-motion='soft'] .en-luz[data-fase='abriendo']::after,
 :root[data-motion='soft'] .girando {
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .en-luz[data-fase='abriendo'],
+  .en-luz[data-fase='abriendo']::after,
   .en-card[data-fase='abriendo']::before,
   .en-card[data-fase='abierto'],
   .en-chip.on,
-  .en-skel,
+  .en-skel::after,
   .girando {
     animation: none;
   }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-pagina-estado"
+description = "Enables the nudo_pagina_estado command without any pre-configured scope."
+commands.allow = ["nudo_pagina_estado"]
+
+[[permission]]
+identifier = "deny-nudo-pagina-estado"
+description = "Denies the nudo_pagina_estado command without any pre-configured scope."
+commands.deny = ["nudo_pagina_estado"]

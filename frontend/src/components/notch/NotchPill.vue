@@ -25,7 +25,7 @@ import { esCampoTextoNotch } from '../../lib/notchTeclado'
 import { puente } from '../../state/notch'
 import { gsap, isSoft } from '../../motion'
 
-const props = defineProps<{ modo: ModoNotch; foco: boolean; brillo?: string | null; pendientes?: number }>()
+const props = defineProps<{ modo: ModoNotch; foco: boolean; brillo?: string | null; pendientes?: number; escuchando?: boolean }>()
 const emit = defineEmits<{ alternar: [] }>()
 
 const pill = ref<HTMLElement | null>(null)
@@ -402,6 +402,7 @@ function onHoverOut() {
         @mouseleave="onHoverOut"
       >
         <slot name="cara" />
+        <span v-if="escuchando" class="escucha loop" role="img" aria-label="Escuchando una reunión" />
         <span v-if="(pendientes ?? 0) > 0" class="insignia" :aria-label="`${pendientes} para hacer`">{{ pendientes }}</span>
       </button>
     </div>
@@ -469,6 +470,25 @@ function onHoverOut() {
   background: transparent;
   color: inherit;
   font: inherit;
+}
+.escucha {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--miel);
+  box-shadow: 0 0 0 3px var(--miel-soft);
+  animation: escucha-late 1.8s ease-in-out infinite;
+}
+@keyframes escucha-late {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .escucha {
+    animation: none;
+  }
 }
 .insignia {
   min-width: 18px;

@@ -1,0 +1,5 @@
+{
+  "identifier": "nudo",
+  "windows": ["nudo"],
+  "permissions": ["core:event:allow-listen", "allow-nudo-pagina-estado"]
+}

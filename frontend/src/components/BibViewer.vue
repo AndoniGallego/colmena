@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { LibItem } from '../api/types'
-import { diagramaOf, formatSize, KIND_LABEL, pathLabel, pruebasOf, safeClaudeUrl, viewerKind } from '../lib/biblioteca'
+import { diagramaOf, formatSize, KIND_LABEL, pathLabel, pruebasOf, reunionOf, safeClaudeUrl, viewerKind } from '../lib/biblioteca'
 import { copyText } from '../lib/clipboard'
 import { renderMarkdown } from '../lib/markdown'
 import { clock } from '../lib/time'
@@ -15,6 +15,7 @@ import BibQuitarSheet from './BibQuitarSheet.vue'
 import DiagramaCard from './DiagramaCard.vue'
 import Icon from './Icon.vue'
 import PruebasCard from './PruebasCard.vue'
+import ReunionCard from './ReunionCard.vue'
 
 const props = defineProps<{
   item: LibItem
@@ -29,6 +30,7 @@ const claude = computed(() => safeClaudeUrl(props.item.url))
 const title = computed(() => props.item.title || props.item.nombre || KIND_LABEL[props.item.kind])
 const diagrama = computed(() => (kind.value === 'diagrama' ? diagramaOf(props.item) : null))
 const pruebas = computed(() => (kind.value === 'pruebas' ? pruebasOf(props.item) : null))
+const reunion = computed(() => (kind.value === 'reunion' ? reunionOf(props.item) : null))
 const when = computed(() => {
   const t = Date.parse(props.item.ts)
   return Number.isNaN(t) ? '' : `${new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(t)} · ${clock(t)}`
@@ -214,7 +216,7 @@ onBeforeUnmount(() => {
 
     <div ref="body" class="body">
       <template v-if="kind === 'frame'">
-        <div v-if="!loaded" class="skeleton" aria-hidden="true" />
+        <div v-if="!loaded" class="skeleton sk-sweep" aria-hidden="true" />
         <BibFrame v-if="src" :key="nonce" :src="src" :title="title" @load="onFrameLoad" @stalled="stalled = true" />
         <Transition name="fade">
           <div v-if="stalled && !loaded" class="stall">
@@ -236,7 +238,7 @@ onBeforeUnmount(() => {
         <div v-if="mdHtml !== null" class="md" v-html="mdHtml" />
         <pre v-else-if="text !== null" class="plain mono">{{ text }}</pre>
         <p v-else-if="textError" class="muted">No pude leer el archivo.</p>
-        <div v-else class="skeleton lines" aria-hidden="true" />
+        <div v-else class="skeleton lines sk-sweep" aria-hidden="true" />
       </div>
       <div v-else-if="kind === 'diagrama'" class="doc diagrama">
         <DiagramaCard v-if="diagrama" :diagrama="diagrama" />
@@ -251,6 +253,13 @@ onBeforeUnmount(() => {
         <div v-else class="note">
           <Icon name="warn" :size="30" />
           <p>No pude leer este informe de pruebas.</p>
+        </div>
+      </div>
+      <div v-else-if="kind === 'reunion'" class="doc diagrama">
+        <ReunionCard v-if="reunion" :data="reunion" :item-id="item.id" :tiene-charla="item.tiene_charla === true" />
+        <div v-else class="note">
+          <Icon name="warn" :size="30" />
+          <p>No pude leer esta reunión.</p>
         </div>
       </div>
       <div v-else-if="kind === 'remote'" class="note">
@@ -494,18 +503,19 @@ onBeforeUnmount(() => {
 .skeleton {
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%) 0 0 / 220% 100%;
-  animation: shimmer 1.4s linear infinite;
+  --sk-bg: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+  --sk-left: -440%;
+  --sk-w: 660%;
+  --sk-tile: 33.3333%;
+  --sk-dx: 40%;
+  --sk-dur: 1.4s;
 }
 .skeleton.lines {
   position: relative;
   height: 160px;
   border-radius: 12px;
 }
-@keyframes shimmer {
-  to { background-position: -220% 0; }
-}
-:root[data-motion='soft'] .skeleton {
+:root[data-motion='soft'] .skeleton::after {
   animation: none;
 }
 .stall,

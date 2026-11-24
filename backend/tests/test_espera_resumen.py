@@ -330,3 +330,19 @@ def test_temporizador_real_vence_y_cierra():
     e = asyncio.run(correr())
     assert e.estado_de(PANE).estado == "done"
     assert avisos.count((PANE, "Stop")) == 1
+
+
+def test_al_stop_se_llama_enseguida_aunque_el_stop_quede_diferido(ctx):
+    e, r, p, avisos = ctx
+    visto = []
+    e.al_stop.append(lambda pane, texto: visto.append((pane, texto)))
+    enviar(e, r, ev("UserPromptSubmit"))
+    enviar(e, r, ev("PreToolUse", tool_use_id="t0", tool_name="Bash"))
+    enviar(e, r, ev("Stop", last_assistant_message=SIN_ESTADO))
+    assert e.estado_de(PANE).estado == "working"
+    assert len(p.activos()) == 1
+    assert visto == [(PANE, SIN_ESTADO)]
+    r.t += ESPERA_RESUMEN_S
+    p.disparar()
+    assert e.estado_de(PANE).estado == "done"
+    assert visto == [(PANE, SIN_ESTADO)]

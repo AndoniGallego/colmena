@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -44,15 +44,17 @@ class SesionRegistrada:
     creada: float
     ultima_vez_viva: float | None
     modo_permisos: str | None = None
+    dirs_extra: list[str] = field(default_factory=list)
 
 
 def _modo_permisos(valor: object) -> str | None:
     """Modo por lanzamiento guardado; uno desconocido cae al más estricto, nunca al global."""
-    from .lanzador import MODOS_POR_LANZAMIENTO
+    from .lanzador import MODOS_INTERNOS, MODOS_POR_LANZAMIENTO
 
     if valor is None:
         return None
-    return valor if valor in MODOS_POR_LANZAMIENTO else "default"
+    # `copiloto` se conserva solo acá: la reanudación; el núcleo lo revalida contra su carpeta.
+    return valor if valor in MODOS_POR_LANZAMIENTO | MODOS_INTERNOS else "default"
 
 
 def _numero_espacio(espacio_id: str) -> int:
@@ -154,6 +156,8 @@ class Registro:
                     creada=float(raw.get("creada") or 0),
                     ultima_vez_viva=raw.get("ultima_vez_viva"),
                     modo_permisos=_modo_permisos(raw.get("modo_permisos")),
+                    dirs_extra=[d for d in (raw.get("dirs_extra") or []) if isinstance(d, str)]
+                    if isinstance(raw.get("dirs_extra") or [], list) else [],
                 )
             except (TypeError, ValueError):
                 continue

@@ -172,7 +172,7 @@ pub fn guardar_notebook(
     let destino = validar_destino(&host, &usuario)?;
     let mut cfg = leer_config_archivo(&estado.ruta_config);
     cfg.notebook = Some(destino);
-    std::fs::write(&estado.ruta_config, escribir_config(&cfg)).map_err(|e| e.to_string())?;
+    crate::escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg)).map_err(|e| e.to_string())?;
     if window.close().is_err() {
         let _ = window.destroy();
     }

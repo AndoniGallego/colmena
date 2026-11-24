@@ -134,7 +134,7 @@ async function abrirTarea() {
   abriendo.value = true
   error.value = ''
   try {
-    const r = await postTerminalesNuevaTarea(armarCuerpoTarea(carpetaSel.value, tarea.value, nombre.value, rama.value, opId.value, ticket.value))
+    const r = await postTerminalesNuevaTarea(armarCuerpoTarea(carpetaSel.value, tarea.value, nombre.value, rama.value, opId.value, ticket.value, grupoId.value))
     guardarUltimoRepo(carpetaSel.value.ruta)
     mostrarListo(r.pegado === false ? 'Tarea abierta: pegá el mensaje a mano' : 'Tarea abierta')
   } catch (e) {
@@ -198,6 +198,14 @@ function onLeave(el: Element, done: () => void) {
               <button type="button" :aria-pressed="modo === 'terminal'" @click="cambiarModo('terminal')">Terminal</button>
               <button type="button" :aria-pressed="modo === 'tarea'" @click="cambiarModo('tarea')">Nueva tarea</button>
             </span>
+
+            <label v-if="mostrarGrupos" class="field">
+              <span>Grupo</span>
+              <select v-model="grupoId" class="sel">
+                <option value="">Nuevo</option>
+                <option v-for="g in grupos" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+              </select>
+            </label>
 
             <template v-if="modo === 'tarea'">
               <label v-if="mostrarBuscadorRepos" class="field">
@@ -274,13 +282,6 @@ function onLeave(el: Element, done: () => void) {
             </template>
 
             <template v-else>
-            <label v-if="mostrarGrupos" class="field">
-              <span>Grupo</span>
-              <select v-model="grupoId" class="sel">
-                <option value="">Nuevo</option>
-                <option v-for="g in grupos" :key="g.id" :value="g.id">{{ g.nombre }}</option>
-              </select>
-            </label>
 
             <label v-if="mostrarBuscador" class="field">
               <span>Buscar</span>

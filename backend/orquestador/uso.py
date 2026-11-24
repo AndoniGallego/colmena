@@ -9,7 +9,7 @@ from .config import private_write
 MODELOS = ("sonnet", "opus")
 RETENCION_DIAS = 30
 CAMPOS = ("input", "cache_write", "cache_read", "output")
-FUENTES = ("mrs",)
+FUENTES = ("mrs", "reunion")
 MAX_TOPE = 1_000_000_000
 _KEYS = {"input": "input_tokens", "cache_write": "cache_creation_input_tokens",
          "cache_read": "cache_read_input_tokens", "output": "output_tokens"}

@@ -687,6 +687,11 @@ export function createMockApi(onUnauthorized: () => void): Api {
       need()
       return library.text(id)
     },
+    async getLibraryCharla() {
+      await sleep(150)
+      need()
+      return 'Ana: Arrancamos con el estado de pagos.\nLuis: El reintento falla con el timeout viejo.\nAna: Lo subimos a 30 s.'
+    },
     async getSubagentes() {
       await sleep(250)
       need()

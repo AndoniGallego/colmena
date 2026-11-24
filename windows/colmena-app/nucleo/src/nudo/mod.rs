@@ -1,0 +1,20 @@
+pub mod controles;
+pub mod imagen;
+pub mod coords;
+pub mod guia;
+pub mod orden;
+pub mod pc;
+pub mod salida;
+pub mod zonas;
+
+pub const ERR_APAGADO: &str = "apagado";
+pub const ERR_SIN_PC: &str = "sin_pc";
+pub const ERR_SIN_VENTANA: &str = "sin_ventana";
+pub const ERR_SIN_CONTROLES: &str = "sin_controles";
+pub const ERR_FOTO_VIEJA: &str = "foto_vieja";
+pub const ERR_SIN_CONTROL: &str = "sin_control";
+pub const ERR_OCUPADO: &str = "ocupado";
+pub const ERR_EN_CURSO: &str = "en_curso";
+pub const ERR_VENCIDO: &str = "vencido";
+pub const ERR_INVALIDO: &str = "invalido";
+pub const ERR_FALLO_PC: &str = "fallo_pc";

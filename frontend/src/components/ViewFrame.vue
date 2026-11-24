@@ -216,4 +216,13 @@ withDefaults(
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 }
+
+/* táctil: sin vidrio (el blur de una barra fija se recalcula con cada scroll y gasta batería) */
+@media (pointer: coarse) {
+  .vf-head {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
+}
 </style>

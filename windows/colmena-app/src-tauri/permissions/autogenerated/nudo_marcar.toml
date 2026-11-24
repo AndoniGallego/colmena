@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-marcar"
+description = "Enables the nudo_marcar command without any pre-configured scope."
+commands.allow = ["nudo_marcar"]
+
+[[permission]]
+identifier = "deny-nudo-marcar"
+description = "Denies the nudo_marcar command without any pre-configured scope."
+commands.deny = ["nudo_marcar"]

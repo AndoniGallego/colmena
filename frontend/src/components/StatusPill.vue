@@ -66,16 +66,32 @@ const text = computed(() => props.label ?? LABEL[props.status])
   width: 12px;
 }
 .dot {
+  position: relative;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: currentColor;
 }
+.dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+  pointer-events: none;
+}
 .pill[data-st='working'] .dot {
   animation: breathe 1.6s var(--ease-in-out) infinite;
 }
+.pill[data-st='working'] .dot::after {
+  animation: breathe-halo 1.6s var(--ease-in-out) infinite;
+}
 .pill[data-st='fondo'] .dot {
   animation: breathe 2.8s var(--ease-in-out) infinite;
+}
+.pill[data-st='fondo'] .dot::after {
+  animation: breathe-halo 2.8s var(--ease-in-out) infinite;
 }
 .pill[data-st='blocked'] .glyph {
   animation: nudge 4.2s var(--ease-in-out) infinite;
@@ -92,8 +108,12 @@ const text = computed(() => props.label ?? LABEL[props.status])
   animation: none;
 }
 @keyframes breathe {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 50%, transparent); }
-  50% { transform: scale(0.8); box-shadow: 0 0 0 4px transparent; }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.8); }
+}
+@keyframes breathe-halo {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(2.3333); opacity: 0; }
 }
 .lbl-enter-active { transition: transform 0.35s var(--ease-out), opacity 0.25s; }
 .lbl-leave-active { transition: transform 0.18s ease-in, opacity 0.15s; }

@@ -7,10 +7,10 @@ import NotchFila from './NotchFila.vue'
 import NotchNotas from './NotchNotas.vue'
 
 const props = withDefaults(
-  defineProps<{ grupos: Grupos; now: number; initialOtrasDesplegadas?: boolean }>(),
-  { initialOtrasDesplegadas: false },
+  defineProps<{ grupos: Grupos; now: number; initialOtrasDesplegadas?: boolean; reunionDisponible?: boolean }>(),
+  { initialOtrasDesplegadas: false, reunionDisponible: false },
 )
-const emit = defineEmits<{ 'abrir-sesion': [sid: string]; 'abrir-colmena': [] }>()
+const emit = defineEmits<{ 'abrir-sesion': [sid: string]; 'abrir-colmena': []; 'abrir-reunion': [] }>()
 
 const otrasDesplegadas = ref(props.initialOtrasDesplegadas)
 const otrasRoot = ref<HTMLElement | null>(null)
@@ -112,7 +112,10 @@ function filaGrupo(s: SesionNotch, teToca: boolean) {
     <NotchNotas />
     <div class="foot">
       <span>Tocá una sesión para abrirla en Colmena</span>
-      <button type="button" class="open-btn" @click="emit('abrir-colmena')">Abrir Colmena</button>
+      <span class="foot-btns">
+        <button v-if="reunionDisponible" type="button" class="reunion-btn" @click="emit('abrir-reunion')">Reunión</button>
+        <button type="button" class="open-btn" @click="emit('abrir-colmena')">Abrir Colmena</button>
+      </span>
     </div>
   </div>
 </template>
@@ -164,6 +167,33 @@ function filaGrupo(s: SesionNotch, teToca: boolean) {
 .foot span {
   font-size: 0.74rem;
   color: var(--text-3);
+}
+.foot-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reunion-btn {
+  position: relative;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: scale 150ms ease-out;
+}
+.reunion-btn:active {
+  scale: 0.96;
+}
+.reunion-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .open-btn {
   font: inherit;

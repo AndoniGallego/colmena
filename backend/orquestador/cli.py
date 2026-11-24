@@ -223,6 +223,11 @@ def serve() -> int:
     recarga_socket = ruta_recarga()
     if recarga_socket is None:
         log.warning("XDG_RUNTIME_DIR no definido; socket de recarga desactivado")
+    from .nudo import ruta_socket as ruta_nudo
+
+    nudo_socket = ruta_nudo()
+    if nudo_socket is None:
+        log.warning("XDG_RUNTIME_DIR no definido; socket del nudo desactivado")
     app = create_app(
         cfg,
         load_secret(directory),
@@ -230,6 +235,7 @@ def serve() -> int:
         entrada_interna=False,
         ganchos_socket=ganchos_socket,
         recarga_socket=recarga_socket,
+        nudo_socket=nudo_socket,
     )
     asyncio.run(_run(app, cfg))
     return 0
@@ -263,6 +269,10 @@ def _kit(ki, accion: str | None, dry_run: bool, check: bool) -> int:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["nudo"]:
+        from .nudo_cli import main_nudo
+
+        sys.exit(main_nudo(sys.argv[2:]))
     parser = argparse.ArgumentParser(prog="orquestador")
     parser.add_argument(
         "command",

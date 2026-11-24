@@ -11,17 +11,18 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use crate::{bandeja, leer_config_archivo, ventanas, Estado};
 
 pub const EVENTO_NOTAS: &str = "notas-abrir";
+pub const EVENTO_GUIA: &str = "guia-abrir";
 pub const EVENTO_NOTCH_LISTO: &str = "notch-listo";
 
 /// Qué atajo tiene cada acción y si el sistema lo tiene registrado ahora.
 #[derive(Default)]
 pub struct EstadoAtajos {
     /// El atajo que corresponde a cada acción (el último que se pudo registrar, o el guardado si nunca se pudo).
-    pub activo: [String; 3],
+    pub activo: [String; Accion::TODAS.len()],
     /// Registrado en el sistema en este momento.
-    pub registrado: [bool; 3],
+    pub registrado: [bool; Accion::TODAS.len()],
     /// El atajo guardado no se pudo registrar (lo usa otro programa).
-    pub ocupado: [bool; 3],
+    pub ocupado: [bool; Accion::TODAS.len()],
     /// Los atajos están soltados mientras la ventana "Atajos" graba una combinación.
     pub pausado: bool,
 }
@@ -40,6 +41,7 @@ impl EstadoAtajos {
             notas: self.activo[Accion::Notas.indice()].clone(),
             notch: self.activo[Accion::Notch.indice()].clone(),
             colmena: self.activo[Accion::Colmena.indice()].clone(),
+            guia: self.activo[Accion::Guia.indice()].clone(),
         }
     }
 }
@@ -55,11 +57,33 @@ fn abrir_notas(app: &AppHandle) {
     }
 }
 
-/// El notch ya escucha: si el atajo se apretó antes, abre el modo notas ahora.
+fn abrir_guia(app: &AppHandle) {
+    // Con un paso a la vista avanza como el botón del globo, sin mostrar ni activar ninguna ventana:
+    // darle el foco a una ventana nuestra le cierra a Ando el menú que tenga abierto.
+    if crate::nudo::atajo_guia_en_curso(app) {
+        return;
+    }
+    let Some(w) = app.get_webview_window("notch") else {
+        return;
+    };
+    // Sin paso: la cajita se abre con el foco, ahora que el atajo le da permiso a Colmena de pasar al frente.
+    let _ = ventanas::mostrar_notch_con_foco(&w);
+    let emitir_ya = app.state::<Estado>().apertura_guia.lock().unwrap().pedir();
+    if emitir_ya {
+        let _ = app.emit_to("notch", EVENTO_GUIA, ());
+    }
+}
+
+/// El notch ya escucha: si algún atajo se apretó antes, abre ese modo ahora.
 pub fn notch_listo(app: &AppHandle) {
-    let habia_pendiente = app.state::<Estado>().apertura_notas.lock().unwrap().marcar_listo();
-    if habia_pendiente {
+    let estado = app.state::<Estado>();
+    let notas = estado.apertura_notas.lock().unwrap().marcar_listo();
+    let guia = estado.apertura_guia.lock().unwrap().marcar_listo();
+    if notas {
         let _ = app.emit_to("notch", EVENTO_NOTAS, ());
+    }
+    if guia {
+        let _ = app.emit_to("notch", EVENTO_GUIA, ());
     }
 }
 
@@ -68,6 +92,7 @@ fn manejar(app: &AppHandle, accion: Accion) {
         Accion::Notas => abrir_notas(app),
         Accion::Notch => ventanas::alternar_notch(app),
         Accion::Colmena => ventanas::traer_colmena(app),
+        Accion::Guia => abrir_guia(app),
     }
 }
 
@@ -163,7 +188,7 @@ pub fn pausar(app: &AppHandle) {
             .filter(|a| e.registrado[a.indice()])
             .map(|a| e.activo[a.indice()].clone())
             .collect();
-        e.registrado = [false; 3];
+        e.registrado = [false; Accion::TODAS.len()];
         lista
     };
     for atajo in a_soltar {
@@ -290,7 +315,7 @@ pub fn guardar_atajo(
     if cambio.guardar {
         let mut cfg = leer_config_archivo(&estado.ruta_config);
         cfg.atajos.set(accion, &cambio.activo);
-        std::fs::write(&estado.ruta_config, escribir_config(&cfg)).map_err(|e| e.to_string())?;
+        crate::escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg)).map_err(|e| e.to_string())?;
     }
     Ok(filas(&estado))
 }

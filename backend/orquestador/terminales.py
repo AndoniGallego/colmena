@@ -13,6 +13,7 @@ from .enchufe import TerminalesError, como_snapshot
 from .enchufe.modelo import InfoProceso
 from .redaccion import OCULTO, redactar_basico as redactar
 from .enchufe.ids import valido
+from .internas import pane_interno
 from .traspaso import CONTROL_RE, ID_RE, TraspasoError
 
 TECLAS = {
@@ -231,6 +232,7 @@ class Terminales:
         self.info = info
         self.hidden = hidden
         self.clock = clock
+        self.interna: Optional[Callable[[str], bool]] = None
         self._snap: Optional[tuple] = None
         self._reads: dict = {}
         self._locks: dict = {}
@@ -270,7 +272,7 @@ class Terminales:
         if not valido(ID_RE, pane_id or ""):
             raise TraspasoError(400, "pane_id inválido")
         pane = merged_panes(snapshot).get(pane_id)
-        if pane is None:
+        if pane is None or pane_interno(pane, self.interna):
             raise TraspasoError(404, "la terminal ya no está")
         agent_ids = {a.get("pane_id") for a in snapshot.get("agents", [])}
         if is_agent(pane, agent_ids):

@@ -9,6 +9,7 @@ from typing import Optional
 from .contexto import ContextoService
 from .digest import DigestService, PENDING_CHARS, clip_frase, parse_estado, quitar_estado, sin_bloques
 from .fondo import FondoService
+from .internas import filtrar_snapshot
 from .enchufe import Terminales, como_snapshot, sesion_propia
 from .enchufe.base import Ilegible, TerminalesError
 from .estado_sesiones import EstadoSesiones, aplicar_fuente
@@ -28,7 +29,10 @@ def build_board(snapshot: dict, digests: DigestService, self_pane_id: Optional[s
                 pinned: frozenset = frozenset(), terminal_info: Optional[dict] = None,
                 hidden: frozenset = frozenset(), contexto: Optional[ContextoService] = None,
                 hidden_workspaces: frozenset = frozenset(),
-                fondo: Optional[FondoService] = None) -> dict:
+                fondo: Optional[FondoService] = None,
+                interna: Optional[Callable[[str], bool]] = None) -> dict:
+    snapshot = filtrar_snapshot(snapshot, interna)
+
     def _agent_entry(agent: dict) -> dict:
         pane_id = agent.get("pane_id")
         session = agent.get("agent_session") or {}
@@ -163,7 +167,7 @@ class BoardHub:
         self.fuente: Callable[[], str] = lambda: "herdr"
         self.sombra = None
         self.crudo: dict | None = None
-        self.espacio_oculto: Optional[str] = None
+        self.interna: Callable[[str], bool] | None = None
 
     def _fuente_efectiva(self) -> str:
         try:
@@ -209,10 +213,9 @@ class BoardHub:
         snapshot = como_snapshot(await self.enchufe.tablero())
         hidden = frozenset(p for p in (self.self_pane_id, self.env_pane) if p)
         info = await self.terminals.many(terminal_panes(snapshot, hidden))
-        ocultos = frozenset({self.espacio_oculto}) if self.espacio_oculto else frozenset()
         board = await asyncio.to_thread(
             build_board, snapshot, self.digests, self.self_pane_id, self.pinned, info,
-            hidden, self.contexto, ocultos, self.fondo,
+            hidden, self.contexto, frozenset(), self.fondo, self.interna,
         )
         board["terminales"] = "ok"
         board["conflictos"] = snapshot.get("conflictos", [])

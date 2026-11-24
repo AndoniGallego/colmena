@@ -49,6 +49,23 @@ def test_filas_de_tablero_sintetico():
     assert filas[0]["tipo"] == "claude"
 
 
+def test_filas_de_tablero_oculta_sesiones_internas():
+    tab = {
+        "espacios": [{"id": "g1", "nombre": "Tienda"}, {"id": "g2", "nombre": "Guia"}],
+        "lineas": [{"id": "g1:l1", "espacio_id": "g1", "nombre": "API"},
+                   {"id": "g2:l1", "espacio_id": "g2", "nombre": "g"}],
+        "sesiones": [
+            {"id": "g1:p1", "linea_id": "g1:l1", "espacio_id": "g1", "programa": "claude", "cwd": "/work/a"},
+            {"id": "g2:p1", "linea_id": "g2:l1", "espacio_id": "g2", "programa": "claude", "cwd": "/data/orq/guia"},
+        ],
+    }
+    filas = filas_de_tablero(tab, es_interna=lambda cwd: cwd == "/data/orq/guia")
+    assert [f["sesion_id"] for f in filas] == ["g1:p1"]
+    assert buscar_indice(filas, "g2:p1") is None
+    assert buscar_indice(filas, "g") is None
+    assert buscar_indice(filas, "2") is None
+
+
 def test_buscar_indice_numero_y_nombre():
     filas = [{"pestana": "API", "sesion_id": "g1:p9"}]
     assert buscar_indice(filas, "1") == 0

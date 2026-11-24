@@ -30,14 +30,46 @@ pub fn aviso_ocupado(accion: Accion) -> String {
     format!("El atajo de {} lo usa otro programa", accion.nombre())
 }
 
+/// Tooltip de la bandeja: aviso de atajo ocupado, estado del nudo y reunión, juntos.
+pub fn tooltip_bandeja(aviso_atajo: Option<&str>, nudo_prendido: bool, escuchando: bool) -> Option<String> {
+    let lineas: Vec<&str> = [
+        aviso_atajo,
+        nudo_prendido.then_some("Colmena · nudo prendido"),
+        escuchando.then_some("Colmena · escuchando reunión"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    (!lineas.is_empty()).then(|| lineas.join("\n"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn tooltip_combina_aviso_y_nudo() {
+        assert_eq!(tooltip_bandeja(None, false, false), None);
+        assert_eq!(tooltip_bandeja(Some("A"), false, false).as_deref(), Some("A"));
+        assert_eq!(tooltip_bandeja(None, true, false).as_deref(), Some("Colmena · nudo prendido"));
+        assert_eq!(tooltip_bandeja(Some("A"), true, false).as_deref(), Some("A\nColmena · nudo prendido"));
+    }
+
+    #[test]
+    fn tooltip_con_reunion() {
+        assert_eq!(tooltip_bandeja(None, false, true).as_deref(), Some("Colmena · escuchando reunión"));
+        assert_eq!(
+            tooltip_bandeja(None, true, true).as_deref(),
+            Some("Colmena · nudo prendido\nColmena · escuchando reunión")
+        );
+        assert_eq!(tooltip_bandeja(None, false, false), None);
+    }
+
+    #[test]
     fn textos_de_la_bandeja() {
         assert_eq!(linea_bandeja(Accion::Notas, "Ctrl+Alt+N"), "Notas: Ctrl+Alt+N");
         assert_eq!(linea_bandeja(Accion::Colmena, "Ctrl+Alt+C"), "Colmena: Ctrl+Alt+C");
+        assert_eq!(linea_bandeja(Accion::Guia, "Ctrl+Alt+V"), "Guía: Ctrl+Alt+V");
         assert_eq!(aviso_ocupado(Accion::Notch), "El atajo de Notch lo usa otro programa");
     }
 

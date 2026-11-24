@@ -245,4 +245,13 @@ watch(
 .badge-enter-active { transition: transform 0.5s var(--spring), opacity 0.2s; }
 .badge-leave-active { transition: transform 0.15s, opacity 0.15s; }
 .badge-enter-from, .badge-leave-to { transform: scale(0.3); opacity: 0; }
+
+/* táctil: sin vidrio (el blur de una barra fija se recalcula con cada scroll y gasta batería) */
+@media (pointer: coarse) {
+  .tabs {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
+}
 </style>

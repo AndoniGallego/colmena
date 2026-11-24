@@ -189,4 +189,13 @@ const emit = defineEmits<{ back: [] }>()
   flex-wrap: wrap;
   max-width: 100%;
 }
+
+/* táctil: sin vidrio (el blur de una barra fija se recalcula con cada scroll y gasta batería) */
+@media (pointer: coarse) {
+  .vh {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
+}
 </style>

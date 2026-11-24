@@ -116,6 +116,7 @@ class Config:
     permisos: dict = field(default_factory=dict)
     terminales: dict = field(default_factory=dict)
     guardian: dict = field(default_factory=dict)
+    reunion: dict = field(default_factory=dict)
     # Nombres propios de un kit de trabajo externo (ver kit_trabajo.py); vacío = genéricos.
     kit_trabajo: dict = field(default_factory=dict)
 

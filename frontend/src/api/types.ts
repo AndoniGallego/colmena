@@ -439,6 +439,13 @@ export interface BoardHandlers {
   onOrdenPestanas?: (e: { grupo: string; orden: string[] }) => void
   onPlegadas?: (plegadas: string[]) => void
   onSilenciadas?: (silenciadas: string[]) => void
+  onNudo?: (orden: unknown, device: string) => void
+  /** Evento `guia` de la guía por atajo (G2); solo llega a la PC dueña. */
+  onGuia?: (data: unknown, device: string) => void
+  /** Eventos `reunion-*` del copiloto de reuniones; `device` es el id de esta conexión. */
+  onReunion?: (evento: string, data: unknown, device: string) => void
+  /** La conexión de la app de Windows (`pc=1`) quedó abierta, la primera vez y cada reconexión. */
+  onPcListo?: (device: string) => void
 }
 
 export type OrdenTableroData = { orden: string[]; pestanas: Record<string, string[]>; plegadas: string[]; silenciadas: string[] }
@@ -742,7 +749,7 @@ export class ApiError extends Error {
   }
 }
 
-export type LibKind = 'html' | 'image' | 'svg' | 'gif' | 'pdf' | 'video' | 'text' | 'diagrama' | 'pruebas' | 'remoto' | 'otro'
+export type LibKind = 'html' | 'image' | 'svg' | 'gif' | 'pdf' | 'video' | 'text' | 'diagrama' | 'pruebas' | 'reunion' | 'remoto' | 'otro'
 
 export interface LibItem {
   id: string
@@ -770,6 +777,10 @@ export interface LibItem {
   diagrama_raw: string
   /** Informe de pruebas en JSON (solo kind 'pruebas'). */
   pruebas_raw?: string
+  /** Reunión guardada en JSON (solo kind 'reunion'): fechas como epoch en segundos. */
+  reunion_raw?: string | null
+  /** La charla completa sigue en disco (se borra a los 90 días). */
+  tiene_charla?: boolean
   /** ruta de la captura -> id de la Biblioteca */
   evidencias?: Record<string, string>
   /** URL del visor con token de 30 minutos; vacía si el ítem no se sirve. */
@@ -853,6 +864,8 @@ export interface AvisosPage {
 
 export interface SubscribeOpts {
   presencia?: boolean
+  /** La página del notch dentro de la app de Windows atiende las órdenes del nudo. */
+  pcNudo?: boolean
   /** Si el cliente es Colmena de escritorio (evita import circular con viewport). */
   escritorio?: () => boolean
 }
@@ -907,6 +920,7 @@ export interface Api {
   getLibraryItem(id: string, filters?: LibFilters): Promise<LibItem>
   getLibrarySessions(): Promise<LibSession[]>
   getLibraryText(id: string): Promise<string>
+  getLibraryCharla(id: string): Promise<string>
   quitarLibrary(ids: string[]): Promise<number>
   getTerminalSalida(paneId: string, rev: string, signal: AbortSignal): Promise<TerminalSalida>
   getTerminalConfig(): Promise<TerminalConfig>

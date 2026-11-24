@@ -202,6 +202,13 @@ def _isolated_home(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("xdg")))
     monkeypatch.setenv("ORQ_NO_AUTOINDEX", "1")
     monkeypatch.setenv("ORQ_DATA_DIR", str(tmp_path_factory.mktemp("datos-vacios")))
+    # Los defaults de las carpetas internas se calculan al importar con el HOME real: el arranque de la app
+    # borra sus capturas y transcripts, así que ningún test puede apuntar a las de verdad.
+    import orquestador.app as app_mod
+
+    internas = tmp_path_factory.mktemp("internas")
+    monkeypatch.setattr(app_mod, "CARPETA_COPILOTO", internas / "reunion-copiloto")
+    monkeypatch.setattr(app_mod, "CARPETA_GUIA", internas / "guia")
     for name in (
         "COLMENA_SESION",
         "COLMENA_GANCHO_ORIGEN",

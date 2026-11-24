@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-senalar-zona"
+description = "Enables the nudo_senalar_zona command without any pre-configured scope."
+commands.allow = ["nudo_senalar_zona"]
+
+[[permission]]
+identifier = "deny-nudo-senalar-zona"
+description = "Denies the nudo_senalar_zona command without any pre-configured scope."
+commands.deny = ["nudo_senalar_zona"]

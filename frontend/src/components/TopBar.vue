@@ -476,8 +476,16 @@ onBeforeUnmount(() => {
   transition: background 0.4s;
 }
 .conn[data-conn='live'] i {
+  position: relative;
   background: var(--st-done);
-  box-shadow: 0 0 0 0 var(--st-done-soft);
+}
+.conn[data-conn='live'] i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--st-done);
+  pointer-events: none;
   animation: ring 2.4s var(--ease-out) infinite;
 }
 .conn[data-conn='reconnecting'] i,
@@ -626,8 +634,8 @@ onBeforeUnmount(() => {
   50% { opacity: 0.45; transform: scale(0.75); }
 }
 @keyframes ring {
-  0% { box-shadow: 0 0 0 0 var(--st-done); }
-  70%, 100% { box-shadow: 0 0 0 6px transparent; }
+  0% { transform: scale(1); opacity: 1; }
+  70%, 100% { transform: scale(2.7143); opacity: 0; }
 }
 @keyframes blink {
   50% { opacity: 0.25; }
@@ -671,5 +679,14 @@ onBeforeUnmount(() => {
 }
 @media (pointer: coarse) {
   .stat { min-height: 44px; }
+}
+
+/* táctil: sin vidrio (el blur de una barra fija se recalcula con cada scroll y gasta batería) */
+@media (pointer: coarse) {
+  .bar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
 }
 </style>

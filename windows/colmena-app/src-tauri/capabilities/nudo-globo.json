@@ -1,0 +1,12 @@
+{
+  "identifier": "nudo-globo",
+  "windows": ["nudo-globo"],
+  "permissions": [
+    "core:event:allow-listen",
+    "allow-nudo-pagina-estado",
+    "allow-nudo-listo",
+    "allow-nudo-salir",
+    "allow-nudo-guia",
+    "allow-nudo-visibilidad"
+  ]
+}

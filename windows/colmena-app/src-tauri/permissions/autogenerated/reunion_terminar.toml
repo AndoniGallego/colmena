@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reunion-terminar"
+description = "Enables the reunion_terminar command without any pre-configured scope."
+commands.allow = ["reunion_terminar"]
+
+[[permission]]
+identifier = "deny-reunion-terminar"
+description = "Denies the reunion_terminar command without any pre-configured scope."
+commands.deny = ["reunion_terminar"]

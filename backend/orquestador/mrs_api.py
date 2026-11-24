@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
-from .claude_cli import fmt_tokens, headless_env
+from .claude_cli import args_headless, fmt_tokens, headless_env, parse_headless, resultado_headless
 from .config import Config
 from .mrs import MAX_COMENTARIO, MAX_DESCRIPCION, MAX_TITULO, GitlabError, MrsService, rama_valida, texto_limpio
 from .uso import usage_from, valid_modelo, valid_tope
@@ -175,17 +175,14 @@ class Redactor:
         tope = self.tope_diario()
         if self.uso is None or tope <= 0:
             return
-        total = self.uso.total_today()
+        total = self.uso.day()["mrs"]["total"]
         if total >= tope:
             raise GitlabError(429, f"Llegaste al tope diario de tokens ({fmt_tokens(total)} de {fmt_tokens(tope)}). "
                                    "Subilo desde Ajustes o escribilo a mano.")
 
     def args(self) -> list:
-        budget = self.tope_mensaje_usd()
-        flag = ["--max-budget-usd", f"{budget:g}"] if budget > 0 else []
         binary = self.cfg.claude_bin or shutil.which("claude") or "claude"
-        return [binary, "-p", "--model", self.modelo(),
-                *flag, "--output-format", "json", "--tools", "", "--strict-mcp-config"]
+        return args_headless(binary, self.modelo(), self.tope_mensaje_usd())
 
     async def redactar(self, ctx: dict, rama: str, target: str) -> dict:
         if self._lock.locked():
@@ -199,19 +196,16 @@ class Redactor:
                 rc, out, err = await self.runner(self.args(), prompt.encode(), str(self.workdir), headless_env())
             except FileNotFoundError:
                 raise GitlabError(503, "No encuentro claude en la notebook")
-            try:
-                obj = json.loads(out or b"null")
-            except ValueError:
-                obj = None
-            obj = obj if isinstance(obj, dict) else {}
+            obj = parse_headless(out)
             if self.uso is not None:
                 self.uso.add("mrs", usage_from(obj.get("usage")))
             if obj.get("subtype") == "error_max_budget_usd":
                 raise GitlabError(502, "Claude llegó al tope de gasto por mensaje. Escribilo a mano o achicá la rama.")
-            if rc != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
+            texto = resultado_headless(rc, obj)
+            if texto is None:
                 log.warning("redactar MR: claude salió con %s", rc)
                 raise GitlabError(502, "Claude no pudo redactarlo")
-            data = _json_suelto(obj["result"]) or {}
+            data = _json_suelto(texto) or {}
             titulo = texto_limpio(str(data.get("titulo") or ""), MAX_TITULO).strip()
             descripcion = texto_limpio(str(data.get("descripcion") or ""), MAX_DESCRIPCION).replace("\r", "").strip()
             if not titulo:

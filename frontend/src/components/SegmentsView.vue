@@ -117,11 +117,24 @@ const items = computed(() => {
   vertical-align: -0.17em;
   border-radius: 2px;
   background: var(--accent);
-  box-shadow: 0 0 10px var(--accent), 0 0 2px var(--accent);
+  position: relative;
+  box-shadow: 0 0 2px var(--accent);
   animation: caret 0.9s var(--ease-in-out) infinite;
 }
+.segs :deep(.caret)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 10px var(--accent);
+  pointer-events: none;
+  animation: caret-glow 0.9s var(--ease-in-out) infinite;
+}
 @keyframes caret {
-  50% { opacity: 0.25; transform: scaleY(0.82); box-shadow: 0 0 2px var(--accent); }
+  50% { opacity: 0.25; transform: scaleY(0.82); }
+}
+@keyframes caret-glow {
+  50% { opacity: 0; }
 }
 .tr-pending {
   align-self: flex-start;
@@ -148,7 +161,8 @@ const items = computed(() => {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-:root[data-motion='soft'] .segs :deep(.caret) {
+:root[data-motion='soft'] .segs :deep(.caret),
+:root[data-motion='soft'] .segs :deep(.caret)::after {
   animation: none;
 }
 </style>

@@ -1,5 +1,7 @@
+import { watch } from 'vue'
 import { isTyping } from '../lib/biblioteca'
 import { claimReload, isStale, IDLE_MS, isWorking, reloadDecision, type Trigger } from '../lib/update'
+import { enCurso, reunion } from './reunion'
 
 const own = __APP_BUILD__
 let remote = ''
@@ -35,10 +37,13 @@ function evaluate(trigger: Trigger) {
     working: isWorking(),
     visible: document.visibilityState === 'visible',
     idleMs: Date.now() - lastActivity,
+    meeting: enCurso(reunion.value),
   })
   if (decision === 'reload') return claimReload(remote) ? void hardReload() : undefined
   if (decision === 'wait') {
     clearTimeout(idleTimer)
+    // Con una reunión en curso no hay timer: el watch de start() reevalúa cuando termina.
+    if (enCurso(reunion.value)) return
     idleTimer = setTimeout(() => evaluate('idle'), Math.max(1000, IDLE_MS - (Date.now() - lastActivity)))
   }
 }
@@ -53,6 +58,12 @@ function start() {
     void refreshWorker()
     if (isStale(own, remote)) evaluate('visible')
   })
+  watch(
+    () => enCurso(reunion.value),
+    (activa) => {
+      if (!activa && isStale(own, remote)) evaluate('idle')
+    },
+  )
   navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => {
     if (e.data?.type !== 'orq-updated') return
     remote ||= SW_BUILD

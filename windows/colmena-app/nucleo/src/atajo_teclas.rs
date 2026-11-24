@@ -236,5 +236,7 @@ mod tests {
         assert_eq!(duplicado_de(&a, Accion::Notas, "Ctrl+Alt+M"), Some(Accion::Notch));
         assert_eq!(duplicado_de(&a, Accion::Notas, "Ctrl+Alt+N"), None);
         assert_eq!(duplicado_de(&a, Accion::Colmena, "Ctrl+Shift+Space"), None);
+        assert_eq!(duplicado_de(&a, Accion::Notas, "Ctrl+Alt+V"), Some(Accion::Guia));
+        assert!(atajo_valido("Ctrl+Alt+V"));
     }
 }

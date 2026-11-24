@@ -74,6 +74,7 @@ export type NuevaTareaBody = {
   nombre?: string
   rama?: string
   ticket?: string
+  grupo?: string
 }
 
 export type NuevaTareaResult = { ok: true; pane_id: string; ruta: string; rama: string; pegado?: false }
@@ -155,8 +156,9 @@ export function validarRamaNueva(raw: string): string {
   return malo ? 'Usá letras, números, guiones y barras' : ''
 }
 
-export function armarCuerpoTarea(repo: CarpetaItem, tarea: string, nombre: string, rama: string, id: string, ticket = ''): NuevaTareaBody {
+export function armarCuerpoTarea(repo: CarpetaItem, tarea: string, nombre: string, rama: string, id: string, ticket = '', grupo = ''): NuevaTareaBody {
   const body: NuevaTareaBody = { id, repo: repo.ruta, tarea: tarea.trim() }
+  if (grupo) body.grupo = grupo
   if (nombre.trim()) body.nombre = nombre.trim()
   if (ticket.trim()) body.ticket = ticket.trim().toUpperCase()
   else if (rama.trim()) body.rama = rama.trim()

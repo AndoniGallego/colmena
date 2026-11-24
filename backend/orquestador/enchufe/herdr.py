@@ -530,7 +530,13 @@ class AdaptadorHerdr:
         return _creado_de(raw, espacio_id)
 
     async def arrancar_claude(
-        self, sesion_id: str, nombre: str, resume: str | None = None, *, modo: str | None = None
+        self,
+        sesion_id: str,
+        nombre: str,
+        resume: str | None = None,
+        *,
+        modo: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> None:
         if modo is not None:
             raise NoDisponible("herdr no permite elegir el modo de permisos")

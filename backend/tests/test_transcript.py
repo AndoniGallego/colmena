@@ -300,3 +300,18 @@ def test_glab_mr_create_ejecutado_cuenta(tmp_path, cmd):
 def test_glab_mr_create_en_busqueda_no_cuenta(tmp_path, cmd):
     p = _glab_transcript(tmp_path / "t.jsonl", cmd)
     assert mr_creados_glab_en_transcript(p) == []
+
+
+def test_pending_con_un_resultado_grande_en_paralelo(tmp_path):
+    from orquestador.transcript import parse_pending
+    p = tmp_path / "s.jsonl"
+    relleno = {"type": "user", "message": {"content": "x" * 2000}}
+    usos = {"type": "assistant", "version": "2.1.0", "message": {"content": [
+        {"type": "tool_use", "id": "toolu_lento", "name": "Bash", "input": {"command": "sleep 60"}},
+        {"type": "tool_use", "id": "toolu_rapido", "name": "Read", "input": {"file_path": "/x"}}]}}
+    grande = {"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "toolu_rapido", "content": "y" * 600_000}]}}
+    p.write_text("\n".join(json.dumps(o) for o in [relleno] * 3000 + [usos, grande]) + "\n")
+    out = parse_pending(p)
+    assert [u["id"] for u in out["pendientes"]] == ["toolu_lento"]
+    assert out["version"] == "2.1.0"

@@ -17,7 +17,7 @@ vi.hoisted(() => {
   })
 })
 
-const modo = ref<'cerrado' | 'panel' | 'aviso'>('aviso')
+const modo = ref<'cerrado' | 'panel' | 'aviso' | 'reunion'>('aviso')
 const avisoActual = ref<AvisoNotch | null>({
   id: 1,
   kind: 'done',
@@ -59,6 +59,10 @@ vi.mock('./NotchPanel.vue', () => ({
   default: { name: 'NotchPanel', props: ['grupos', 'now'], template: '<div class="panel-stub" />' },
 }))
 
+vi.mock('./NotchReunion.vue', () => ({
+  default: { name: 'NotchReunion', template: '<div class="reunion-stub" />' },
+}))
+
 vi.mock('./NotchLogin.vue', () => ({
   default: { name: 'NotchLogin', template: '<div class="login-stub" />' },
 }))
@@ -78,6 +82,8 @@ vi.mock('../../state/notch', () => ({
   cerrarPanel: vi.fn(),
   abrirSesion: vi.fn(),
   abrirColmena: vi.fn(),
+  abrirReunion: vi.fn(),
+  cerrarReunion: vi.fn(),
   setPuente: vi.fn(),
 }))
 
@@ -124,5 +130,31 @@ describe('NotchApp brillo en pastilla', () => {
     modo.value = 'panel'
     const htmlSinAviso = await renderToString(createSSRApp({ render: () => h(NotchApp) }))
     expect(htmlSinAviso).not.toContain('pill-brillo')
+  })
+})
+
+describe('NotchApp reunión', () => {
+  it("con modo = 'reunion' monta el panel de la reunión", async () => {
+    auth.value = 'ready'
+    avisoActual.value = null
+    modo.value = 'reunion'
+    const { default: NotchApp } = await import('./NotchApp.vue')
+    const html = await renderToString(createSSRApp({ render: () => h(NotchApp) }))
+    expect(html).toContain('reunion-stub')
+    expect(html).not.toContain('panel-stub')
+  })
+
+  it("con la reunión escuchando la cara muestra el punto aunque el notch esté cerrado", async () => {
+    auth.value = 'ready'
+    avisoActual.value = null
+    modo.value = 'cerrado'
+    const { reunion } = await import('../../state/reunion')
+    const { default: NotchApp } = await import('./NotchApp.vue')
+    const sin = await renderToString(createSSRApp({ render: () => h(NotchApp) }))
+    expect(sin).not.toContain('class="escucha loop"')
+    reunion.value = { ...reunion.value, reunion: 'r1', estado: 'escuchando' }
+    const con = await renderToString(createSSRApp({ render: () => h(NotchApp) }))
+    expect(con).toContain('class="escucha loop"')
+    expect(con).toContain('Escuchando una reunión')
   })
 })

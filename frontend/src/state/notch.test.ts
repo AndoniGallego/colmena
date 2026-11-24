@@ -76,7 +76,7 @@ describe('state/notch', () => {
   })
 
   it('abrir una sesión pasa por el puente', () => {
-    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: vi.fn() }
+    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: vi.fn(), mostrarReunion: vi.fn() }
     setPuente(p)
     abrirSesion('s1')
     abrirColmena()
@@ -84,7 +84,7 @@ describe('state/notch', () => {
   })
 
   it('abrir sesión con panel abierto colapsa el notch', () => {
-    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: vi.fn() }
+    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: vi.fn(), mostrarReunion: vi.fn() }
     setPuente(p)
     modo.value = 'panel'
     abrirSesion('s1')
@@ -93,7 +93,7 @@ describe('state/notch', () => {
   })
 
   it('abrir Colmena con panel abierto colapsa el notch', () => {
-    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: vi.fn() }
+    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: vi.fn(), mostrarReunion: vi.fn() }
     setPuente(p)
     modo.value = 'panel'
     abrirColmena()
@@ -102,7 +102,7 @@ describe('state/notch', () => {
   })
 
   it('abrir Colmena con aviso visible no cierra el aviso', () => {
-    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: vi.fn() }
+    const p = { enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: vi.fn(), mostrarReunion: vi.fn() }
     setPuente(p)
     modo.value = 'aviso'
     abrirColmena()
@@ -113,6 +113,12 @@ describe('state/notch', () => {
   it('alternar abre y cierra el panel', () => {
     alternarPanel()
     expect(modo.value).toBe('panel')
+    alternarPanel()
+    expect(modo.value).toBe('cerrado')
+  })
+
+  it('alternar con la cajita de la guía abierta la oculta en vez de abrir el panel', () => {
+    modo.value = 'guia'
     alternarPanel()
     expect(modo.value).toBe('cerrado')
   })

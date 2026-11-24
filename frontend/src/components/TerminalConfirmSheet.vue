@@ -68,7 +68,7 @@ function onLeave(el: Element, done: () => void) {
           <div class="sheet-stagger ts-stagger">
             <h2 id="ts-title" class="sheet-title title">{{ title }}</h2>
 
-            <div v-if="loading" class="skeleton" aria-busy="true" aria-label="Cargando"><i /><i /></div>
+            <div v-if="loading" class="skeleton" aria-busy="true" aria-label="Cargando"><i class="sk-sweep" /><i class="sk-sweep" /></div>
 
             <div v-if="p" class="target">
               <p class="where mono">{{ where }}</p>
@@ -133,8 +133,7 @@ function onLeave(el: Element, done: () => void) {
 .problem span { min-width: 0; overflow-wrap: anywhere; }
 .problem svg { flex: none; margin-top: 2px; }
 .skeleton { display: grid; gap: 6px; }
-.skeleton i { height: 40px; border-radius: var(--r-md); background: linear-gradient(90deg, var(--bg-2), var(--surface-hover), var(--bg-2)) 0 0 / 200% 100%; animation: shimmer 1.2s linear infinite; }
-@keyframes shimmer { to { background-position: -200% 0; } }
+.skeleton i { height: 40px; border-radius: var(--r-md); --sk-bg: linear-gradient(90deg, var(--bg-2), var(--surface-hover), var(--bg-2)); }
 .actions { display: flex; flex-direction: column-reverse; gap: 8px; margin-top: 4px; }
 @media (min-width: 640px) { .actions { flex-direction: row-reverse; } .actions .btn { flex: 1; } }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 12px; font-size: 14px; font-weight: 600; transition: background 0.2s, color 0.2s, scale 0.3s var(--spring), box-shadow 0.25s, opacity 0.2s; }
@@ -148,8 +147,8 @@ function onLeave(el: Element, done: () => void) {
 .ghost:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
 .spin { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spin, .skeleton i { animation-duration: 3s; } }
-:root[data-motion='soft'] .skeleton i {
+@media (prefers-reduced-motion: reduce) { .spin, .skeleton i::after { animation-duration: 3s; } }
+:root[data-motion='soft'] .skeleton i::after {
   animation: none;
 }
 </style>

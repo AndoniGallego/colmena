@@ -440,3 +440,29 @@ def test_respuesta_trae_eco_del_modo():
         assert llamadas == ["default", None]
 
     asyncio.run(run())
+
+
+def test_protocolo_dirs_extra_llega_y_se_valida_la_forma():
+    g = GuardianFalso()
+    llamadas = []
+
+    async def arrancar_claude(sesion_id, nombre, resume=None, modo=None, dirs_extra=None):
+        llamadas.append(dirs_extra)
+        return {"estado": "idle", "listo": True, "modo": modo}
+
+    g.arrancar_claude = arrancar_claude  # type: ignore[method-assign]
+    srv = ServidorGuardian(g, "1", lambda: None)
+
+    async def run():
+        pedidos = b""
+        for i, d in enumerate(["x", [1], {"a": 1}], start=1):
+            pedidos += (json.dumps({"id": i, "op": "arrancar_claude", "args": {
+                "sesion_id": "g1:p1", "nombre": "x", "modo": "copiloto", "dirs_extra": d}}) + "\n").encode()
+        pedidos += (json.dumps({"id": 9, "op": "arrancar_claude", "args": {
+            "sesion_id": "g1:p1", "nombre": "x", "modo": "copiloto", "dirs_extra": ["/a", "/b"]}}) + "\n").encode()
+        buf, _ = await _atender_uno(srv, pedidos)
+        msgs = _lineas(buf)
+        assert [m.get("error", {}).get("codigo") for m in msgs[:3]] == [INVALIDO] * 3
+        assert llamadas == [["/a", "/b"]]
+
+    asyncio.run(run())

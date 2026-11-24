@@ -1029,3 +1029,143 @@ def test_abrir_pedido_revalida_el_comando_antes_de_escribir(tmp_path):
     with pytest.raises(TraspasoError):
         asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), item, idempotencia="cmdmalo1", grupo=None))
     assert not g.calls_of("escribir")
+
+
+def _item_copiloto(carpeta):
+    return {"carpeta": carpeta, "nombre": "Copiloto", "mensaje": "hola"}
+
+
+def test_abrir_pedido_copiloto_en_otra_carpeta_no_abre_nada(tmp_path):
+    import asyncio
+
+    import pytest
+
+    ta, g, tacc = _ta_guardian(tmp_path)
+    with pytest.raises(ValueError):
+        asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto("/tmp"), idempotencia="cop00001",
+                                                  grupo=None, permiso="copiloto"))
+    assert not g.calls_of("crear_espacio") and not g.calls_of("arrancar_claude")
+
+
+def test_abrir_pedido_copiloto_con_una_pestana_ajena_no_abre_nada(tmp_path, monkeypatch):
+    import asyncio
+
+    import pytest
+    from orquestador.guardian import lanzador as lz
+
+    destino = tmp_path / "reunion-copiloto"
+    destino.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", destino)
+    ta, g, tacc = _ta_guardian(tmp_path)
+    item = {"carpeta": str(destino), "tarjeta": "W", "pestanas": [
+        {"nombre": "A", "tipo": "claude", "mensaje": "x", "carpeta": str(destino)},
+        {"nombre": "B", "tipo": "claude", "mensaje": "y", "carpeta": "/tmp"}]}
+    with pytest.raises(ValueError):
+        asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), item, idempotencia="cop00002",
+                                                  grupo=None, permiso="copiloto"))
+    assert not g.calls_of("crear_espacio")
+
+
+def test_abrir_pedido_copiloto_en_su_carpeta_se_acepta(tmp_path, monkeypatch):
+    import asyncio
+
+    from orquestador.guardian import lanzador as lz
+
+    destino = tmp_path / "reunion-copiloto"
+    destino.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", destino)
+    ta, g, tacc = _ta_guardian(tmp_path)
+    ta.plan_cwds = lambda: [str(tmp_path)]
+    asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(destino)), idempotencia="cop00003",
+                                              grupo=None, permiso="copiloto"))
+    llamadas = g.calls_of("arrancar_claude")
+    assert len(llamadas) == 1 and llamadas[0][-1] == "copiloto"
+
+
+def test_abrir_pedido_copiloto_no_necesita_su_carpeta_en_plan_cwds(tmp_path, monkeypatch):
+    import asyncio
+
+    import pytest
+    from orquestador.guardian import lanzador as lz
+    from orquestador.traspaso import TraspasoError
+
+    destino = tmp_path / "reunion-copiloto"
+    destino.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", destino)
+    ta, g, tacc = _ta_guardian(tmp_path)
+    ta.plan_cwds = lambda: []
+    asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(destino)), idempotencia="cop00004",
+                                              grupo=None, permiso="copiloto"))
+    assert len(g.calls_of("arrancar_claude")) == 1
+    with pytest.raises(TraspasoError):
+        asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(destino)), idempotencia="cop00005",
+                                                  grupo=None, permiso="default"))
+
+
+def test_modo_guia_solo_en_su_carpeta(tmp_path, monkeypatch):
+    import asyncio
+
+    import pytest
+    from orquestador.guardian import lanzador as lz
+
+    cop = tmp_path / "reunion-copiloto"
+    gui = tmp_path / "guia"
+    cop.mkdir()
+    gui.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", cop)
+    monkeypatch.setattr(lz, "CARPETA_GUIA", gui)
+    ta, g, tacc = _ta_guardian(tmp_path)
+    ta.plan_cwds = lambda: []
+    with pytest.raises(ValueError):
+        asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(cop)), idempotencia="gui00001",
+                                                  grupo=None, permiso="guia"))
+    assert not g.calls_of("crear_espacio") and not g.calls_of("arrancar_claude")
+    asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(gui)), idempotencia="gui00002",
+                                              grupo=None, permiso="guia"))
+    llamadas = g.calls_of("arrancar_claude")
+    assert len(llamadas) == 1 and llamadas[0][-1] == "guia"
+
+
+def test_dirs_extra_con_permiso_guia_es_error(tmp_path, monkeypatch):
+    import asyncio
+
+    import pytest
+    from orquestador.guardian import lanzador as lz
+
+    gui = tmp_path / "guia"
+    gui.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_GUIA", gui)
+    ta, g, tacc = _ta_guardian(tmp_path)
+    with pytest.raises(ValueError):
+        asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(gui)), idempotencia="gui00003",
+                                                  grupo=None, permiso="guia", dirs_extra=[str(tmp_path)]))
+    assert not g.calls_of("crear_espacio")
+
+
+def test_abrir_guia_o_copiloto_no_avisa_al_celu_y_una_pestana_comun_si(tmp_path, monkeypatch):
+    import asyncio
+
+    from orquestador.guardian import lanzador as lz
+
+    cop = tmp_path / "reunion-copiloto"
+    gui = tmp_path / "guia"
+    cop.mkdir()
+    gui.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", cop)
+    monkeypatch.setattr(lz, "CARPETA_GUIA", gui)
+    ta, g, tacc = _ta_guardian(tmp_path)
+    ta.plan_cwds = lambda: [str(tmp_path)]
+    avisos = []
+
+    async def notify(titulo, cuerpo, tag, pane=""):
+        avisos.append(titulo)
+
+    ta.notify = notify
+    asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(gui)), idempotencia="sil00001",
+                                              grupo=None, permiso="guia"))
+    asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(cop)), idempotencia="sil00002",
+                                              grupo=None, permiso="copiloto"))
+    assert avisos == []
+    asyncio.run(ta.abrir_desde_pedido_pestana(tacc.Ctx(), _item_copiloto(str(tmp_path)), idempotencia="sil00003",
+                                              grupo=None))
+    assert len(avisos) == 1

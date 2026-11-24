@@ -36,7 +36,7 @@ vi.mock('./NotchCaptura.vue', () => ({
 }))
 vi.mock('../../state/app', async () => {
   const { ref: r } = await import('vue')
-  return { auth: r('ready') }
+  return { auth: r('ready'), pcNudoActivo: r(false) }
 })
 const lista = vi.hoisted(() => ({ ref: null as null | { value: unknown[] } }))
 vi.mock('../../state/notas', async () => {
@@ -56,6 +56,8 @@ vi.mock('../../state/notch', () => ({
   cerrarNotas,
   abrirSesion: vi.fn(),
   abrirColmena: vi.fn(),
+  abrirReunion: vi.fn(),
+  cerrarReunion: vi.fn(),
   abrirNotas: vi.fn(),
   setPuente: vi.fn(),
   iniciarEscuchaNotas: vi.fn(),
@@ -66,7 +68,7 @@ vi.mock('../../state/notchResumen', () => ({
   iniciarResumenVisible: vi.fn(),
 }))
 vi.mock('../../state/pedidosPestana', () => ({ initPedidosPestana: vi.fn() }))
-vi.mock('../../lib/notchPuente', () => ({ crearPuente: () => ({}) }))
+vi.mock('../../lib/notchPuente', () => ({ crearPuente: () => ({}), escuchar: async () => false }))
 
 const { default: NotchApp } = await import('./NotchApp.vue')
 

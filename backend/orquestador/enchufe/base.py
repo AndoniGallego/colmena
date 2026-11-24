@@ -125,7 +125,13 @@ class Terminales(Protocol):
     ) -> Creado: ...
 
     async def arrancar_claude(
-        self, sesion_id: str, nombre: str, resume: str | None = None, *, modo: str | None = None
+        self,
+        sesion_id: str,
+        nombre: str,
+        resume: str | None = None,
+        *,
+        modo: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> None: ...
 
     async def renombrar(self, objetivo_id: str, nombre: str) -> None: ...

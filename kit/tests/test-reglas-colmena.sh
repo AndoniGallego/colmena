@@ -8,7 +8,7 @@ LINEA='> Esta regla rige cuando la sesión corre en una terminal de Colmena (COL
 FAIL=0
 check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: esperado '$3', obtuve '$2'"; FAIL=1; fi; }
 
-check "hay 8 reglas de la capa Colmena" "$(ls "$REGLAS"/colmena/*.md | wc -l)" "8"
+check "hay 9 reglas de la capa Colmena" "$(ls "$REGLAS"/colmena/*.md | wc -l)" "9"
 for f in "$REGLAS"/colmena/*.md; do
   check "$(basename "$f") línea 3" "$(sed -n 3p "$f")" "$LINEA"
   check "$(basename "$f") línea 4 en blanco" "$(sed -n 4p "$f")" ""

@@ -200,10 +200,12 @@
   height: 2px;
   margin: -6px 0 -4px;
   border-radius: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  background-size: 50% 100%;
-  background-repeat: no-repeat;
-  animation: ui-sweep 1s linear infinite;
+  --sk-bg: linear-gradient(90deg, transparent, var(--accent), transparent);
+  --sk-left: -25%;
+  --sk-w: 50%;
+  --sk-tile: 100%;
+  --sk-dx: 200%;
+  --sk-dur: 1s;
 }
 
 /* sheets */
@@ -301,6 +303,7 @@
 :root[data-motion='soft'] .spin,
 :root[data-motion='soft'] .btn.spinning svg,
 :root[data-motion='soft'] .btn-icon.spinning svg,
+:root[data-motion='soft'] .ui-refresh-bar::after,
 :root[data-motion='soft'] .ui-refresh-bar,
 :root[data-motion='soft'] .ui-skeleton-shimmer {
   animation: none;
@@ -311,6 +314,7 @@
   .btn.spinning svg,
   .btn-icon.spinning svg,
   .ui-refresh-bar,
+  .ui-refresh-bar::after,
   .ui-skeleton-shimmer,
   .ui-skeleton-pulse {
     animation: none;

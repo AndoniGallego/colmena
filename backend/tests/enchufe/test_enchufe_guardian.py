@@ -659,3 +659,25 @@ def test_arrancar_claude_modo_que_relaja_no_se_manda():
         assert pedidos == []
 
     asyncio.run(_con_cliente(g, caso))
+
+
+def test_arrancar_claude_manda_dirs_extra_solo_con_copiloto():
+    g = GuardianEnchufe()
+    pedidos: list = []
+
+    async def arrancar_claude(sesion_id, nombre, resume=None, modo=None, dirs_extra=None):
+        pedidos.append((modo, dirs_extra))
+        return {"estado": "idle", "listo": True, "modo": modo}
+
+    g.arrancar_claude = arrancar_claude  # type: ignore[method-assign]
+
+    async def caso(c):
+        await c.arrancar_claude("g1:p2", "x", modo="copiloto", dirs_extra=["/a", "/b"])
+        await c.arrancar_claude("g1:p2", "x", modo="copiloto")
+        assert pedidos == [("copiloto", ["/a", "/b"]), ("copiloto", None)]
+        with pytest.raises(ValueError):
+            await c.arrancar_claude("g1:p2", "x", modo="default", dirs_extra=["/a"])
+        with pytest.raises(ValueError):
+            await c.arrancar_claude("g1:p2", "x", dirs_extra=["/a"])
+
+    asyncio.run(_con_cliente(g, caso))

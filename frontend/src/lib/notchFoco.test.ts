@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claveAvisoNotch, debeCerrarPanelAlPerderFoco, reducirFocoNotch } from './notchFoco'
+import { cerrarTrasBlur, claveAvisoNotch, debeCerrarPanelAlPerderFoco, GRACIA_BLUR_MS, reducirFocoNotch } from './notchFoco'
 
 describe('reducirFocoNotch', () => {
   it('tras interacción (foco true), blur lo baja', () => {
@@ -13,6 +13,14 @@ describe('reducirFocoNotch', () => {
 
   it("pasar a 'notas' toma el foco para poder escribir", () => {
     expect(reducirFocoNotch(false, { tipo: 'modo_cambio', modo: 'notas' })).toBe(true)
+  })
+
+  it("pasar a 'guia' toma el foco para poder escribir la pregunta", () => {
+    expect(reducirFocoNotch(false, { tipo: 'modo_cambio', modo: 'guia' })).toBe(true)
+  })
+
+  it('perder el foco no cierra la cajita de la guía', () => {
+    expect(debeCerrarPanelAlPerderFoco('guia')).toBe(false)
   })
 
   it('perder el foco no cierra la captura de notas', () => {
@@ -72,5 +80,26 @@ describe('claveAvisoNotch', () => {
   it('combina id y session_id', () => {
     expect(claveAvisoNotch({ id: 3, session_id: 's1', kind: 'asks', titulo: '', cuerpo: '' })).toBe('3:s1')
     expect(claveAvisoNotch(null)).toBe(null)
+  })
+})
+
+describe('cerrarTrasBlur', () => {
+  it('un blur pasajero (el foco volvió a la página) no cierra el panel', () => {
+    expect(cerrarTrasBlur('panel', true)).toBe(false)
+    expect(cerrarTrasBlur('reunion', true)).toBe(false)
+  })
+  it('si el foco se fue de verdad, cierra el panel y la reunión', () => {
+    expect(cerrarTrasBlur('panel', false)).toBe(true)
+    expect(cerrarTrasBlur('reunion', false)).toBe(true)
+    expect(cerrarTrasBlur('guia', false)).toBe(false)
+  })
+  it('con la reunión en curso, la vista de la reunión queda abierta aunque mires otra ventana', () => {
+    expect(cerrarTrasBlur('reunion', false, true)).toBe(false)
+    expect(cerrarTrasBlur('panel', false, true)).toBe(true)
+    expect(cerrarTrasBlur('reunion', false, false)).toBe(true)
+  })
+  it('espera un instante antes de decidir', () => {
+    expect(GRACIA_BLUR_MS).toBeGreaterThanOrEqual(100)
+    expect(GRACIA_BLUR_MS).toBeLessThanOrEqual(300)
   })
 })

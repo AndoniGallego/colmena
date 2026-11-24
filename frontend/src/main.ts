@@ -11,7 +11,7 @@ import { boot, init, onUnauthorized } from './state/app'
 import { loadTheme } from './lib/storage'
 import { aplicarBarraScroll } from './lib/scrollbar'
 import { instalarCopiaCodigo } from './lib/codeCopy'
-import { esRutaNotch } from './lib/notchPuente'
+import { esRutaNotch, esVistaReunion } from './lib/notchPuente'
 import { precargarChat } from './lib/precarga'
 import { correrGancho, piezas } from './piezas'
 import { bloquearRedEnDemo, DEMO } from './lib/demoActual'
@@ -23,6 +23,7 @@ document.documentElement.dataset.theme = loadTheme()
 instalarCopiaCodigo(document)
 
 const notch = esRutaNotch(location.pathname)
+const vistaReunion = notch && esVistaReunion(location.search)
 
 let api: Api = createHttpApi(onUnauthorized, () => piezas().flatMap((p) => (p.avisos ? [p.avisos.kind] : [])))
 if (DEMO) bloquearRedEnDemo()
@@ -38,9 +39,13 @@ if (usarMock({ demo: DEMO, dev: import.meta.env.DEV, search: location.search }))
   setCambiosApi(mockCambios)
 }
 
-init(api, notch ? { presencia: false, ligero: true } : {})
+const pcNudo = notch && typeof window.__TAURI__?.core?.invoke === 'function'
+init(api, notch ? { presencia: false, ligero: true, pcNudo, vistaReunion } : {})
 
-if (notch) {
+if (vistaReunion) {
+  const { default: NotchReunionVentana } = await import('./components/notch/NotchReunionVentana.vue')
+  createApp(NotchReunionVentana).mount('#app')
+} else if (notch) {
   const { default: NotchApp } = await import('./components/notch/NotchApp.vue')
   createApp(NotchApp).mount('#app')
 } else {

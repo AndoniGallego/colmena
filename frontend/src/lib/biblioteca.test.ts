@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { LibItem } from '../api/types'
+import { normalizeLibItem } from '../api/normalize'
 import {
+  reunionOf, groupIndex,
   cardVariant, dayLabel, emptyFilters, diagramaOf, formatSize, groupByDay, insertNuevos, isFiltering, libQuery,
   matchesFilters, mergePage, pruebasOf, TYPE_GROUPS, KIND_LABEL, needsRenewal, neighbours, parseLibLink, pathLabel, safeClaudeUrl, shortcutFor,
   TOKEN_RENEW_MS, viewerKind, libIdsPorDiagrama, chunkIds, pickIds, quitadoToast, removeIds,
@@ -257,5 +259,33 @@ describe('pruebas en la Biblioteca', () => {
     expect(matchesFilters(p, f)).toBe(true)
     expect(matchesFilters(p, { ...emptyFilters(), q: 'checkout' })).toBe(true)
     expect(matchesFilters(p, { ...emptyFilters(), q: '1 falla' })).toBe(true)
+  })
+})
+
+describe('reuniones', () => {
+  const raw = JSON.stringify({ titulo: 'Daily', inicio: 1_795_000_000, fin: 1_795_000_600, duracion_s: 600, motivo: 'terminada', resumen: ['a'] })
+  const r = item({ kind: 'reunion', title: 'Daily', reunion_raw: raw, servible: false })
+  it('es el grupo 8, con tecla, tarjeta y visor propios', () => {
+    expect(TYPE_GROUPS[7]).toEqual({ key: '8', label: 'Reuniones', tipo: ['reunion'] })
+    expect(groupIndex(['reunion'])).toBe(7)
+    expect(shortcutFor({ key: '8' }, false)).toBe('type8')
+    expect(KIND_LABEL.reunion).toBe('Reunión')
+    for (const x of [r, item({ kind: 'reunion', exists: false, copia: false })]) {
+      expect(cardVariant(x)).toBe('reunion')
+      expect(viewerKind(x)).toBe('reunion')
+    }
+  })
+  it('reunionOf lee una válida y da null con vacía, rota o de otro tipo', () => {
+    expect(reunionOf(r)).toMatchObject({ titulo: 'Daily', duracion_s: 600 })
+    expect(reunionOf(item({ kind: 'reunion', reunion_raw: '' }))).toBeNull()
+    expect(reunionOf(item({ kind: 'reunion', reunion_raw: null }))).toBeNull()
+    expect(reunionOf(item({ kind: 'reunion', reunion_raw: '{roto' }))).toBeNull()
+    expect(reunionOf(item({ kind: 'html', reunion_raw: raw }))).toBeNull()
+  })
+  it('normalize acepta kind reunion y conserva reunion_raw y tiene_charla', () => {
+    expect(normalizeLibItem({ id: ID, kind: 'reunion', reunion_raw: raw, tiene_charla: true })).toMatchObject({ kind: 'reunion', reunion_raw: raw, tiene_charla: true })
+    const n = normalizeLibItem({ id: ID, kind: 'reunion', reunion_raw: null })
+    expect(n?.reunion_raw).toBeNull()
+    expect(n?.tiene_charla).toBe(false)
   })
 })

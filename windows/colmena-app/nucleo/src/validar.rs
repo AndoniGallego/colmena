@@ -85,8 +85,23 @@ pub fn url_colmena(origen: &str, sesion: Option<&str>) -> String {
     }
 }
 
+/// Id de un ítem de la Biblioteca: 32 hex minúsculas, igual que `ITEM_ID` del front.
+pub fn validar_item_biblioteca(item: &str) -> bool {
+    item.len() == 32 && item.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// URL de Colmena abierta en un ítem de la Biblioteca; `None` si el id no es válido.
+pub fn url_biblioteca(origen: &str, item: &str) -> Option<String> {
+    validar_item_biblioteca(item).then(|| format!("{origen}/?biblioteca={item}&app=windows"))
+}
+
 pub fn url_notch(origen: &str) -> String {
     format!("{origen}/notch")
+}
+
+/// Ventana "Reunión": la misma página del notch con la vista de reunión a tamaño completo.
+pub fn url_reunion(origen: &str) -> String {
+    format!("{}?vista=reunion", url_notch(origen))
 }
 
 pub fn es_url_local(url: &str) -> bool {
@@ -241,6 +256,33 @@ mod tests {
         );
         assert_eq!(url_colmena(o, Some("../x")), "https://pc.ts.net:8444/?app=windows");
         assert_eq!(url_notch(o), "https://pc.ts.net:8444/notch");
+        assert_eq!(url_reunion(o), "https://pc.ts.net:8444/notch?vista=reunion");
+    }
+
+    #[test]
+    fn url_de_un_item_de_la_biblioteca() {
+        let o = "https://pc.ts.net:8444";
+        let id = "0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            url_biblioteca(o, id).as_deref(),
+            Some("https://pc.ts.net:8444/?biblioteca=0123456789abcdef0123456789abcdef&app=windows")
+        );
+    }
+
+    #[test]
+    fn un_item_invalido_no_arma_url() {
+        let o = "https://pc.ts.net:8444";
+        let largo = "a".repeat(33);
+        for m in [
+            "",
+            "abc",
+            "0123456789ABCDEF0123456789ABCDEF",
+            "0123456789abcdef0123456789abcde&",
+            "../0123456789abcdef0123456789ab",
+            largo.as_str(),
+        ] {
+            assert_eq!(url_biblioteca(o, m), None, "{m}");
+        }
     }
 
     #[test]

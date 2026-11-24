@@ -16,9 +16,12 @@ from typing import Any
 from orquestador.enchufe.base import TECLAS
 from orquestador.enchufe.ids import es_guardian, tipo_de_id
 from orquestador.guardian.lanzador import (
+    MODOS_INTERNOS,
     MODOS_POR_LANZAMIENTO,
+    es_carpeta_interna,
     AjustesGuardian,
     argv_claude,
+    dirs_extra_validos,
     argv_shell,
     entorno_hijo,
 )
@@ -316,6 +319,8 @@ class Guardian:
         modo = rt.registro.modo_permisos
         if modo is None and resume:
             modo = self._registro.modo_de_claude(resume)
+        if modo in MODOS_INTERNOS and not es_carpeta_interna(modo, rt.registro.cwd):
+            modo = "default"
         self._registro.actualizar_sesion(
             rt.registro.id, programa="claude", claude_session_id=csid, modo_permisos=modo
         )
@@ -327,11 +332,14 @@ class Guardian:
             session_id=session_id,
             resume=resume,
             modo=rt.registro.modo_permisos,
+            dirs_extra=rt.registro.dirs_extra if rt.registro.modo_permisos in MODOS_INTERNOS else None,
+            entorno=self._entorno,
         )
         rt.pantalla = Pantalla(self._ajustes.columnas, self._ajustes.filas, self._historial)
-        await self._lanzar(rt, argv, con_resume=resume is not None)
+        await self._lanzar(rt, argv, con_resume=resume is not None,
+                           copiloto=rt.registro.modo_permisos in MODOS_INTERNOS)
 
-    async def _lanzar(self, rt: _RuntimeSesion, argv: list[str], *, con_resume: bool) -> None:
+    async def _lanzar(self, rt: _RuntimeSesion, argv: list[str], *, con_resume: bool, copiloto: bool = False) -> None:
         ses = rt.registro
         self._cancelar_tareas(rt)
         rt.estado = "idle"
@@ -348,7 +356,7 @@ class Guardian:
             rt.proceso = await ProcesoPty.lanzar(
                 argv,
                 ses.cwd,
-                entorno_hijo(self._entorno, ses.id, self._ajustes),
+                entorno_hijo(self._entorno, ses.id, self._ajustes, copiloto=copiloto),
                 self._ajustes.columnas,
                 self._ajustes.filas,
                 lambda d, r=rt: self._al_leer(r, d),
@@ -361,12 +369,21 @@ class Guardian:
             raise ErrorProtocolo(NO_DISPONIBLE, "no se pudo lanzar el programa") from exc
 
     async def arrancar_claude(
-        self, sesion_id: str, nombre: str, resume: str | None = None, modo: str | None = None
+        self,
+        sesion_id: str,
+        nombre: str,
+        resume: str | None = None,
+        modo: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> dict:
-        if modo is not None and modo not in MODOS_POR_LANZAMIENTO:
+        if modo is not None and modo not in MODOS_POR_LANZAMIENTO | MODOS_INTERNOS:
             raise ErrorProtocolo(INVALIDO, "modo inválido")
+        if dirs_extra and modo != "copiloto":
+            raise ErrorProtocolo(INVALIDO, "dirs_extra solo vale en modo copiloto")
         rt = self._runtime(sesion_id)
         ses = rt.registro
+        if modo in MODOS_INTERNOS and not es_carpeta_interna(modo, ses.cwd):
+            raise ErrorProtocolo(INVALIDO, "modo inválido")
         if (
             rt.proceso
             and rt.proceso.vivo
@@ -375,6 +392,7 @@ class Guardian:
         ):
             raise ErrorProtocolo(INVALIDO, "claude ya corre")
         nombre = self._normalizar_nombre(nombre)
+        dirs_validos = dirs_extra_validos(dirs_extra or [], self._entorno)
         uid = resume or str(uuid.uuid4())
         if rt.proceso and rt.proceso.vivo:
             await rt.proceso.terminar(((signal.SIGHUP, 1.0), (signal.SIGTERM, 1.0)))
@@ -386,6 +404,7 @@ class Guardian:
             programa="claude",
             claude_session_id=uid,
             modo_permisos=modo_efectivo,
+            dirs_extra=dirs_validos if modo == "copiloto" else (ses.dirs_extra if modo is None else []),
         )
         rt.registro = self._registro.sesiones[ses.id]
         if resume:

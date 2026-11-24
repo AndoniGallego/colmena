@@ -8,7 +8,7 @@ import signal
 import sys
 from pathlib import Path
 
-from orquestador.guardian.lanzador import ConfigInvalida, ajustes_de, escribir_hooks
+from orquestador.guardian.lanzador import ConfigInvalida, ajustes_de, es_carpeta_interna, escribir_hooks
 from orquestador.guardian.nucleo import Guardian
 from orquestador.guardian.registro import Registro
 from orquestador.guardian.servidor import ServidorGuardian
@@ -28,7 +28,8 @@ def _cargar_config():
 
     def cwd_confiable(cwd: str) -> bool:
         real = os.path.realpath(cwd)
-        return any(real == root or real.startswith(root + os.sep) for root in roots)
+        # Las carpetas del Copiloto y de la guía pueden no existir al arrancar (plan_roots solo ve carpetas existentes).
+        return es_carpeta_interna("copiloto", cwd) or es_carpeta_interna("guia", cwd) or any(real == root or real.startswith(root + os.sep) for root in roots)
 
     espera = permisos_espera(cfg)
     return ajustes, cwd_confiable, espera

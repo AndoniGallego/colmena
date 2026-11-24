@@ -2,6 +2,7 @@ import type { LibFilters, LibItem, LibKind } from '../api/types'
 import { lenientJson } from './fence'
 import { toDiagrama, type Diagrama } from './diagrama'
 import { toPruebas, type Pruebas } from './pruebas'
+import { toReunion, type ReunionGuardada } from './reunion'
 
 export const ITEM_ID = /^[0-9a-f]{32}$/
 /** El token del visor dura 30 minutos: se pide uno nuevo a los 25. */
@@ -74,6 +75,7 @@ export const TYPE_GROUPS: TypeGroup[] = [
   { key: '5', label: 'Diagramas', tipo: ['diagrama'] },
   { key: '6', label: 'Otros', tipo: ['text', 'video', 'remoto', 'otro'] },
   { key: '7', label: 'Pruebas', tipo: ['pruebas'] },
+  { key: '8', label: 'Reuniones', tipo: ['reunion'] },
 ]
 
 export const groupIndex = (tipo: LibKind[]) =>
@@ -82,7 +84,7 @@ export const groupIndex = (tipo: LibKind[]) =>
 export type ShortcutAction =
   | 'search' | 'left' | 'right' | 'up' | 'down' | 'enter' | 'quick' | 'prev' | 'next' | 'fullscreen'
   | 'escape' | 'quitar' | 'claude' | 'session' | 'copy' | 'reload' | 'toggleView' | 'help'
-  | `type${1 | 2 | 3 | 4 | 5 | 6 | 7}`
+  | `type${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8}`
 
 const KEYS: Record<string, ShortcutAction> = {
   '/': 'search',
@@ -103,7 +105,7 @@ const KEYS: Record<string, ShortcutAction> = {
   r: 'reload',
   g: 'toggleView',
   '?': 'help',
-  '1': 'type1', '2': 'type2', '3': 'type3', '4': 'type4', '5': 'type5', '6': 'type6', '7': 'type7',
+  '1': 'type1', '2': 'type2', '3': 'type3', '4': 'type4', '5': 'type5', '6': 'type6', '7': 'type7', '8': 'type8',
 }
 
 export interface KeyInfo {
@@ -124,12 +126,13 @@ export function shortcutFor(e: KeyInfo, typing: boolean): ShortcutAction | null 
 export const isTyping = (el: Element | null) =>
   !!el && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable)
 
-export type CardVariant = 'cover' | 'image' | 'video' | 'diagrama' | 'pruebas' | 'doc' | 'remoto' | 'gone'
+export type CardVariant = 'cover' | 'image' | 'video' | 'diagrama' | 'pruebas' | 'reunion' | 'doc' | 'remoto' | 'gone'
 
 export function cardVariant(item: LibItem): CardVariant {
   if (item.kind === 'remoto') return 'remoto'
   if (item.kind === 'diagrama') return 'diagrama'
   if (item.kind === 'pruebas') return 'pruebas'
+  if (item.kind === 'reunion') return 'reunion'
   if (!item.exists && !item.copia) return 'gone'
   if (item.kind === 'html') return item.servible ? 'cover' : 'doc'
   if (item.kind === 'image' || item.kind === 'gif' || item.kind === 'svg') return item.servible ? 'image' : 'doc'
@@ -152,6 +155,12 @@ export function pruebasOf(item: LibItem): Pruebas | null {
   }
 }
 
+/** The saved meeting behind a library item; null when it is missing or unreadable, so the caller shows a fallback. */
+export function reunionOf(item: LibItem): ReunionGuardada | null {
+  if (item.kind !== 'reunion' || !item.reunion_raw) return null
+  return toReunion(item.reunion_raw)
+}
+
 export const KIND_LABEL: Record<LibKind, string> = {
   html: 'Página',
   image: 'Imagen',
@@ -162,6 +171,7 @@ export const KIND_LABEL: Record<LibKind, string> = {
   text: 'Texto',
   diagrama: 'Diagrama',
   pruebas: 'Pruebas',
+  reunion: 'Reunión',
   remoto: 'Solo en claude.ai',
   otro: 'Archivo',
 }
@@ -214,12 +224,13 @@ export function coverHues(id: string): [number, number] {
   return [h % 360, (h >>> 9) % 360]
 }
 
-export type ViewerKind = 'frame' | 'image' | 'video' | 'pdf' | 'text' | 'diagrama' | 'pruebas' | 'remote' | 'gone'
+export type ViewerKind = 'frame' | 'image' | 'video' | 'pdf' | 'text' | 'diagrama' | 'pruebas' | 'reunion' | 'remote' | 'gone'
 
 export function viewerKind(item: LibItem): ViewerKind {
   if (item.kind === 'remoto') return 'remote'
   if (item.kind === 'diagrama') return 'diagrama'
   if (item.kind === 'pruebas') return 'pruebas'
+  if (item.kind === 'reunion') return 'reunion'
   if (!item.servible) return 'gone'
   if (item.kind === 'html' || item.kind === 'svg') return 'frame'
   if (item.kind === 'image' || item.kind === 'gif') return 'image'

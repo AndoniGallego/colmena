@@ -216,7 +216,7 @@ function onLeave(el: Element, done: () => void) {
             <div class="field">
               <span class="lh">
                 Título
-                <button type="button" class="ai" :class="{ busy: redactando }" :disabled="redactando || !info?.pusheada || !target" @click="redactar">
+                <button type="button" class="ai" :class="{ busy: redactando, 'sk-sweep': redactando }" :disabled="redactando || !info?.pusheada || !target" @click="redactar">
                   <span v-if="redactando" class="spin" aria-hidden="true" /><Icon v-else name="sparkle" :size="14" /> {{ redactando ? 'Redactando…' : 'Redactar con Claude' }}
                 </button>
               </span>
@@ -289,9 +289,9 @@ select:disabled, input:disabled { opacity: 0.55; }
 .ai:hover:not(:disabled) { filter: brightness(1.12); }
 .ai:active:not(:disabled) { scale: var(--press-scale); }
 .ai:disabled:not(.busy) { opacity: 0.45; cursor: default; }
-.ai.busy { background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 25%, transparent), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: ui-sweep 1.1s linear infinite; }
+.ai.busy { --sk-bg: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 25%, transparent), transparent); --sk-left: -25%; --sk-w: 50%; --sk-tile: 100%; --sk-dx: 200%; --sk-dur: 1.1s; }
 .problem { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 9px 12px; border-radius: var(--r-md); font-size: 13px; line-height: 1.4; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
 .problem :deep(svg) { flex: none; margin-top: 2px; }
 @media (min-width: 640px) { .actions .btn { flex: 1; } }
-:root[data-motion='soft'] .ai.busy { animation: none; }
+:root[data-motion='soft'] .ai.busy::after { animation: none; }
 </style>

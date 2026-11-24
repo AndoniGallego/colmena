@@ -138,7 +138,7 @@ const finVisibles = computed(() => itemsFin.value.filter((i) => !resultadoDe(i)!
               <span class="dias-lbl">Quietas hace más de</span>
               <div class="stepper" role="group" aria-label="Días de inactividad">
                 <button type="button" aria-label="Un día menos" :disabled="lm.dias <= DIAS_MIN" @click="setDias(lm.dias - 1)">−</button>
-                <output :class="{ calc: lm.recalculando }">{{ lm.dias }} {{ lm.dias === 1 ? 'día' : 'días' }}</output>
+                <output :class="{ calc: lm.recalculando, 'sk-sweep': lm.recalculando }">{{ lm.dias }} {{ lm.dias === 1 ? 'día' : 'días' }}</output>
                 <button type="button" aria-label="Un día más" :disabled="lm.dias >= DIAS_MAX" @click="setDias(lm.dias + 1)">+</button>
               </div>
             </div>
@@ -149,9 +149,9 @@ const finVisibles = computed(() => itemsFin.value.filter((i) => !resultadoDe(i)!
 
             <template v-if="lm.paso === 'elegir'">
               <p v-if="lm.error" class="aviso stag" role="alert"><Icon name="warn" :size="14" /> <span>{{ lm.error }}</span></p>
-              <div v-if="!lm.loaded && !lm.error" class="skel" aria-busy="true"><i /><i /><i /></div>
+              <div v-if="!lm.loaded && !lm.error" class="skel" aria-busy="true"><i class="sk-sweep" /><i class="sk-sweep" /><i class="sk-sweep" /></div>
               <p v-else-if="lm.loaded && !lm.items.length" class="vacio stag">No hay sesiones quietas con ese criterio.</p>
-              <div v-else class="lista" :class="{ calc: lm.recalculando }">
+              <div v-else class="lista" :class="{ calc: lm.recalculando, 'sk-sweep': lm.recalculando }">
                 <section v-for="g in agrupado.grupos" :key="g.workspace" class="grupo stag">
                   <h3 class="g-name">{{ g.workspace }}</h3>
                   <div v-for="i in g.items" :key="itemKey(i)" class="fila" :class="{ on: lm.marcas[itemKey(i)] }">
@@ -196,7 +196,7 @@ const finVisibles = computed(() => itemsFin.value.filter((i) => !resultadoDe(i)!
             </template>
 
             <template v-else-if="lm.paso === 'revisar'">
-              <div v-if="lm.revisando" class="skel" aria-busy="true"><i /><i /></div>
+              <div v-if="lm.revisando" class="skel" aria-busy="true"><i class="sk-sweep" /><i class="sk-sweep" /></div>
               <template v-else>
                 <section v-for="i in itemsRevision" :key="itemKey(i)" class="rev stag" :class="{ amber: !!lm.motivos[itemKey(i)] }">
                   <h3 class="g-name">{{ i.label }}</h3>
@@ -367,16 +367,11 @@ const finVisibles = computed(() => itemsFin.value.filter((i) => !resultadoDe(i)!
 }
 .calc {
   opacity: 0.55;
-  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--accent) 14%, transparent) 50%, transparent 70%) 0 0 / 200% 100%;
-  animation: shim 1.1s linear infinite;
+  --sk-bg: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--accent) 14%, transparent) 50%, transparent 70%);
+  --sk-dur: 1.1s;
 }
-:root[data-motion='soft'] .calc {
+:root[data-motion='soft'] .calc::after {
   animation: none;
-}
-@keyframes shim {
-  to {
-    background-position: -200% 0;
-  }
 }
 .ls-body {
   flex: 1;
@@ -620,11 +615,10 @@ const finVisibles = computed(() => itemsFin.value.filter((i) => !resultadoDe(i)!
   height: 64px;
   border-radius: 12px;
   background: var(--bg-2);
-  animation: shim 1.1s linear infinite;
-  background-image: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--accent) 12%, transparent) 50%, transparent 70%);
-  background-size: 200% 100%;
+  --sk-bg: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--accent) 12%, transparent) 50%, transparent 70%);
+  --sk-dur: 1.1s;
 }
-:root[data-motion='soft'] .skel i {
+:root[data-motion='soft'] .skel i::after {
   animation: none;
 }
 .btn {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reunion-mostrar-ventana"
+description = "Enables the reunion_mostrar_ventana command without any pre-configured scope."
+commands.allow = ["reunion_mostrar_ventana"]
+
+[[permission]]
+identifier = "deny-reunion-mostrar-ventana"
+description = "Denies the reunion_mostrar_ventana command without any pre-configured scope."
+commands.deny = ["reunion_mostrar_ventana"]

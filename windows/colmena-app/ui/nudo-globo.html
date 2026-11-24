@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nudo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --fondo: #151917;
+        --texto: #f0efe8;
+        --suave: #b4b7ae;
+        --tenue: #80857c;
+        --linea: rgba(233, 231, 223, 0.1);
+        --linea-2: rgba(233, 231, 223, 0.16);
+        --lima: #c6f25e;
+        --lima-linea: rgba(198, 242, 94, 0.4);
+        --lima-suave: rgba(198, 242, 94, 0.12);
+        --lima-tinta: #12160a;
+        --miel: #f2b33d;
+        --entra: cubic-bezier(0.2, 0, 0, 1);
+        --sale: cubic-bezier(0.4, 0, 1, 1);
+        --radio: 14px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+      body {
+        padding: 4px;
+      }
+
+      /* ---- Globo: entra desde el lado de la abejita y sale encogiéndose hacia ella ---- */
+      .globo {
+        --dx: 0px;
+        --dy: 8px;
+        position: relative;
+        height: 100%;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        color: var(--texto);
+        background:
+          linear-gradient(180deg, rgba(198, 242, 94, 0.07), rgba(198, 242, 94, 0) 46%),
+          var(--fondo);
+        border-radius: var(--radio);
+        outline: 1px solid var(--linea);
+        outline-offset: -1px;
+        opacity: 0;
+        transform: translate(var(--dx), var(--dy)) scale(0.94);
+        transform-origin: 50% 100%;
+        pointer-events: none;
+        transition:
+          opacity 180ms var(--sale),
+          transform 180ms var(--sale);
+      }
+      .globo[data-lado='arriba'] {
+        --dx: 0px;
+        --dy: -8px;
+        transform-origin: 50% 0%;
+      }
+      .globo[data-lado='izquierda'] {
+        --dx: -8px;
+        --dy: 0px;
+        transform-origin: 0% 50%;
+      }
+      .globo[data-lado='derecha'] {
+        --dx: 8px;
+        --dy: 0px;
+        transform-origin: 100% 50%;
+      }
+      .globo.visible {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+        transition:
+          opacity 220ms var(--entra),
+          transform 220ms var(--entra);
+      }
+      /* Borde lima que se enciende al llegar y queda tenue. */
+      .globo::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow:
+          inset 0 0 0 1px var(--lima-linea),
+          0 0 6px rgba(198, 242, 94, 0.22);
+        opacity: 0;
+        pointer-events: none;
+      }
+      .globo.visible::after {
+        animation: enciende 600ms 90ms var(--entra) both;
+      }
+      @keyframes enciende {
+        0% {
+          opacity: 0;
+        }
+        45% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.5;
+        }
+      }
+
+      /* ---- Cabecera: "Paso X de Y" con un puntito de panal por paso ---- */
+      .cabecera {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 14px;
+        font-size: 11px;
+        line-height: 14px;
+        color: var(--suave);
+      }
+      .titulo {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+      #sesion {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .panal {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex: none;
+      }
+      .panal[hidden] {
+        display: none;
+      }
+      .panal i {
+        width: 7px;
+        height: 8px;
+        background: var(--lima-suave);
+        clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+        transition:
+          opacity 200ms var(--entra),
+          transform 200ms var(--entra);
+      }
+      .panal i.hecho {
+        background: var(--miel);
+        opacity: 0.85;
+      }
+      .panal i.actual {
+        background: var(--lima);
+        transform: scale(1.25);
+      }
+      .panal i.actual.llega {
+        animation: llega 360ms var(--entra) both;
+      }
+      @keyframes llega {
+        from {
+          opacity: 0.3;
+          transform: scale(0.5);
+        }
+      }
+
+      /* ---- Texto del paso: el nuevo entra mientras el anterior se va ---- */
+      .textos {
+        display: grid;
+        flex: 1;
+        min-height: 0;
+      }
+      .texto {
+        grid-area: 1 / 1;
+        margin: 0;
+        min-height: 0;
+        font-size: 13px;
+        line-height: 16px;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow-wrap: anywhere;
+        text-wrap: pretty;
+      }
+      .texto.entra {
+        animation: texto-entra 220ms var(--entra) both;
+      }
+      .texto.sale {
+        animation: texto-sale 160ms var(--sale) both;
+      }
+      @keyframes texto-entra {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+      }
+      @keyframes texto-sale {
+        to {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+      }
+
+      /* ---- Botones ---- */
+      .botones {
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        position: relative;
+        flex: 1;
+        min-height: 44px;
+        border: 0;
+        border-radius: 10px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--suave);
+        background: transparent;
+        box-shadow: inset 0 0 0 1px var(--linea-2);
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        transition: scale 150ms ease-out;
+      }
+      /* El hover aclara con una capa (solo opacidad), sin animar colores. */
+      button::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: #fff;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease-out;
+      }
+      button.principal {
+        color: var(--lima-tinta);
+        background: var(--lima);
+        box-shadow: none;
+      }
+      button.aviso {
+        flex: none;
+        min-height: 0;
+        padding: 0 2px;
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 14px;
+        color: var(--tenue);
+        background: none;
+        box-shadow: none;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      button.aviso::before {
+        content: none;
+      }
+      button:active {
+        scale: 0.96;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--lima);
+        outline-offset: 2px;
+      }
+      button[hidden] {
+        display: none;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        button:hover::before {
+          opacity: 0.06;
+        }
+        button.principal:hover::before {
+          opacity: 0.18;
+        }
+        button.aviso:hover {
+          color: var(--suave);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .globo,
+        .globo.visible,
+        .panal i,
+        button,
+        button::before {
+          transition: none;
+        }
+        .globo {
+          transform: none;
+        }
+        .globo.visible::after {
+          animation: none;
+          opacity: 0.5;
+        }
+        .panal i.actual.llega,
+        .texto.entra,
+        .texto.sale {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="globo" id="globo">
+      <div class="cabecera">
+        <span class="titulo">
+          <span id="sesion"></span>
+          <span class="panal" id="panal" aria-hidden="true" hidden></span>
+        </span>
+        <button type="button" class="aviso" id="aviso" aria-pressed="false"></button>
+      </div>
+      <div class="textos" id="textos" role="status" aria-live="polite">
+        <p class="texto"></p>
+      </div>
+      <div class="botones">
+        <button type="button" class="principal" id="siguiente" hidden>Hecho, siguiente</button>
+        <button type="button" class="principal" id="listo">Listo</button>
+        <button type="button" id="salir">Salir</button>
+      </div>
+    </div>
+    <script>
+      const tauri = window.__TAURI__;
+      const invoke = tauri ? tauri.core.invoke : () => Promise.reject(new Error('sin programa'));
+      const listen = tauri ? tauri.event.listen : () => {};
+      const globo = document.getElementById('globo');
+      const textos = document.getElementById('textos');
+      const panal = document.getElementById('panal');
+      const LADOS = ['arriba', 'abajo', 'izquierda', 'derecha'];
+      const PUNTITOS_MAX = 10;
+      const sinMovimiento = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      let ultimo = '';
+      let enPantalla = false;
+      let enGuia = false;
+      let pasoAnterior = 0;
+
+      // Un puntito de panal por paso: los hechos en miel (el rastro), el actual en lima.
+      function dibujarPanal(guia) {
+        const total = guia ? guia.total : 0;
+        const paso = guia ? guia.paso : 0;
+        if (total < 2 || total > PUNTITOS_MAX) {
+          panal.hidden = true;
+          panal.replaceChildren();
+          pasoAnterior = paso;
+          return;
+        }
+        panal.hidden = false;
+        if (panal.children.length !== total) {
+          panal.replaceChildren(...Array.from({ length: total }, () => document.createElement('i')));
+        }
+        Array.from(panal.children).forEach((p, i) => {
+          p.className = i + 1 < paso ? 'hecho' : i + 1 === paso ? 'actual' : '';
+        });
+        if (paso !== pasoAnterior && paso >= 1 && !sinMovimiento()) {
+          panal.children[paso - 1].classList.add('llega');
+        }
+        pasoAnterior = paso;
+      }
+
+      function textoActual() {
+        const p = textos.querySelector('.texto:not(.sale)');
+        return p ? p.textContent : '';
+      }
+
+      // Con el globo a la vista, el texto nuevo hace cross-fade con el anterior; si no, se cambia en el lugar.
+      function ponerTexto(texto, animar) {
+        if (texto === textoActual()) return;
+        const viejos = Array.from(textos.querySelectorAll('.texto'));
+        const nuevo = document.createElement('p');
+        nuevo.className = 'texto';
+        nuevo.textContent = texto;
+        if (!animar || sinMovimiento()) {
+          textos.replaceChildren(nuevo);
+          return;
+        }
+        for (const v of viejos) {
+          v.classList.remove('entra');
+          v.classList.add('sale');
+          v.setAttribute('aria-hidden', 'true');
+          setTimeout(() => v.remove(), 200);
+        }
+        nuevo.classList.add('entra');
+        textos.appendChild(nuevo);
+      }
+
+      function mostrar(g) {
+        // El seguimiento reavisa cada vez que el control se mueve: si el globo no cambió, no se re-anima.
+        const clave = JSON.stringify(g && g.visible ? g : null);
+        if (clave === ultimo) return;
+        ultimo = clave;
+        if (!g || !g.visible) {
+          // Sale encogiéndose hacia la abejita; Rust oculta la ventana cuando termina.
+          enPantalla = false;
+          globo.classList.remove('visible');
+          return;
+        }
+        enGuia = !!g.guia;
+        if (!enPantalla && LADOS.includes(g.lado)) globo.dataset.lado = g.lado;
+        document.getElementById('sesion').textContent = g.guia ? g.guia.cabecera : g.sesion;
+        dibujarPanal(g.guia);
+        ponerTexto(g.texto.slice(0, 120), enPantalla);
+        const aviso = document.getElementById('aviso');
+        aviso.textContent = g.se_ve ? 'Se ve al compartir' : 'No se ve al compartir';
+        aviso.setAttribute('aria-pressed', String(g.se_ve));
+        aviso.dataset.seVe = String(g.se_ve);
+        // Con guía, los botones los manda el paso; sin guía, todo como siempre.
+        document.getElementById('siguiente').hidden = !(g.guia && g.guia.siguiente);
+        document.getElementById('listo').hidden = g.guia ? !g.guia.listo : !g.esperando;
+        document.getElementById('salir').hidden = !!(g.guia && g.guia.listo);
+        // Solo anima al aparecer: si ya estaba a la vista (cambió el texto o el aviso) se actualiza en el lugar.
+        if (!enPantalla) {
+          enPantalla = true;
+          requestAnimationFrame(() => enPantalla && globo.classList.add('visible'));
+        }
+      }
+
+      async function actualizar() {
+        try {
+          mostrar((await invoke('nudo_pagina_estado')).globo);
+        } catch (_) {}
+      }
+
+      // Fuera del programa (la página demo de pruebas) el globo se maneja a mano.
+      if (!tauri) window.__globo = { mostrar };
+
+      listen('nudo-globo', actualizar);
+      document.getElementById('listo').addEventListener('click', () => {
+        if (enGuia) invoke('nudo_guia', { accion: 'listo' }).catch(() => {});
+        else invoke('nudo_listo').catch(() => {});
+      });
+      document.getElementById('siguiente').addEventListener('click', () => {
+        invoke('nudo_guia', { accion: 'siguiente' }).catch(() => {});
+      });
+      document.getElementById('aviso').addEventListener('click', (e) => {
+        const seVe = e.currentTarget.dataset.seVe !== 'true';
+        invoke('nudo_visibilidad', { se_ve: seVe }).catch(() => {});
+      });
+      document.getElementById('salir').addEventListener('click', () => {
+        invoke('nudo_salir').catch(() => {});
+      });
+      actualizar();
+    </script>
+  </body>
+</html>

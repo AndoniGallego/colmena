@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-mostrar"
+description = "Enables the nudo_mostrar command without any pre-configured scope."
+commands.allow = ["nudo_mostrar"]
+
+[[permission]]
+identifier = "deny-nudo-mostrar"
+description = "Denies the nudo_mostrar command without any pre-configured scope."
+commands.deny = ["nudo_mostrar"]

@@ -989,3 +989,9 @@ def test_ref_viejo_en_creados_que_ya_no_esta_en_items_no_se_asocia(svc_cwd, tmp_
     assert run(svc_cwd.sesiones()) == {}
     svc_cwd.estado["creados"]["7:3"] = SID_A
     assert run(svc_cwd.sesiones()) == {SID_A: "7:3"}
+
+
+def test_redactar_ignora_el_uso_de_la_reunion_en_el_tope(mclient, claude, repo):
+    mclient.redactor.uso.add("reunion", {"input": 10**9})
+    r = mclient.post("/api/mrs/crear/redactar", json={"repo": str(repo), "rama": "feature/x", "target": "main"})
+    assert r.status_code == 200

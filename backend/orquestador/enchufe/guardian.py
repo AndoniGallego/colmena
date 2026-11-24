@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from orquestador.guardian.lanzador import MODOS_POR_LANZAMIENTO
+from orquestador.guardian.lanzador import MODOS_INTERNOS, MODOS_POR_LANZAMIENTO
 from orquestador.guardian.protocolo import MAX_LINEA, VERSION, leer_mensaje
 
 from .base import (
@@ -436,15 +436,25 @@ class ClienteGuardian:
         return Creado(None, res.get("linea_id"), str(res.get("sesion_id")))
 
     async def arrancar_claude(
-        self, sesion_id: str, nombre: str, resume: str | None = None, *, modo: str | None = None
+        self,
+        sesion_id: str,
+        nombre: str,
+        resume: str | None = None,
+        *,
+        modo: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> None:
-        if modo is not None and modo not in MODOS_POR_LANZAMIENTO:
+        if modo is not None and modo not in MODOS_POR_LANZAMIENTO | MODOS_INTERNOS:
             raise ValueError("modo de permisos por lanzamiento inválido")
+        if dirs_extra and modo != "copiloto":
+            raise ValueError("dirs_extra solo vale en modo copiloto")
         args: dict[str, Any] = {"sesion_id": sesion_id, "nombre": nombre}
         if resume:
             args["resume"] = resume
         if modo is not None:
             args["modo"] = modo
+        if dirs_extra:
+            args["dirs_extra"] = list(dirs_extra)
         res = await self._pedir("arrancar_claude", args)
         if modo is None:
             return

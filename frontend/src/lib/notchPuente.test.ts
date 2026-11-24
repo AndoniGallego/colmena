@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import { anchoVentanaFijo } from './notchMovimiento'
-import { crearPuente, escuchar, esRutaNotch, formaPara, pasosVentana, ventanaPara } from './notchPuente'
+import { crearPuente, escuchar, esRutaNotch, esVistaReunion, formaPara, pasosVentana, ventanaPara } from './notchPuente'
 
 describe('notchPuente', () => {
   it('reconoce la ruta del notch', () => {
     expect([esRutaNotch('/notch'), esRutaNotch('/notch/'), esRutaNotch('/'), esRutaNotch('/notchx')]).toEqual([true, true, false, false])
+  })
+
+  it('reconoce la vista de reunión por el parámetro vista', () => {
+    expect([esVistaReunion('?vista=reunion'), esVistaReunion('?x=1&vista=reunion'), esVistaReunion(''), esVistaReunion('?vista=otra')]).toEqual([true, true, false, false])
+  })
+
+  it('mostrarReunion trae la ventana en el programa y no hace nada fuera', () => {
+    const invoke = vi.fn().mockResolvedValue(undefined)
+    crearPuente({ __TAURI__: { core: { invoke } } } as unknown as Window).mostrarReunion()
+    expect(invoke).toHaveBeenCalledWith('reunion_mostrar_ventana')
+    expect(() => crearPuente({} as unknown as Window).mostrarReunion()).not.toThrow()
   })
 
   it('en el programa usa los comandos del notch', () => {
@@ -28,6 +39,25 @@ describe('notchPuente', () => {
     const invoke = vi.fn().mockResolvedValue(undefined)
     crearPuente({ __TAURI__: { core: { invoke } } } as unknown as Window).abrirColmena('../x y')
     expect(invoke).toHaveBeenCalledWith('abrir_colmena', { sesion: null })
+  })
+
+  it('abrirBiblioteca invoca el comando con el ítem y un id inválido abre Colmena sin ítem', () => {
+    const invoke = vi.fn().mockResolvedValue(undefined)
+    const p = crearPuente({ __TAURI__: { core: { invoke } } } as unknown as Window)
+    const id = '0123456789abcdef0123456789abcdef'
+    p.abrirBiblioteca(id)
+    p.abrirBiblioteca('../x')
+    expect(invoke.mock.calls).toEqual([
+      ['abrir_biblioteca', { item: id }],
+      ['abrir_colmena', { sesion: null }],
+    ])
+  })
+
+  it('abrirBiblioteca en el navegador abre la pestaña de Colmena en ese ítem', () => {
+    const open = vi.fn()
+    const id = '0123456789abcdef0123456789abcdef'
+    crearPuente({ open } as unknown as Window).abrirBiblioteca(id)
+    expect(open).toHaveBeenCalledWith('/?biblioteca=' + id, 'colmena')
   })
 
   it('en el navegador abre una pestaña de Colmena', () => {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-salir"
+description = "Enables the nudo_salir command without any pre-configured scope."
+commands.allow = ["nudo_salir"]
+
+[[permission]]
+identifier = "deny-nudo-salir"
+description = "Denies the nudo_salir command without any pre-configured scope."
+commands.deny = ["nudo_salir"]

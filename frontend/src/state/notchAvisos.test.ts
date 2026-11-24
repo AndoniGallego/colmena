@@ -119,7 +119,7 @@ beforeEach(async () => {
   avisoActual.value = null
   cola.splice(0, cola.length)
   boardState.value = { ...boardState.value, board: null, connection: 'live' }
-  setPuente({ enPrograma: false, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: vi.fn() })
+  setPuente({ enPrograma: false, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: vi.fn(), mostrarReunion: vi.fn() })
   const { _resetIniciar } = await import('./notchAvisos')
   _resetIniciar()
 })
@@ -139,7 +139,7 @@ describe('state/notchAvisos', () => {
   it('un aviso nuevo de te toca sale y suena; un done sale sin sonido', async () => {
     const sonar = vi.fn()
     const puenteAviso = vi.fn()
-    setPuente({ enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: puenteAviso })
+    setPuente({ enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: puenteAviso, mostrarReunion: vi.fn() })
     getAvisos
       .mockResolvedValueOnce(page([aviso(7, 'asks')]))
       .mockResolvedValueOnce(page([aviso(8, 'asks', { session_id: 's8' })]))
@@ -517,7 +517,7 @@ describe('state/notchAvisos', () => {
   it('un te-toca de la misma sesión reemplaza un done visible al instante', async () => {
     const sonar = vi.fn()
     const puenteAviso = vi.fn()
-    setPuente({ enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), aviso: puenteAviso })
+    setPuente({ enPrograma: true, tamano: vi.fn(), forma: vi.fn(), arrastrar: vi.fn(), abrirColmena: vi.fn(), abrirBiblioteca: vi.fn(), aviso: puenteAviso, mostrarReunion: vi.fn() })
     getAvisos
       .mockResolvedValueOnce(page([aviso(7, 'asks')]))
       .mockResolvedValueOnce(page([aviso(8, 'done', { session_id: 's1' })]))

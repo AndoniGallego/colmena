@@ -26,7 +26,7 @@ onMounted(() => {
 <template>
   <div class="preview" :class="{ asking }">
     <div v-if="loading" class="skeleton" aria-label="Cargando">
-      <span v-for="i in 2" :key="i" :style="{ width: `${100 - i * 22}%`, animationDelay: `${i * 0.12}s` }" />
+      <span v-for="i in 2" :key="i" class="sk-sweep" :style="{ width: `${100 - i * 22}%`, '--sk-delay': `${i * 0.12}s` }" />
     </div>
     <template v-else-if="source">
       <span class="who mono"><Icon v-if="asking" name="warn" :size="12" />{{ asking ? 'Te pregunta' : fondo ? `En segundo plano · ${fondoTxt}` : 'Último estado' }}</span>
@@ -81,13 +81,10 @@ onMounted(() => {
 .skeleton span {
   height: 9px;
   border-radius: 5px;
-  background: linear-gradient(90deg, var(--surface-2), var(--surface-hover), var(--surface-2));
-  background-size: 200% 100%;
-  animation: shimmer 1.3s linear infinite;
-}
-@keyframes shimmer {
-  from { background-position: 100% 0; }
-  to { background-position: -100% 0; }
+  --sk-bg: linear-gradient(90deg, var(--surface-2), var(--surface-hover), var(--surface-2));
+  --sk-left: -300%;
+  --sk-w: 400%;
+  --sk-dur: 1.3s;
 }
 .empty {
   margin: 0;

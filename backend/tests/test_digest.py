@@ -126,3 +126,33 @@ def test_estado_dentro_de_un_fence_mas_largo_no_cuenta():
     ejemplo = '````markdown\n```estado\n{"hizo": "X"}\n```\n````\n\n```estado\n{"hizo": "Real"}\n```'
     assert parse_estado(ejemplo) == {"hizo": "Real"}
     assert estados_todos_validos(ejemplo) is True
+
+
+def _conversacion(n: int) -> str:
+    lineas = []
+    for i in range(n):
+        lineas.append(json.dumps({"type": "user", "message": {"content": f"pregunta {i}"}}))
+        lineas.append(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": f"respuesta {i}"}]}}))
+    return "\n".join(lineas) + "\n"
+
+
+def test_digest_guarda_solo_los_turnos_recientes(tmp_path):
+    from orquestador.digest import MAX_TURNS
+    p = tmp_path / "x.jsonl"
+    p.write_text(_conversacion(40))
+    d = parse_transcript(p)
+    assert MAX_TURNS == 50
+    assert len(d.turns) == 50
+    assert d.turns[0]["text"] == "pregunta 15"
+    assert d.last_claude_text() == "respuesta 39"
+
+
+def test_digest_incremental_sigue_acotado(projects):
+    svc = DigestService(projects)
+    path = projects / "-proj" / f"{SID}.jsonl"
+    svc.get(SID)
+    path.write_text(path.read_text() + _conversacion(40))
+    d = svc.get(SID)
+    assert len(d.turns) == 50
+    assert d.last_claude_text() == "respuesta 39"
+    assert len(svc.summary(SID, turns=50)["turns"]) == 50

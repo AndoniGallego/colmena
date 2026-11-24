@@ -25,12 +25,15 @@ from .digest import SESSION_ID
 
 log = logging.getLogger("orquestador.biblioteca")
 
-KINDS = ("html", "image", "svg", "gif", "pdf", "video", "text", "diagrama", "pruebas", "remoto", "otro")
+KINDS = ("html", "image", "svg", "gif", "pdf", "video", "text", "diagrama", "pruebas", "remoto", "reunion", "otro")
 MB = 1024 * 1024
 MAX_BY_KIND = {"html": 5 * MB, "image": 25 * MB, "gif": 25 * MB, "svg": 2 * MB, "pdf": 50 * MB,
                "video": 200 * MB, "text": 1 * MB}
 MAX_ASSET = 20 * MB
 MAX_DIAGRAMA_BYTES = 64 * 1024
+MAX_REUNION_RAW_BYTES = 64 * 1024
+REUNION_TITULO_CHARS = 200
+REUNION_ITEM_CHARS = 400
 MAX_PRUEBAS_CASOS = 60
 PRUEBAS_RESULTADOS = ("ok", "falla", "omitida")
 PRUEBAS_IMG_EXT = {"png": ("image", "png", "image/png"), "jpg": ("image", "jpeg", "image/jpeg"),
@@ -971,7 +974,7 @@ class Library:
         return {"kind": kind, "source": source, "session_id": ctx["session_id"], "project": ctx["project"],
                 "subagent": ctx["subagent"], "tool_use_id": tool_use_id, "ts": ts, "title": "", "description": "",
                 "caption": "", "path": "", "exists": False, "size": 0, "mime": "", "url": "", "version": 0,
-                "versions": [], "assets": {}, "diagrama_raw": None, "pruebas_raw": None, "allowed": True, "motivo": "", "copia": False,
+                "versions": [], "assets": {}, "diagrama_raw": None, "pruebas_raw": None, "reunion_raw": None, "allowed": True, "motivo": "", "copia": False,
                 "keys": []}
 
     def _put(self, ctx: dict, item: dict, is_new: bool) -> None:
@@ -1504,6 +1507,87 @@ class Library:
             self.save()
         return len(gone)
 
+    @staticmethod
+    def _reunion_raw(datos: dict) -> str:
+        def textos(v):
+            return [clip(x, REUNION_ITEM_CHARS) for x in (v if isinstance(v, list) else []) if isinstance(x, str)][:8]
+
+        def tocada(t):
+            if not isinstance(t, dict):
+                return None
+            return {k: (clip(v, REUNION_ITEM_CHARS) if isinstance(v, str) else v) for k, v in t.items()
+                    if k in ("texto", "tipo", "respuesta", "archivos")}
+
+        out = dict(datos)
+        out["titulo"] = clip(datos.get("titulo"), REUNION_TITULO_CHARS)
+        out["resumen"] = textos(datos.get("resumen"))
+        out["pendientes"] = textos(datos.get("pendientes"))
+        out["repos"] = [clip(x, REUNION_TITULO_CHARS) for x in (datos.get("repos") or []) if isinstance(x, str)][:20]
+        tocadas = [t for t in map(tocada, datos.get("tocadas") or []) if t is not None]
+        for t in tocadas:
+            if isinstance(t.get("archivos"), list):
+                t["archivos"] = [clip(a, REUNION_ITEM_CHARS) for a in t["archivos"] if isinstance(a, str)][:20]
+        while True:
+            out["tocadas"] = tocadas
+            raw = json.dumps(out, ensure_ascii=False)
+            if len(raw.encode()) <= MAX_REUNION_RAW_BYTES or not tocadas:
+                break
+            tocadas = tocadas[1:]
+        if len(raw.encode()) > MAX_REUNION_RAW_BYTES:
+            raw = json.dumps({k: out[k] for k in ("v", "reunion", "inicio", "fin", "titulo") if k in out},
+                             ensure_ascii=False)
+        return raw
+
+    def agregar_reunion(self, datos: dict, charla: str) -> str:
+        rid = str(datos.get("reunion") or "")
+        if not rid:
+            raise ValueError("la reunión no trae id")
+        ident = item_id(f"reunion-{rid}", rid, 0)
+        fin = datos.get("fin") if isinstance(datos.get("fin"), (int, float)) else time.time()
+        inicio = datos.get("inicio") if isinstance(datos.get("inicio"), (int, float)) else fin
+        resumen = [p for p in (datos.get("resumen") or []) if isinstance(p, str)]
+        raw = self._reunion_raw(datos)
+        stamp = datetime.fromtimestamp(inicio).strftime("%d/%m %H:%M")
+        item = {"kind": "reunion", "source": "reunion", "session_id": f"reunion-{rid}", "project": "Reunión",
+                "subagent": False, "tool_use_id": "", "ts": datetime.fromtimestamp(fin, timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                "title": clip(f"Reunión {stamp} · {datos.get('titulo') or ''}".rstrip(" ·"), TITLE_CHARS),
+                "description": clip(resumen[0] if resumen else "", TEXT_CHARS), "caption": "", "path": "",
+                "exists": True, "size": len(raw.encode()), "mime": "text/plain", "url": "", "version": 0, "versions": [],
+                "assets": {}, "diagrama_raw": None, "pruebas_raw": None, "reunion_raw": raw, "allowed": True,
+                "motivo": "", "copia": False, "keys": [], "id": ident}
+        with self._index_lock:
+            self._fresh = set()
+            try:
+                sha, _ = self._store_bytes(charla.encode(), ident)
+                item.update(copia=True, blobs={"main": sha, "files": {}}, copied_at=time.time())
+            except OSError as exc:
+                log.warning("no pude guardar la charla de la reunión %s: %s", rid, exc)
+            with self._lock:
+                self.quitados.discard(ident)
+                self.items[ident] = item
+                self._register(item)
+            self._fresh = set()
+            self.save()
+        for fn in list(self.listeners):
+            try:
+                fn([ident])
+            except Exception as exc:
+                log.warning("listener de la biblioteca falló: %s", exc)
+        return ident
+
+    def charla_de(self, ident: str) -> Optional[str]:
+        item = self.items.get(ident)
+        if not item or item.get("kind") != "reunion":
+            return None
+        path = self._blob_file(item)
+        if path is None:
+            return None
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+
     def purge(self) -> None:
         cutoff = time.time() - COPY_DAYS * 86400
         with self._lock:
@@ -1529,7 +1613,7 @@ class Library:
         return res
 
     def view_of(self, item: dict, with_src: bool = True) -> dict:
-        exists, size = (self._stat_of(item["path"]) if item["path"] else (item["kind"] in ("diagrama", "pruebas"), item["size"]))
+        exists, size = (self._stat_of(item["path"]) if item["path"] else (item["kind"] in ("diagrama", "pruebas", "reunion"), item["size"]))
         copia = bool(item.get("copia")) and self._blob_file(item) is not None
         kind = item["kind"]
         servible = (kind in SERVED_KINDS or kind == "text") and item["allowed"] and (exists or copia)
@@ -1558,6 +1642,7 @@ class Library:
                "mime": item["mime"], "url": item["url"], "version": item["version"],
                "versions": [{"version": v["version"], "ts": v["ts"]} for v in item["versions"]],
                "diagrama_raw": item.get("diagrama_raw"), "pruebas_raw": item.get("pruebas_raw"),
+               "reunion_raw": item.get("reunion_raw"), "tiene_charla": kind == "reunion" and copia,
                "evidencias": dict(item.get("evidencias") or {}), "src": ""}
         if with_src and servible and kind in SERVED_KINDS:
             out["src"] = self.src_for(item["id"])

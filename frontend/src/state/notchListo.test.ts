@@ -6,7 +6,12 @@ vi.mock('./app', async () => {
   return { boardState: shallowRef({ connection: 'live' }) }
 })
 
-type Tauri = NonNullable<Window['__TAURI__']>
+vi.mock('../lib/viewport', async () => {
+  const { ref } = await import('vue')
+  return { desktop: ref(false) }
+})
+
+type Tauri =NonNullable<Window['__TAURI__']>
 
 describe('iniciarEscuchaNotas', () => {
   beforeEach(() => {
@@ -16,13 +21,13 @@ describe('iniciarEscuchaNotas', () => {
     delete (window as { __TAURI__?: unknown }).__TAURI__
   })
 
-  it('avisa notch-listo recién después de registrar la escucha', async () => {
+  it('notch-listo se emite recién después de registrar notas-abrir y guia-abrir', async () => {
     const orden: string[] = []
-    let registrada!: () => void
-    const listen = vi.fn(() => {
-      orden.push('listen')
+    const registros: Record<string, () => void> = {}
+    const listen = vi.fn((nombre: string) => {
+      orden.push(`listen:${nombre}`)
       return new Promise<unknown>((r) => {
-        registrada = () => r(() => undefined)
+        registros[nombre] = () => r(() => undefined)
       })
     })
     const emit = vi.fn(() => {
@@ -33,10 +38,30 @@ describe('iniciarEscuchaNotas', () => {
     const { iniciarEscuchaNotas } = await import('./notch')
     iniciarEscuchaNotas()
     await Promise.resolve()
+    expect(Object.keys(registros).sort()).toEqual(['guia-abrir', 'guia-listo', 'guia-siguiente', 'notas-abrir', 'nudo-salir'])
+    registros['notas-abrir']()
+    await new Promise((r) => setTimeout(r, 0))
     expect(emit).not.toHaveBeenCalled()
-    registrada()
+    registros['guia-abrir']()
     await vi.waitFor(() => expect(emit).toHaveBeenCalledWith('notch-listo'))
-    expect(orden).toEqual(['listen', 'emit'])
+    expect(orden.at(-1)).toBe('emit')
+    expect(emit).toHaveBeenCalledTimes(1)
+  })
+
+  it('con guia-abrir registrada primero también espera a notas-abrir', async () => {
+    const registros: Record<string, () => void> = {}
+    const listen = vi.fn((nombre: string) => new Promise<unknown>((r) => {
+      registros[nombre] = () => r(() => undefined)
+    }))
+    const emit = vi.fn(() => Promise.resolve())
+    ;(window as { __TAURI__?: Tauri }).__TAURI__ = { event: { listen, emit } }
+    const { iniciarEscuchaNotas } = await import('./notch')
+    iniciarEscuchaNotas()
+    registros['guia-abrir']()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(emit).not.toHaveBeenCalled()
+    registros['notas-abrir']()
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledWith('notch-listo'))
   })
 
   it('fuera de Windows no rompe ni avisa', async () => {

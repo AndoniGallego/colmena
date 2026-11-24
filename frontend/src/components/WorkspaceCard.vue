@@ -1,5 +1,6 @@
 <script lang="ts">
 import { superaUmbral } from '../lib/geometria'
+import { observarFueraDeVista } from '../lib/fueraDeVista'
 
 export { superaUmbral }
 
@@ -29,7 +30,7 @@ export function debeCancelarPestHoldPorMovimiento(
 </script>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Agent, Workspace } from '../api/types'
 import { boardState } from '../state/app'
 import {
@@ -545,7 +546,13 @@ watch(menu, (on) => {
   f.call(document, 'pointerdown', outside, true)
   f.call(document, 'keydown', onEsc)
 })
+const cardEl = ref<HTMLElement | null>(null)
+let soltarVista = () => {}
+onMounted(() => {
+  if (cardEl.value) soltarVista = observarFueraDeVista(cardEl.value)
+})
 onBeforeUnmount(() => {
+  soltarVista()
   cuerpoTween?.kill()
   cancelHold()
   pestPress?.cancel()
@@ -569,6 +576,7 @@ function onPestGripKey(tab: Tab, index: number, e: KeyboardEvent) {
 
 <template>
   <article
+    ref="cardEl"
     class="ws"
     :data-rail="rail"
     :class="{
@@ -1081,15 +1089,28 @@ function onPestGripKey(tab: Tab, index: number, e: KeyboardEvent) {
 }
 .ws:not([data-rail='calm']) .rail { opacity: 0.9; }
 .ws[data-rail='blocked'] .rail {
-  box-shadow: 0 0 12px var(--c);
+  box-shadow: 0 0 6px var(--c);
   animation: rail-call 2.8s var(--ease-in-out) infinite;
+}
+.ws[data-rail='blocked'] .rail::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 16px 1px var(--c);
+  opacity: 0;
+  pointer-events: none;
+  animation: rail-call-glow 2.8s var(--ease-in-out) infinite;
 }
 .ws[data-rail='working'] .rail {
   opacity: 0.7;
 }
 @keyframes rail-call {
-  0%, 100% { box-shadow: 0 0 6px var(--c); opacity: 0.75; }
-  50% { box-shadow: 0 0 16px 1px var(--c); opacity: 1; }
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+@keyframes rail-call-glow {
+  50% { opacity: 1; }
 }
 .spot,
 .lift {

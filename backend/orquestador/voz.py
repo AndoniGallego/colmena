@@ -10,6 +10,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from .heap import trim_heap
 from .traspaso import TraspasoError
 from .uploads import _Part, read_multipart
 
@@ -80,15 +81,6 @@ def decode(path: Path, max_seconds: Optional[float] = None, family: Optional[str
     if not chunks:
         return np.zeros(0, dtype=np.float32)
     return np.concatenate(chunks).astype(np.float32) / 32768.0
-
-
-def trim_heap() -> None:
-    try:
-        import ctypes
-
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except (OSError, AttributeError):
-        pass
 
 
 def local_model_path(name: str, models_dir: Path) -> Path:

@@ -1,5 +1,8 @@
 export const esRutaNotch = (pathname: string) => pathname === '/notch' || pathname === '/notch/'
 
+/** La ventana "Reunión" de la app de Windows carga la ruta del notch con `?vista=reunion`. */
+export const esVistaReunion = (search: string) => new URLSearchParams(search).get('vista') === 'reunion'
+
 export const SESION_RE = /^[A-Za-z0-9_.:-]{1,80}$/
 
 export type TipoAvisoPuente = 'te-toca' | 'termino'
@@ -22,8 +25,14 @@ export interface Puente {
   forma(x: number, y: number, ancho: number, alto: number, radio: number): void
   arrastrar(): void
   abrirColmena(sessionId?: string | null): void
+  /** Abre Colmena directo en un ítem de la Biblioteca (id de 32 hex); con otro id abre Colmena sin ítem. */
+  abrirBiblioteca(item: string): void
   aviso(tipo: TipoAvisoPuente): void
+  /** Trae al frente la ventana "Reunión" (la abre si hace falta). */
+  mostrarReunion(): void
 }
+
+const ITEM_BIBLIOTECA = /^[0-9a-f]{32}$/
 
 export const MARGEN_X = 16
 export const MARGEN_Y = 16
@@ -131,9 +140,24 @@ export function crearPuente(w: Window = window): Puente {
       }
       w.open(sesion ? '/?session=' + encodeURIComponent(sesion) : '/', 'colmena')
     },
+    abrirBiblioteca(item) {
+      if (!ITEM_BIBLIOTECA.test(item)) {
+        this.abrirColmena(null)
+        return
+      }
+      if (enPrograma) {
+        invoke!('abrir_biblioteca', { item }).catch(() => undefined)
+        return
+      }
+      w.open('/?biblioteca=' + item, 'colmena')
+    },
     aviso(tipo) {
       if (!enPrograma) return
       invoke!('mostrar_aviso', { tipo }).catch(() => undefined)
+    },
+    mostrarReunion() {
+      if (!enPrograma) return
+      invoke!('reunion_mostrar_ventana').catch(() => undefined)
     },
   }
 }

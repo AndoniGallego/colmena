@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-limpiar"
+description = "Enables the nudo_limpiar command without any pre-configured scope."
+commands.allow = ["nudo_limpiar"]
+
+[[permission]]
+identifier = "deny-nudo-limpiar"
+description = "Denies the nudo_limpiar command without any pre-configured scope."
+commands.deny = ["nudo_limpiar"]

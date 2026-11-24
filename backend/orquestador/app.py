@@ -4,8 +4,11 @@ import json
 import logging
 import os
 import re
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket
@@ -31,6 +34,7 @@ from .ganchos.enrutador import Enrutador
 from .permisos import AuditoriaPermisos, PermisoError, PermisosService
 from .digest import SESSION_ID, DigestService
 from .hardening import HardeningMiddleware, build_csp
+from .heap import devolver_periodicamente
 from .locks import PaneLocks
 from . import envio_sesion
 from .mensaje import MAX_TEXT, ORIGENES_PUBLICOS, MensajeBody, MensajeService, StopBody
@@ -65,7 +69,8 @@ from .push import NOTCH_PRUEBA_KINDS, EndpointBody, PushService, SubscribeBody, 
 from .orden_tablero import OrdenPestanasBody, OrdenTableroBody, PlegadasBody, SilencioBody
 from .state import StateStore
 from .sombra import Sombra
-from .terminales import Terminales
+from .internas import predicado_de_carpetas
+from .terminales import Terminales, merged_panes
 from . import terminales_acciones as tacc
 from .sesiones_viejas import SesionesViejas
 from .uso_claude import project_key
@@ -74,7 +79,14 @@ from .tareas import vigilar
 from .transcript import DEFAULT_LIMIT, MAX_LIMIT, TranscriptService
 from .enchufe import NoDisponible, NoExiste, TerminalesError, crear_terminales, sesion_propia
 from . import terminal_vivo
-from .guardian.lanzador import ConfigInvalida, ajustes_de
+from .guardian.lanzador import CARPETA_COPILOTO, CARPETA_GUIA, ConfigInvalida, ajustes_de, rutas_protegidas
+from .copiloto import PuenteCopiloto, relacionada
+from . import mostrar as mostrar_mod
+from . import guia as guia_mod
+from .guia import GuiaError, GuiaStore
+from .guia_puente import PuenteGuia
+from .reunion import TEXTO_POST_MAX, ReunionError, ReunionStore, ajustes_reunion
+from .reunion_detector import Detector
 from .enchufe.ids import ID_RE, valido
 from .traspaso import TraspasoBody, TraspasoError, TraspasoService
 from .guardado import GuardadoService, Lote
@@ -157,6 +169,21 @@ class PresenciaBody(BaseModel):
     escritorio: Optional[StrictBool] = None
 
 
+NUDO_PID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class NudoRespuestaBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str = Field(..., pattern=DEVICE_RE.pattern)
+    token: str = Field(..., min_length=1, max_length=64)
+    resultado: dict
+
+
+class NudoSalirBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str = Field(..., pattern=DEVICE_RE.pattern)
+
+
 class AbrirEnPcBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pane_id: str = Field(..., pattern=AVISO_PANE_RE.pattern)
@@ -217,6 +244,67 @@ class AbrirPedidoBody(BaseModel):
     forzar: bool = False
 
 
+class EmpezarReunionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str = Field(..., max_length=64)
+    repos: list[str] = Field(default_factory=list, max_length=60)
+    todos: StrictBool = False
+
+
+class TextoReunionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reunion: str = Field(..., max_length=64)
+    device: str = Field(..., max_length=64)
+    texto: str = Field(..., min_length=1, max_length=TEXTO_POST_MAX)
+
+
+class TocarReunionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reunion: str = Field(..., max_length=64)
+    linea: str = Field(..., pattern=r"^l\d{1,4}$")
+
+
+class MostrarReunionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reunion: str = Field(..., max_length=64)
+    device: str = Field(..., pattern=DEVICE_RE.pattern)
+    pregunta: str = Field("", max_length=mostrar_mod.PREGUNTA_MOSTRAR_MAX)
+    foto: dict
+    imagen: dict
+
+
+class ReunionIdBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reunion: str = Field(..., max_length=64)
+
+
+class PedirGuiaBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str = Field(..., pattern=DEVICE_RE.pattern)
+    pregunta: str = Field(..., max_length=guia_mod.PREGUNTA_MAX)
+    foto: dict
+    imagen: dict
+
+
+class SiguienteGuiaBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str = Field(..., pattern=DEVICE_RE.pattern)
+    foto: dict
+    imagen: dict
+
+
+class SalirGuiaBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device: str = Field(..., pattern=DEVICE_RE.pattern)
+
+
+RUTAS_CAPTURA = frozenset({"/api/reunion/mostrar", "/api/guia/pedir", "/api/guia/siguiente"})
+
+
+REPOS_REUNION_MAX = 60
+DEV_ESCANEO_MAX = 200
+
+
 class FocusBody(BaseModel):
     tab_id: str
 
@@ -235,6 +323,8 @@ class SecurityMiddleware:
         chunked = b"chunked" in headers.get(b"transfer-encoding", b"")
         if scope["method"] == "POST" and scope["path"] == "/api/uploads":
             too_big = not length.isdigit() or int(length) > uploads_mod.MAX_UPLOAD + uploads_mod.MAX_BODY_OVERHEAD
+        elif scope["method"] == "POST" and scope["path"] in RUTAS_CAPTURA:
+            too_big = not length.isdigit() or int(length) > mostrar_mod.CUERPO_MAX or chunked
         elif scope["method"] == "POST" and scope["path"] == "/api/voz/transcribir":
             too_big = not length.isdigit() or int(length) > voz_mod.MAX_AUDIO + voz_mod.MAX_BODY_OVERHEAD
         else:
@@ -261,6 +351,35 @@ class SecurityMiddleware:
 
 def sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def carpetas_internas(data_directory: Path, carpeta_copiloto: Path, carpeta_guia: Path) -> tuple[str, ...]:
+    """Carpetas de sesiones que no son trabajo de Ando: detector, Copiloto y guía (fuera del uso y de las viejas)."""
+    return (project_key(data_directory / "context"), project_key(data_directory / "mrs-claude"),
+            project_key(data_directory / "reunion-claude"), project_key(carpeta_copiloto),
+            project_key(carpeta_guia))
+
+
+REUNION_ACTIVA = frozenset({"escuchando", "pausada", "sin_pc", "llena", "terminando"})
+
+
+def panes_en_carpeta(snapshot: dict, carpeta: Path) -> list[str]:
+    """Los panes de Claude cuyo cwd es esa carpeta (comparando rutas reales)."""
+    try:
+        destino = os.path.realpath(carpeta)
+    except (OSError, ValueError):
+        return []
+    out: list[str] = []
+    for agente in snapshot.get("agents", []):
+        cwd, pane = agente.get("cwd"), agente.get("pane_id")
+        if not (isinstance(cwd, str) and cwd and isinstance(pane, str) and pane):
+            continue
+        try:
+            if os.path.realpath(cwd) == destino and pane not in out:
+                out.append(pane)
+        except (OSError, ValueError):
+            continue
+    return out
 
 
 def frontend_dir() -> Path:
@@ -331,9 +450,10 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                mrs: Optional[MrsService] = None, redactor: Optional[Redactor] = None,
                entrada_interna: bool = True, enchufe=None,
                ganchos_socket: Optional[Path] = None,
-               recarga_socket: Optional[Path] = None, entornos_runner=None,
+               recarga_socket: Optional[Path] = None, nudo_socket: Optional[Path] = None, entornos_runner=None,
                kit_opts: Optional[dict] = None, piezas: Optional[list] = None,
-               piezas_opts: Optional[dict] = None, piezas_paquete: str = "orquestador.piezas") -> FastAPI:
+               piezas_opts: Optional[dict] = None, piezas_paquete: str = "orquestador.piezas",
+               reunion_opts: Optional[dict] = None) -> FastAPI:
     # entrada_interna=False: sin Host/CIDR/Tailscale/Hardening aquí; envolver con entrada.pila_para.
     if enchufe is None:
         enchufe = crear_terminales(cfg)
@@ -347,14 +467,20 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     silencio.configurar(data_directory / silencio.MARCA)
 
     uso = UsoStore(data_directory)
-    uso_claude = ClaudeUso(cfg.projects_dir(), data_directory,
-                           excluir=(project_key(data_directory / "context"), project_key(data_directory / "mrs-claude")),
-                           limits_dir=ctx_dir())
+    reunion_opts = reunion_opts or {}
+    carpeta_copiloto = Path(reunion_opts.get("carpeta") or CARPETA_COPILOTO)
+    carpeta_guia = Path(reunion_opts.get("carpeta_guia") or CARPETA_GUIA)
+    # Las sesiones del detector, del Copiloto y de la guía no son trabajo de Ando: fuera del uso y de las viejas.
+    internas = carpetas_internas(data_directory, carpeta_copiloto, carpeta_guia)
+    destinos_internos = {os.path.realpath(c) for c in (carpeta_copiloto, carpeta_guia)}
+    hub.interna = predicado_de_carpetas(destinos_internos)
+    uso_claude = ClaudeUso(cfg.projects_dir(), data_directory, excluir=internas, limits_dir=ctx_dir())
     memoria = memoria or MemoriaService(cfg, data_directory)
     locks = PaneLocks()
     hub.env_pane = env_pane
     terminales = Terminales(enchufe, hub.terminals, lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                             writes=lambda: cfg.terminales_escritura is True)
+    terminales.interna = hub.interna
     traspasos = TraspasoService(enchufe, state, handoffs_dir, locks, cfg.protected_workspaces, lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                                 lambda event, data: emit_all(event, data))
 
@@ -424,6 +550,9 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     def emit_all(event: str, data: dict) -> None:
         for queue in list(hub.subscribers):
             hub._offer(queue, (event, data))
+
+    from .nudo import NudoStore, validar_respuesta
+    nudo = NudoStore(lambda queue, item: hub._offer(queue, item))
 
     from .notas import NotasStore
     notas = NotasStore(data_directory)
@@ -590,7 +719,9 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     app.state.enchufe = enchufe
     app.state.sombra = sombra
     app.state.estados = estados
+    app.state.uso_claude = uso_claude
     app.state.recarga = recarga_svc
+    app.state.nudo = nudo
     app.state.permisos = permisos
     app.state.mudanzas = mudanzas
     app.state.ir_a_pc = IrAPc()
@@ -745,17 +876,22 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         return await cambios_svc.cambios(carpeta, refrescar=refrescar)
 
     @api.get("/events")
-    async def events(request: Request, cid: str = ""):
+    async def events(request: Request, cid: str = "", pc: int = 0):
         if len(hub.subscribers) >= MAX_SUBSCRIBERS:
             raise HTTPException(status_code=503, detail="demasiados clientes conectados")
         device = cid if DEVICE_RE.match(cid) else ""
         queue = hub.subscribe()
+        es_pc = bool(device) and pc == 1
 
         async def stream():
             last = None
             seen: dict = {}
             if device:
                 push.presencia.connect(device)
+            if es_pc:
+                nudo.pc_conectada(device, queue)
+                reunion.pc_volvio(device, queue)
+                guia.pc_conectada(device, queue)
             try:
                 yield sse("build", {"id": build_id(dist, build_cache)})
                 try:
@@ -785,6 +921,10 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                                 yield sse("session", {"session_id": session_id, "mtime": mtime})
                         seen = current
             finally:
+                if es_pc:
+                    nudo.pc_desconectada(device, queue)
+                    reunion.pc_caida(device, queue)
+                    guia.pc_desconectada(device, queue)
                 if device:
                     push.presencia.disconnect(device)
                 hub.unsubscribe(queue)
@@ -1228,10 +1368,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     viejas = SesionesViejas(
         cfg.projects_dir(),
         plan_cwds=lambda: cfg.plan_cwds,
-        excluir_carpetas=(
-            project_key(data_directory / "context"),
-            project_key(data_directory / "mrs-claude"),
-        ),
+        excluir_carpetas=internas,
         abiertas=sesiones_abiertas,
     )
 
@@ -1364,6 +1501,277 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             except Exception:
                 log.warning("nueva-tarea: no pude avisar que no pegó", exc_info=True)
         return sin_pegar
+
+    # ---- copiloto de reuniones
+    reunion_tareas: set = set()
+
+    def lanzar_reunion(coro) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        reunion_tareas.add(task)
+        task.add_done_callback(reunion_tareas.discard)
+        vigilar(task, getattr(coro, "__qualname__", None) or repr(coro))
+
+    ajustes_reu = ajustes_reunion(cfg.reunion)
+
+    def protegidos_copiloto() -> list[str]:
+        """Lo que el Copiloto nunca lee: el repo de Colmena (configurado y real) y el data dir."""
+        rutas = [*rutas_protegidas(os.environ), str(data_directory), str(cfg.self_repo_path())]
+        return list(dict.fromkeys(rutas))
+    ctx_reunion: list = [tacc.Ctx(ip="127.0.0.1", device="copiloto")]
+
+    async def cerrar_pane_copiloto(pane_id: str) -> None:
+        """Cierra la pestaña del Copiloto, solo si ese pane es lo único que hay en ella."""
+        snap = await terminales.snapshot(fresh=True)
+        tab_id = (merged_panes(snap).get(pane_id) or {}).get("tab_id")
+        if not tab_id:
+            return
+        vista = await cierres.preview(PreviewBody(tipo="tab", target_id=tab_id))
+        if [p.get("pane_id") for p in vista.get("panes", [])] != [pane_id]:
+            log.warning("reunión: la pestaña del Copiloto tiene otras terminales, no la cierro")
+            return
+        await cierres.execute(CierreBody(id=f"cop-cerrar-{uuid.uuid4().hex[:12]}", tipo="tab", target_id=tab_id,
+                                         huella=vista["huella"], origen="manual", destino="Copiloto"),
+                              guardado="saltado", forzar=True)
+
+    detector_reu = Detector(cfg, uso, data_directory / "reunion-claude", ajustes_reu, runner=reunion_opts.get("runner"))
+    puente_reu = PuenteCopiloto(tacciones, pegar_mensajes_nuevos, mensajes, ctx=lambda: ctx_reunion[0],
+                                carpeta=carpeta_copiloto, home=Path.home(), extra=[], cerrar_pane=cerrar_pane_copiloto,
+                                protegidos=protegidos_copiloto, transcripts=cfg.projects_dir(),
+                                regla=reunion_opts.get("regla", REPO_ROOT / "kit" / "reglas" / "copiloto" / "copiloto.md"))
+    reunion = ReunionStore(
+        emitir=emit_all,
+        programar=reunion_opts.get("programar") or (lambda d, fn: asyncio.get_running_loop().call_later(d, fn)),
+        lanzar=lanzar_reunion, clock=time.time, detector=detector_reu, puente=puente_reu,
+        biblioteca=SimpleNamespace(guardar=library.agregar_reunion), journal_dir=data_directory / "reuniones",
+        ajustes=ajustes_reu, registrar_foto=nudo.registrar_foto, notas=notas)
+    estados.al_stop.append(reunion.al_stop)
+    app.state.reunion = reunion
+    app.state.reunion_tareas = reunion_tareas
+
+    # ---- guía por atajo
+    puente_guia = PuenteGuia(tacciones, pegar_mensajes_nuevos, mensajes,
+                             ctx=lambda: tacc.Ctx(ip="127.0.0.1", device="guia"), carpeta=carpeta_guia,
+                             cerrar_pane=cerrar_pane_copiloto, protegidos=protegidos_copiloto,
+                             transcripts=cfg.projects_dir(),
+                             regla=reunion_opts.get("regla_guia", REPO_ROOT / "kit" / "reglas" / "guia" / "guia.md"))
+
+    def soltar_nudo_guia(pane: str) -> None:
+        """Suelta el nudo solo si lo tiene el ayudante de la guía (no le saca el nudo a otra sesión)."""
+        dueno = nudo.dueno()
+        if dueno is not None and dueno[0] == pane:
+            nudo.soltar(limpiar=True)
+
+    guia = GuiaStore(
+        puente=puente_guia, ofrecer=lambda q, item: hub._offer(q, item),
+        programar=reunion_opts.get("programar") or (lambda d, fn: asyncio.get_running_loop().call_later(d, fn)),
+        lanzar=lanzar_reunion, pc_objetivo=nudo.pc_objetivo,
+        reunion_activa=lambda: (reunion.snapshot() or {}).get("estado") in REUNION_ACTIVA,
+        registrar_foto=nudo.registrar_foto, soltar_nudo=soltar_nudo_guia)
+    nudo.es_guia = guia.es_guia
+    estados.al_stop.append(guia.al_stop)
+    app.state.guia = guia
+    app.state.puente_guia = puente_guia
+
+    async def cerrar_guias_huerfanas() -> None:
+        """Al arrancar: cierra los ayudantes de guía que quedaron de la corrida anterior (nadie los usa)."""
+        try:
+            snap = await terminales.snapshot(fresh=True)
+        except (TerminalesError, OSError, ValueError):
+            log.warning("guía: no pude ver las terminales para cerrar ayudantes huérfanos")
+            return
+        for pane in panes_en_carpeta(snap, carpeta_guia):
+            if pane == guia.snapshot()["pane"]:
+                continue
+            try:
+                await puente_guia.cerrar_pane(pane)
+            except Exception:
+                log.exception("guía: no pude cerrar el ayudante huérfano %s", pane)
+
+    def repos_reunion() -> list[dict]:
+        out: list[dict] = []
+        vistos: set = set()
+        copiloto_real = os.path.realpath(carpeta_copiloto)
+        protegidos = protegidos_copiloto()
+
+        def sumar(real: str) -> None:
+            if real in vistos or real == copiloto_real or len(out) >= REPOS_REUNION_MAX:
+                return
+            if relacionada(real, protegidos):
+                return
+            vistos.add(real)
+            out.append({"ruta": real, "nombre": os.path.basename(real) or real})
+
+        dev = Path.home() / "development"
+        try:
+            hijos = sorted(dev.iterdir(), key=lambda x: x.name.casefold())[:DEV_ESCANEO_MAX]
+        except OSError:
+            hijos = []
+        for hijo in hijos:
+            if hijo.name.startswith(".") or hijo.is_symlink() or not hijo.is_dir():
+                continue
+            sumar(os.path.realpath(hijo))
+        for agente in board_agents(hub.board or {}):
+            cwd = agente.get("cwd")
+            if not isinstance(cwd, str) or not cwd:
+                continue
+            try:
+                sumar(validar_carpeta(cwd, cfg.plan_cwds_con_self()))
+            except TraspasoError:
+                continue
+        return out
+
+    def error_reunion(exc: ReunionError, no_existe: int = 404) -> HTTPException:
+        return HTTPException(status_code=no_existe if exc.status == 404 else exc.status, detail=exc.mensaje)
+
+    def misma_reunion(rid: str) -> None:
+        if (reunion.snapshot() or {}).get("reunion") != rid:
+            raise HTTPException(status_code=409, detail="No hay una reunión con ese id.")
+
+    @api.get("/reunion/repos")
+    async def reunion_repos():
+        repos = await asyncio.to_thread(repos_reunion)
+        return JSONResponse({"repos": repos, "todos": str(Path.home() / "development")},
+                            headers={"Cache-Control": "no-store"})
+
+    @api.post("/reunion/empezar")
+    async def reunion_empezar(body: EmpezarReunionBody, request: Request):
+        if not DEVICE_RE.match(body.device):
+            raise HTTPException(status_code=422, detail="dispositivo inválido")
+        permitidas = {r["ruta"] for r in await asyncio.to_thread(repos_reunion)}
+        if any(r not in permitidas for r in body.repos):
+            raise HTTPException(status_code=422, detail="Ese repo no está en la lista.")
+        ctx_reunion[0] = tctx(request)
+        try:
+            resultado = await reunion.empezar(body.device, list(dict.fromkeys(body.repos)), body.todos)
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+        lanzar_reunion(guia.por_reunion())
+        return resultado
+
+    @api.post("/reunion/texto", status_code=202)
+    async def reunion_texto(body: TextoReunionBody):
+        try:
+            reunion.texto(body.reunion, body.device, body.texto)
+        except ReunionError as exc:
+            raise error_reunion(exc, 409) from None
+        return {"ok": True}
+
+    @api.post("/reunion/tocar", status_code=202)
+    async def reunion_tocar(body: TocarReunionBody):
+        misma_reunion(body.reunion)
+        try:
+            return {"estado": await reunion.tocar(body.reunion, body.linea)}
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+
+    @api.post("/reunion/descartar", status_code=202)
+    async def reunion_descartar(body: TocarReunionBody):
+        misma_reunion(body.reunion)
+        try:
+            return {"estado": await reunion.descartar(body.reunion, body.linea)}
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+
+    @api.post("/reunion/anotar", status_code=202)
+    async def reunion_anotar(body: TocarReunionBody):
+        misma_reunion(body.reunion)
+        try:
+            return await reunion.anotar(body.reunion, body.linea)
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+
+    @api.post("/reunion/preguntar-ultimo", status_code=202)
+    async def reunion_preguntar_ultimo(body: ReunionIdBody):
+        misma_reunion(body.reunion)
+        try:
+            return {"linea": await reunion.preguntar_ultimo(body.reunion)}
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+
+    @api.post("/reunion/mostrar", status_code=202)
+    async def reunion_mostrar(body: MostrarReunionBody):
+        misma_reunion(body.reunion)
+        try:
+            imagen = await asyncio.to_thread(mostrar_mod.decodificar_imagen, body.imagen)
+            foto = await asyncio.to_thread(mostrar_mod.validar_foto, body.foto)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="La captura no es válida.") from None
+        try:
+            return await reunion.mostrar(body.reunion, body.device, body.pregunta, foto, imagen)
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+
+    @api.post("/reunion/pausar", status_code=202)
+    async def reunion_pausar(body: ReunionIdBody):
+        try:
+            reunion.pausar(body.reunion)
+        except ReunionError as exc:
+            raise error_reunion(exc, 409) from None
+        return {"ok": True}
+
+    @api.post("/reunion/seguir", status_code=202)
+    async def reunion_seguir(body: ReunionIdBody):
+        try:
+            reunion.seguir(body.reunion)
+        except ReunionError as exc:
+            raise error_reunion(exc, 409) from None
+        return {"ok": True}
+
+    async def _terminar_reunion(rid: str) -> None:
+        try:
+            await reunion.terminar(rid)
+        except ReunionError:
+            log.warning("reunión: no pude terminar %s", rid)
+
+    @api.post("/reunion/terminar", status_code=202)
+    async def reunion_terminar(body: ReunionIdBody):
+        misma_reunion(body.reunion)
+        lanzar_reunion(_terminar_reunion(body.reunion))
+        return {"ok": True}
+
+    @api.get("/reunion/estado")
+    async def reunion_estado():
+        return JSONResponse(reunion.snapshot() or None, headers={"Cache-Control": "no-store"})
+
+    def error_guia(exc: GuiaError) -> HTTPException:
+        return HTTPException(status_code=exc.status, detail={"codigo": exc.codigo, "mensaje": exc.mensaje})
+
+    async def captura_guia(foto_raw: dict, imagen_raw: dict) -> tuple:
+        try:
+            imagen = await asyncio.to_thread(mostrar_mod.decodificar_imagen, imagen_raw)
+            foto = await asyncio.to_thread(mostrar_mod.validar_foto, foto_raw)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"codigo": "invalida",
+                                                         "mensaje": "La captura no es válida."}) from None
+        return foto, imagen
+
+    async def correr_guia(coro):
+        try:
+            return await coro
+        except GuiaError as exc:
+            raise error_guia(exc) from None
+        except OSError:
+            # guardar_captura no pudo escribir (disco, enlace): la guía ya se limpió sola.
+            log.exception("guía: no pude guardar la captura")
+            raise HTTPException(status_code=500, detail={"codigo": "fallo",
+                                                         "mensaje": "No pude guardar la captura."}) from None
+
+    @api.post("/guia/pedir", status_code=202)
+    async def guia_pedir(body: PedirGuiaBody):
+        if not body.pregunta.strip():
+            raise error_guia(GuiaError(422, "sin_pregunta", guia_mod.SIN_PREGUNTA))
+        foto, imagen = await captura_guia(body.foto, body.imagen)
+        return await correr_guia(guia.pedir(body.device, body.pregunta, foto, imagen))
+
+    @api.post("/guia/siguiente", status_code=202)
+    async def guia_siguiente(body: SiguienteGuiaBody):
+        foto, imagen = await captura_guia(body.foto, body.imagen)
+        return await correr_guia(guia.siguiente(body.device, foto, imagen))
+
+    @api.post("/guia/salir")
+    async def guia_salir(body: SalirGuiaBody):
+        await correr_guia(guia.salir(body.device))
+        return {"ok": True}
 
     async def _aprobar_cierre_de_terminal(pedido_id: str, item: dict, request: Request):
         """Ando aprobó el pedido de cerrar una terminal: misma acción que el botón Cerrar del tablero.
@@ -1916,6 +2324,13 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             raise HTTPException(status_code=404, detail="no encontrado")
         return {"text": text}
 
+    @api.get("/biblioteca/{ident}/charla")
+    async def biblioteca_charla(ident: str):
+        charla = await asyncio.to_thread(library.charla_de, ident)
+        if charla is None:
+            raise HTTPException(status_code=404, detail="no encontrado")
+        return JSONResponse({"charla": charla}, headers={"Cache-Control": "no-store"})
+
     @api.get("/avisos")
     async def avisos_list(limite: int = 50, antes: int = 0, incluir_prueba: bool = False):
         return JSONResponse(push.avisos.page(limite, antes, incluir_prueba=incluir_prueba), headers={"Cache-Control": "no-store"})
@@ -1961,6 +2376,30 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         payload = {"pane_id": body.pane_id, "titulo": body.titulo}
         for queue in list(hub.subscribers):
             hub._offer(queue, ("abrir_terminal", payload))
+        return {"ok": True}
+
+    @api.post("/nudo/salir")
+    async def nudo_salir(body: NudoSalirBody):
+        if nudo.pc_objetivo() != body.device:
+            raise HTTPException(status_code=403, detail="No es la PC conectada")
+        nudo.salir(body.device)
+        return {"ok": True}
+
+    @api.post("/nudo/{pid}/respuesta")
+    async def nudo_respuesta(pid: str, body: NudoRespuestaBody):
+        if not NUDO_PID_RE.match(pid):
+            raise HTTPException(status_code=404, detail="Pedido desconocido")
+        op = nudo.op_de(pid)
+        invalido = False
+        if op:
+            try:
+                validar_respuesta(op, body.resultado)
+            except ValueError:
+                invalido = True
+        if not nudo.resolver(pid, body.device, body.token, body.resultado):
+            raise HTTPException(status_code=404, detail="Pedido desconocido")
+        if invalido:
+            raise HTTPException(status_code=422, detail="Respuesta inválida")
         return {"ok": True}
 
     @api.get("/push/key")
@@ -2034,11 +2473,29 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         if not os.environ.get("ORQ_NO_AUTOINDEX"):
             spawn(vigia_entornos.run())
         loop_ref[:] = [asyncio.get_running_loop()]
+        try:
+            reunion.recuperar()
+        except Exception:
+            log.exception("no pude recuperar las reuniones del diario")
+        try:
+            puente_reu.borrar_capturas()
+        except OSError:
+            log.exception("no pude borrar las capturas viejas del Copiloto")
+        try:
+            puente_guia.borrar_capturas()
+        except OSError:
+            log.exception("no pude borrar las capturas viejas de la guía")
+        try:
+            puente_guia.borrar_transcripts()
+        except OSError:
+            log.exception("no pude borrar los transcripts viejos de la guía")
+        lanzar_reunion(cerrar_guias_huerfanas())
         if not os.environ.get("ORQ_NO_AUTOINDEX"):
             spawn(asyncio.to_thread(library.index_all))
             spawn(asyncio.to_thread(library.run_capturas_backfill))
             spawn(asyncio.to_thread(uso_claude.scan))
             memoria.fondo()
+            spawn(devolver_periodicamente())
             if mrs.habilitado and mrs.disponible():
                 spawn(mrs.run())
 
@@ -2309,6 +2766,22 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         app.router.on_shutdown.append(recarga_shutdown)
     else:
         app.state.recarga_socket = None
+
+    if nudo_socket is not None:
+        from .nudo import ServidorNudo, crear_manejador
+        nudo_srv = ServidorNudo(crear_manejador(nudo, lambda: hub.board))
+        app.state.nudo_socket = nudo_srv
+
+        async def nudo_startup():
+            try:
+                await nudo_srv.abrir(nudo_socket)
+            except (PermissionError, OSError) as exc:
+                log.error("no se pudo abrir el socket del nudo: %s", exc)
+
+        app.router.on_startup.append(nudo_startup)
+        app.router.on_shutdown.append(nudo_srv.cerrar)
+    else:
+        app.state.nudo_socket = None
 
     def wctx(ws: WebSocket) -> tacc.Ctx:
         client = ws.scope.get("client")

@@ -31,7 +31,7 @@ class MensajeBody(BaseModel):
     texto: str = Field("", max_length=20000)
     adjuntos: list[str] = Field(default_factory=list, max_length=MAX_ATTACHMENTS)
     origen: Literal["manual", "jefe", "usuario", "pedido-pestana", "pedido-pestana-aviso", "pedido-mr",
-                    "comentario-diff", "mr-job", "mr-hilo", "cursor-aviso", "programada"]
+                    "comentario-diff", "mr-job", "mr-hilo", "cursor-aviso", "programada", "copiloto", "guia"]
     destino: str = Field("", max_length=200)
     por_que: str = Field("", max_length=2000)
 

@@ -136,12 +136,20 @@ class FakeTerminales:
         return Creado(espacio_id, lid, sid)
 
     async def arrancar_claude(
-        self, sesion_id: str, nombre: str, resume: str | None = None, *, modo: str | None = None
+        self,
+        sesion_id: str,
+        nombre: str,
+        resume: str | None = None,
+        *,
+        modo: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> None:
         if modo is None:
             self._registrar("arrancar_claude", sesion_id, nombre, resume)
-        else:
+        elif not dirs_extra:
             self._registrar("arrancar_claude", sesion_id, nombre, resume, modo)
+        else:
+            self._registrar("arrancar_claude", sesion_id, nombre, resume, modo, list(dirs_extra))
         if resume:
             raise NoDisponible("retoma con resume no disponible en adaptador herdr")
         self._exigir_sesion(sesion_id)

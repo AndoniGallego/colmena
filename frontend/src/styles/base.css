@@ -671,6 +671,15 @@ input:focus-visible,
 :root[data-hidden] .loop::after {
   animation-play-state: paused !important;
 }
+/* tarjetas fuera de la vista (lib/fueraDeVista): nada se anima donde no se ve */
+[data-fuera],
+[data-fuera]::before,
+[data-fuera]::after,
+[data-fuera] *,
+[data-fuera] *::before,
+[data-fuera] *::after {
+  animation-play-state: paused !important;
+}
 :root[data-motion='soft'] .fx-layer {
   display: none;
 }
@@ -710,24 +719,45 @@ input:focus-visible,
   }
 }
 
-@keyframes ui-sweep {
-  from {
-    background-position: -50% 0;
-  }
+/* Barrido de brillo: el degradado vive en ::after y se desliza con transform (la GPU lo compone, sin repintar).
+   Variables: --sk-bg (degradado), --sk-left/--sk-w (capa, en % del contenedor), --sk-tile (tamano del mosaico, en % de
+   la capa), --sk-dx (recorrido, en % de la capa), --sk-dur, --sk-ease, --sk-delay. Los valores por defecto equivalen a
+   un degradado de 200% de ancho que corre de 0 a -200% de background-position. */
+:where(.sk-sweep, .ui-refresh-bar) {
+  position: relative;
+}
+.sk-sweep,
+.ui-refresh-bar {
+  overflow: hidden;
+  isolation: isolate;
+}
+.sk-sweep::after,
+.ui-refresh-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--sk-left, -200%);
+  width: var(--sk-w, 400%);
+  z-index: -1;
+  pointer-events: none;
+  background: var(--sk-bg);
+  background-size: var(--sk-tile, 50%) 100%;
+  animation: sk-slide var(--sk-dur, 1.2s) var(--sk-ease, linear) var(--sk-delay, 0s) infinite;
+}
+@keyframes sk-slide {
   to {
-    background-position: 150% 0;
+    transform: translateX(var(--sk-dx, 50%));
   }
+}
+:root[data-hidden] .sk-sweep::after,
+:root[data-hidden] .ui-refresh-bar::after {
+  animation-play-state: paused;
 }
 
 @keyframes ui-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes ui-shimmer {
-  to {
-    background-position: -200% 0;
   }
 }
 

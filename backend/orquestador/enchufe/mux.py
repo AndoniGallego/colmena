@@ -207,13 +207,21 @@ class Mux:
         return await self._backend(espacio_id).crear_linea(espacio_id, nombre, cwd, programa)
 
     async def arrancar_claude(
-        self, sesion_id: str, nombre: str, resume: str | None = None, *, modo: str | None = None
+        self,
+        sesion_id: str,
+        nombre: str,
+        resume: str | None = None,
+        *,
+        modo: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> None:
         backend = self._backend(sesion_id)
         if modo is None:
             await backend.arrancar_claude(sesion_id, nombre, resume)
-        else:
+        elif not dirs_extra:
             await backend.arrancar_claude(sesion_id, nombre, resume, modo=modo)
+        else:
+            await backend.arrancar_claude(sesion_id, nombre, resume, modo=modo, dirs_extra=dirs_extra)
 
     async def renombrar(self, objetivo_id: str, nombre: str) -> None:
         backend = self._backend(objetivo_id)

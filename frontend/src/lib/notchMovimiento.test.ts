@@ -89,3 +89,12 @@ describe('modo notas', () => {
     expect(anchoVentanaFijo(1920)).toBeGreaterThanOrEqual(anchoPara('notas', 0, 1920))
   })
 })
+
+describe('modo guia', () => {
+  it('abre al ancho de la cajita de notas y respeta pantallas chicas', () => {
+    expect(anchoPara('guia', 120, 1920)).toBe(ANCHO_NOTAS)
+    expect(anchoPara('guia', 120, 300)).toBe(276)
+    expect(cuerpoVisible('guia', false)).toBe(true)
+    expect(pillAbierto('guia', false)).toBe(true)
+  })
+})

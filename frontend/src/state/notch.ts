@@ -23,7 +23,9 @@ const puenteStub: Puente = {
   forma() {},
   arrastrar() {},
   abrirColmena() {},
+  abrirBiblioteca() {},
   aviso() {},
+  mostrarReunion() {},
 }
 let bridge: Puente = puenteStub
 
@@ -68,6 +70,14 @@ export function alternarPanel() {
     cerrarNotas()
     return
   }
+  if (modo.value === 'reunion') {
+    cerrarReunion()
+    return
+  }
+  if (modo.value === 'guia') {
+    cerrarGuia()
+    return
+  }
   if (modo.value === 'aviso') {
     void import('./notchAvisos').then(({ limpiarColaAvisoVisible }) => limpiarColaAvisoVisible())
   }
@@ -85,13 +95,34 @@ export function abrirNotas() {
 
 /** El atajo global de la app de Windows manda `notas-abrir`; al quedar escuchando avisa `notch-listo`. */
 export function iniciarEscuchaNotas() {
-  void escuchar('notas-abrir', abrirNotas).then((ok) => {
-    if (ok) emitir('notch-listo')
+  // `guia` importa este módulo: se carga recién al usarse para no hacer un ciclo.
+  const guia = (accion: 'alAtajo' | 'siguienteDelGlobo' | 'terminar') => () => {
+    void import('./guia').then((m) => m[accion]()).catch((e) => console.warn('[guia] no se pudo cargar', e))
+  }
+  void escuchar('guia-siguiente', guia('siguienteDelGlobo'))
+  void escuchar('guia-listo', guia('terminar'))
+  void escuchar('nudo-salir', guia('terminar'))
+  void Promise.all([escuchar('notas-abrir', abrirNotas), escuchar('guia-abrir', guia('alAtajo'))]).then(([notas, guiaAbrir]) => {
+    if (notas && guiaAbrir) emitir('notch-listo')
   })
 }
 
 export function cerrarNotas() {
   if (modo.value === 'notas') modo.value = 'cerrado'
+}
+
+/** Oculta la cajita de la guía; la guía sigue (se termina con Listo o Salir). */
+export function cerrarGuia() {
+  if (modo.value === 'guia') modo.value = 'cerrado'
+}
+
+/** Panel de la reunión (solo en la app de Windows). */
+export function abrirReunion() {
+  modo.value = 'reunion'
+}
+
+export function cerrarReunion() {
+  if (modo.value === 'reunion') modo.value = 'cerrado'
 }
 
 export function abrirSesion(sessionId: string) {
@@ -101,6 +132,11 @@ export function abrirSesion(sessionId: string) {
 
 export function abrirColmena() {
   bridge.abrirColmena(null)
+  if (modo.value === 'panel') cerrarPanel()
+}
+
+export function abrirBiblioteca(item: string) {
+  bridge.abrirBiblioteca(item)
   if (modo.value === 'panel') cerrarPanel()
 }
 

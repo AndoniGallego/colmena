@@ -66,7 +66,7 @@ onMounted(() => {
         loading="lazy"
         decoding="async"
       />
-      <span v-else class="shimmer" aria-hidden="true" />
+      <span v-else class="shimmer sk-sweep" aria-hidden="true" />
       <span v-if="extra && cell.index === 3" class="more mono">+{{ extra }}</span>
     </button>
     <FotoCarrusel
@@ -128,12 +128,10 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   min-height: 80px;
-  background: linear-gradient(110deg, var(--surface) 8%, color-mix(in srgb, var(--line) 40%, var(--surface)) 18%, var(--surface) 33%);
-  background-size: 200% 100%;
-  animation: shine 1.4s ease-in-out infinite;
-}
-@keyframes shine {
-  to { background-position-x: -120%; }
+  --sk-bg: linear-gradient(110deg, var(--surface) 8%, color-mix(in srgb, var(--line) 40%, var(--surface)) 18%, var(--surface) 33%);
+  --sk-dx: 30%;
+  --sk-dur: 1.4s;
+  --sk-ease: ease-in-out;
 }
 .more {
   position: absolute;
@@ -145,5 +143,6 @@ onMounted(() => {
   font-size: 1.35rem;
   font-weight: 600;
 }
-:root[data-motion='soft'] .shimmer { animation: none; opacity: 0.5; }
+:root[data-motion='soft'] .shimmer { opacity: 0.5; }
+:root[data-motion='soft'] .shimmer::after { animation: none; }
 </style>

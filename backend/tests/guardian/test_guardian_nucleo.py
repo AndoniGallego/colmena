@@ -396,3 +396,153 @@ def test_modo_endurecido_sigue_a_la_conversacion_al_retomarla_en_otra_sesion(tmp
         await g2.apagar_ordenado(espera=2)
 
     asyncio.run(run())
+
+
+def test_copiloto_fuera_de_su_carpeta_no_lanza(tmp_path, monkeypatch):
+    from orquestador.guardian import lanzador as lz
+
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", tmp_path / "reunion-copiloto")
+
+    async def run():
+        g = _guardian(tmp_path)
+        esp = await g.crear_espacio("e", str(tmp_path))
+        sid = esp["sesion_id"]
+        with pytest.raises(ErrorProtocolo) as exc:
+            await g.arrancar_claude(sid, "x", modo="copiloto")
+        assert exc.value.codigo == INVALIDO
+        assert g._registro.sesiones[sid].programa == "shell"
+        await g.apagar_ordenado(espera=2)
+
+    asyncio.run(run())
+
+
+def test_copiloto_en_su_carpeta_lanza_con_args_de_solo_lectura_y_los_conserva_al_retomar(tmp_path, monkeypatch):
+    from orquestador.guardian import lanzador as lz
+
+    destino = tmp_path / "reunion-copiloto"
+    destino.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", destino)
+    reg = Registro(tmp_path / "registro.json")
+
+    async def run():
+        g1 = _guardian(tmp_path, registro=reg)
+        esp = await g1.crear_espacio("e", str(destino))
+        sid = esp["sesion_id"]
+        res = await g1.arrancar_claude(sid, "copiloto", modo="copiloto")
+        assert res["modo"] == "copiloto"
+        args = json.loads((destino / ".falso_args.json").read_text())["argv"]
+        assert args[args.index("--permission-mode") + 1] == "dontAsk"
+        assert args[args.index("--tools") + 1] == "Read,Grep,Glob,Bash"
+        await g1.apagar_ordenado(espera=2)
+        g2 = _guardian(tmp_path, registro=reg)
+        await g2.retomar()
+        await asyncio.wait_for(g2._sesiones[sid].listo.wait(), 10.0)
+        args = json.loads((destino / ".falso_args.json").read_text())["argv"]
+        assert "--resume" in args and "--tools" in args
+        await g2.apagar_ordenado(espera=2)
+
+    asyncio.run(run())
+
+
+def test_resume_de_copiloto_en_otra_carpeta_cae_a_default(tmp_path, monkeypatch):
+    from orquestador.guardian import lanzador as lz
+
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", tmp_path / "reunion-copiloto")
+    reg = Registro(tmp_path / "registro.json")
+
+    async def run():
+        g = _guardian(tmp_path, registro=reg)
+        esp = await g.crear_espacio("e", str(tmp_path))
+        sid = esp["sesion_id"]
+        reg.actualizar_sesion(sid, modo_permisos="copiloto")
+        await g.arrancar_claude(sid, "x", modo=None)
+        args = json.loads((tmp_path / ".falso_args.json").read_text())["argv"]
+        assert "--tools" not in args and args[args.index("--permission-mode") + 1] == "default"
+        await g.apagar_ordenado(espera=2)
+
+    asyncio.run(run())
+
+
+def test_copiloto_lanza_con_add_dir_y_lo_conserva_al_retomar(tmp_path, monkeypatch):
+    from orquestador.guardian import lanzador as lz
+
+    destino = tmp_path / "reunion-copiloto"
+    destino.mkdir()
+    repo = tmp_path / "repo-elegido"
+    repo.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", destino)
+    reg = Registro(tmp_path / "registro.json")
+
+    async def run():
+        g1 = _guardian(tmp_path, registro=reg)
+        esp = await g1.crear_espacio("e", str(destino))
+        sid = esp["sesion_id"]
+        await g1.arrancar_claude(sid, "copiloto", modo="copiloto", dirs_extra=[str(repo), "relativa"])
+        args = json.loads((destino / ".falso_args.json").read_text())["argv"]
+        assert args[args.index("--add-dir") + 1] == os.path.realpath(repo)
+        assert args.count("--add-dir") == 1
+        await g1.apagar_ordenado(espera=2)
+        g2 = _guardian(tmp_path, registro=reg)
+        await g2.retomar()
+        await asyncio.wait_for(g2._sesiones[sid].listo.wait(), 10.0)
+        args = json.loads((destino / ".falso_args.json").read_text())["argv"]
+        assert "--resume" in args and args[args.index("--add-dir") + 1] == os.path.realpath(repo)
+        await g2.apagar_ordenado(espera=2)
+
+    asyncio.run(run())
+
+
+def test_dirs_extra_con_otro_modo_se_rechaza(tmp_path):
+    async def run():
+        g = _guardian(tmp_path)
+        esp = await g.crear_espacio("e", str(tmp_path))
+        with pytest.raises(ErrorProtocolo) as exc:
+            await g.arrancar_claude(esp["sesion_id"], "x", modo="default", dirs_extra=[str(tmp_path)])
+        assert exc.value.codigo == INVALIDO
+        await g.apagar_ordenado(espera=2)
+
+    asyncio.run(run())
+
+
+def test_modo_guia_fuera_de_su_carpeta_se_rechaza(tmp_path, monkeypatch):
+    from orquestador.guardian import lanzador as lz
+
+    cop = tmp_path / "reunion-copiloto"
+    cop.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_COPILOTO", cop)
+    monkeypatch.setattr(lz, "CARPETA_GUIA", tmp_path / "guia")
+
+    async def run():
+        g = _guardian(tmp_path)
+        esp = await g.crear_espacio("e", str(cop))
+        sid = esp["sesion_id"]
+        with pytest.raises(ErrorProtocolo) as exc:
+            await g.arrancar_claude(sid, "x", modo="guia")
+        assert exc.value.codigo == INVALIDO and "modo inválido" in str(exc.value)
+        assert g._registro.sesiones[sid].programa == "shell"
+        await g.apagar_ordenado(espera=2)
+
+    asyncio.run(run())
+
+
+def test_modo_guia_en_su_carpeta_arranca_sin_dirs_extra(tmp_path, monkeypatch):
+    from orquestador.guardian import lanzador as lz
+
+    destino = tmp_path / "guia"
+    destino.mkdir()
+    monkeypatch.setattr(lz, "CARPETA_GUIA", destino)
+
+    async def run():
+        g = _guardian(tmp_path)
+        esp = await g.crear_espacio("e", str(destino))
+        sid = esp["sesion_id"]
+        with pytest.raises(ErrorProtocolo):
+            await g.arrancar_claude(sid, "g", modo="guia", dirs_extra=[str(tmp_path)])
+        res = await g.arrancar_claude(sid, "guia", modo="guia")
+        assert res["modo"] == "guia"
+        args = json.loads((destino / ".falso_args.json").read_text())["argv"]
+        assert args[args.index("--tools") + 1] == "Read,Grep,Glob,Bash"
+        assert "--add-dir" not in args
+        await g.apagar_ordenado(espera=2)
+
+    asyncio.run(run())

@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
-use colmena_nucleo::atajo_cambio::{aviso_ocupado, linea_bandeja};
-use colmena_nucleo::config::{escribir_config, leer_config, Accion, Config};
+use colmena_nucleo::atajo_cambio::{aviso_ocupado, linea_bandeja, tooltip_bandeja};
+use colmena_nucleo::config::{escribir_config, leer_config, Accion, Config, ConfigNudo};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -21,7 +21,76 @@ fn leer_cfg(estado: &Estado) -> Config {
 fn guardar_arranque(estado: &Estado, arranque: bool) -> Result<(), String> {
     let mut cfg = leer_cfg(estado);
     cfg.arranque = arranque;
-    std::fs::write(&estado.ruta_config, escribir_config(&cfg)).map_err(|e| e.to_string())
+    crate::escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg)).map_err(|e| e.to_string())
+}
+
+pub(crate) fn guardar_nudo(estado: &Estado, nudo: ConfigNudo) -> Result<(), String> {
+    let mut cfg = leer_cfg(estado);
+    cfg.nudo = nudo;
+    crate::escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg)).map_err(|e| e.to_string())
+}
+
+/// Deja los dos checks y el tooltip de la bandeja iguales a lo guardado en la config.
+pub fn sincronizar_nudo(app: &AppHandle) {
+    let estado = app.state::<Estado>();
+    let nudo = leer_cfg(&estado).nudo;
+    if let Some((prendido, se_ve)) = estado.nudo_checks.lock().unwrap().as_ref() {
+        let _ = prendido.set_checked(nudo.prendido);
+        let _ = se_ve.set_checked(nudo.se_ve_al_compartir);
+    }
+    actualizar_tooltip(app);
+}
+
+/// Única escritura del tooltip: junta el aviso de atajo ocupado, el estado del nudo y si se escucha una reunión.
+pub(crate) fn actualizar_tooltip(app: &AppHandle) {
+    let estado = app.state::<Estado>();
+    let prendido = leer_cfg(&estado).nudo.prendido;
+    let aviso = estado.aviso_atajo.lock().unwrap().clone();
+    if let Some(tray) = app.tray_by_id("colmena") {
+        let _ = tray.set_tooltip(tooltip_bandeja(aviso.as_deref(), prendido, crate::reunion::escuchando(app)).as_deref());
+    }
+}
+
+const ID_REUNION_PARAR: &str = "reunion_parar";
+
+/// Mientras se escucha una reunión aparece "dejar de escuchar" en el menú; el tooltip sigue el mismo estado.
+pub(crate) fn sincronizar_reunion(app: &AppHandle) {
+    let estado = app.state::<Estado>();
+    if let Some((menu, item)) = estado.reunion_bandeja.lock().unwrap().as_ref() {
+        let esta = menu.get(ID_REUNION_PARAR).is_some();
+        let escucha = crate::reunion::escuchando(app);
+        if escucha && !esta {
+            let _ = menu.prepend(item);
+        } else if !escucha && esta {
+            let _ = menu.remove(item);
+        }
+    }
+    actualizar_tooltip(app);
+}
+
+fn alternar_prendido(app: &AppHandle) {
+    let estado = app.state::<Estado>();
+    let mut nudo = leer_cfg(&estado).nudo;
+    nudo.prendido = !nudo.prendido;
+    if guardar_nudo(&estado, nudo).is_ok() && !nudo.prendido {
+        crate::nudo::apagar(app);
+    }
+    sincronizar_nudo(app);
+}
+
+fn alternar_se_ve(app: &AppHandle) {
+    let estado = app.state::<Estado>();
+    let mut nudo = leer_cfg(&estado).nudo;
+    let antes = nudo.se_ve_al_compartir;
+    let nuevo = !antes;
+    let valor = if crate::nudo::cambiar_visibilidad(app, &estado, &mut nudo, nuevo).is_ok() {
+        nuevo
+    } else {
+        let _ = ventanas::aplicar_visibilidad(app, antes, crate::reunion::escuchando(app));
+        antes
+    };
+    crate::nudo::actualizar_se_ve(app, valor);
+    sincronizar_nudo(app);
 }
 
 fn guardar_monitor(estado: &Estado, nombre: &str) -> Result<(), String> {
@@ -30,7 +99,7 @@ fn guardar_monitor(estado: &Estado, nombre: &str) -> Result<(), String> {
     estado.ancla_guardado_gen.fetch_add(1, Ordering::SeqCst);
     cfg.ancla = None;
     *estado.ancla.lock().unwrap() = None;
-    std::fs::write(&estado.ruta_config, escribir_config(&cfg)).map_err(|e| e.to_string())
+    crate::escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg)).map_err(|e| e.to_string())
 }
 
 const ID_CAMBIAR_ATAJOS: &str = "cambiar_atajos";
@@ -83,9 +152,8 @@ pub fn refrescar_atajos(app: &AppHandle) {
     if let Ok(item) = MenuItem::with_id(app, ID_CAMBIAR_ATAJOS, "Cambiar atajos…", true, None::<&str>) {
         let _ = sub.append(&item);
     }
-    if let Some(tray) = app.tray_by_id("colmena") {
-        let _ = tray.set_tooltip(aviso_tooltip.as_deref());
-    }
+    *estado.aviso_atajo.lock().unwrap() = aviso_tooltip;
+    actualizar_tooltip(app);
 }
 
 fn indice_monitor_elegido(app: &AppHandle, cfg: &Config) -> usize {
@@ -183,6 +251,25 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
     let cfg = leer_cfg(estado);
     let arranque_item = CheckMenuItem::with_id(app, "arranque", "Arrancar con Windows", true, cfg.arranque, None::<&str>)
         .map_err(|e| e.to_string())?;
+    let nudo_prendido = CheckMenuItem::with_id(
+        app,
+        "nudo_prendido",
+        "Nudo: dejar que las sesiones me señalen",
+        true,
+        cfg.nudo.prendido,
+        None::<&str>,
+    )
+    .map_err(|e| e.to_string())?;
+    let nudo_se_ve = CheckMenuItem::with_id(
+        app,
+        "nudo_se_ve",
+        "Nudo: que se vea al compartir pantalla",
+        true,
+        cfg.nudo.se_ve_al_compartir,
+        None::<&str>,
+    )
+    .map_err(|e| e.to_string())?;
+    *estado.nudo_checks.lock().unwrap() = Some((nudo_prendido.clone(), nudo_se_ve.clone()));
     let toggle_notch = MenuItem::with_id(app, "toggle_notch", "Mostrar u ocultar el notch", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     let abrir = MenuItem::with_id(app, "abrir_colmena", "Abrir Colmena", true, None::<&str>)
@@ -209,6 +296,8 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
             &abrir,
             &entornos,
             &arranque_item,
+            &nudo_prendido,
+            &nudo_se_ve,
             &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
             &submenu_monitor,
             &submenu_atajo,
@@ -219,6 +308,28 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
         ],
     )
     .map_err(|e| e.to_string())?;
+
+    let reunion_parar = MenuItem::with_id(app, ID_REUNION_PARAR, "Reunión: dejar de escuchar", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    *estado.reunion_bandeja.lock().unwrap() = Some((menu.clone(), reunion_parar));
+
+    #[cfg(windows)]
+    if std::env::var("COLMENA_NUDO_DIAG").as_deref() == Ok("1") {
+        let diag = MenuItem::with_id(app, "nudo_diag", "Nudo: diagnóstico (3 s)", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
+        menu.append(&diag).map_err(|e| e.to_string())?;
+    }
+    #[cfg(windows)]
+    if std::env::var("COLMENA_REUNION_DIAG").as_deref() == Ok("1") {
+        let diag = MenuItem::with_id(app, "reunion_diag", "Reunión: diagnóstico (60 s)", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
+        menu.append(&diag).map_err(|e| e.to_string())?;
+    }
+    if std::env::var("COLMENA_NUDO_DIAG").as_deref() == Ok("1") {
+        let dibujo = MenuItem::with_id(app, "nudo_dibujo", "Nudo: dibujo de prueba", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
+        menu.append(&dibujo).map_err(|e| e.to_string())?;
+    }
 
     let icon = app
         .default_window_icon()
@@ -248,7 +359,7 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
                     estado.ancla_guardado_gen.fetch_add(1, Ordering::SeqCst);
                     cfg.ancla = None;
                     *estado.ancla.lock().unwrap() = None;
-                    let _ = std::fs::write(&estado.ruta_config, escribir_config(&cfg));
+                    let _ = crate::escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg));
                     sincronizar_checks_monitor(app, &estado);
                     let _ = ventanas::reposicionar_notch_actual(app);
                     return;
@@ -297,6 +408,19 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
                 "cambiar_origen" => {
                     let _ = ventanas::crear_origen(app);
                 }
+                #[cfg(windows)]
+                "nudo_diag" => crate::uia::diagnostico_en_hilo(app.clone()),
+                #[cfg(windows)]
+                "reunion_diag" => app.state::<crate::reunion::LectorReunion>().diagnostico(),
+                ID_REUNION_PARAR => {
+                    let app = app.clone();
+                    std::thread::spawn(move || {
+                        let _ = crate::reunion::terminar(&app, Some("bandeja"));
+                    });
+                }
+                "nudo_prendido" => alternar_prendido(app),
+                "nudo_se_ve" => alternar_se_ve(app),
+                "nudo_dibujo" => crate::nudo::dibujo_de_prueba(app.clone()),
                 "salir" => {
                     app.exit(0);
                 }
@@ -322,5 +446,6 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
         .build(app)
         .map_err(|e| e.to_string())?;
 
+    sincronizar_nudo(app);
     Ok(())
 }

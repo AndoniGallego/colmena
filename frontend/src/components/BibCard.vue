@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { LibItem } from '../api/types'
-import { diagramaOf, cardVariant, coverHues, formatSize, KIND_LABEL, safeClaudeUrl } from '../lib/biblioteca'
+import { diagramaOf, cardVariant, reunionOf, coverHues, formatSize, KIND_LABEL, safeClaudeUrl } from '../lib/biblioteca'
 import { clock } from '../lib/time'
+import { duracionLabel } from '../lib/reunion'
 import { gsap, isSoft, useGsap } from '../motion'
 import BibFrame from './BibFrame.vue'
 import DiagramaCard from './DiagramaCard.vue'
@@ -33,6 +34,7 @@ const when = computed(() => {
 const name = computed(() => props.item.title || props.item.nombre || KIND_LABEL[props.item.kind])
 const claude = computed(() => safeClaudeUrl(props.item.url))
 const diagrama = computed(() => (variant.value === 'diagrama' ? diagramaOf(props.item) : null))
+const reunionDur = computed(() => (variant.value === 'reunion' ? duracionLabel(reunionOf(props.item)?.duracion_s ?? 0) : ''))
 const tip = computed(() => `${name.value} · ${props.item.session_titulo}${props.item.donde ? ` · ${props.item.donde}` : ''}`)
 
 const root = ref<HTMLElement | null>(null)
@@ -105,6 +107,10 @@ defineExpose({ el: root, measure, pulse })
       </template>
       <template v-else-if="variant === 'pruebas'">
         <div class="art"><span class="emoji" aria-hidden="true">🧪</span></div>
+      </template>
+      <template v-else-if="variant === 'reunion'">
+        <div class="art"><span class="emoji" aria-hidden="true">🎙️</span></div>
+        <span v-if="reunionDur !== '—'" class="art-note mono">{{ reunionDur }}</span>
       </template>
       <template v-else-if="variant === 'cover'">
         <div class="win" aria-hidden="true"><i /><i /><i /></div>

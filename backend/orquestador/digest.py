@@ -35,6 +35,8 @@ def queued_prompt(obj: dict) -> str:
 
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 CACHE_SIZE = 256
+# Lo máximo que pide la pantalla (app.py acota summary a 50): el resto de la conversación no se guarda.
+MAX_TURNS = 50
 MAX_TURN_CHARS = 12000
 OLD_TURN_CHARS = 1200
 PENDING_CHARS = 180
@@ -267,6 +269,8 @@ def _parse_digest_lines(digest: Digest, raw_lines: list[bytes], max_chars: int =
         except ValueError:
             continue
         _apply_digest_line(digest, obj, max_chars)
+    if len(digest.turns) > MAX_TURNS:
+        del digest.turns[:-MAX_TURNS]
 
 
 def parse_transcript(path: Path, max_chars: int = MAX_TURN_CHARS) -> Digest:

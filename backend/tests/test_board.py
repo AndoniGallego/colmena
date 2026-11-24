@@ -244,3 +244,62 @@ def test_find_session_agent_ignora_la_clave_centinela_vieja(projects):
     board["centinela"] = {"session_id": "nope", "pane_id": "w2:p9"}
     assert find_session_agent(board, SID)["pane_id"] == "w1:p1"
     assert find_session_agent(board, "nope") is None
+
+
+def _snapshot_con_internas(cwd_guia, cwd_copiloto="/tmp/x/reunion-copiloto"):
+    snap = make_snapshot()
+    snap["workspaces"] += [
+        {"workspace_id": "w3", "number": 3, "label": "guia", "agent_status": "idle"},
+        {"workspace_id": "w4", "number": 4, "label": "copiloto", "agent_status": "idle"},
+    ]
+    snap["tabs"] += [
+        {"tab_id": "w3:t1", "workspace_id": "w3", "label": "g"},
+        {"tab_id": "w4:t1", "workspace_id": "w4", "label": "c"},
+    ]
+    snap["agents"] += [
+        {"pane_id": "w3:p1", "tab_id": "w3:t1", "workspace_id": "w3", "agent": "claude",
+         "agent_status": "idle", "cwd": cwd_guia},
+        {"pane_id": "w4:p1", "tab_id": "w4:t1", "workspace_id": "w4", "agent": "claude",
+         "agent_status": "idle", "cwd": cwd_copiloto},
+    ]
+    snap["panes"] += [
+        {"pane_id": "w3:p1", "tab_id": "w3:t1", "workspace_id": "w3"},
+        {"pane_id": "w4:p1", "tab_id": "w4:t1", "workspace_id": "w4"},
+    ]
+    return snap
+
+
+def _interna(carpetas):
+    import os
+    reales = {os.path.realpath(c) for c in carpetas}
+    return lambda cwd: bool(cwd) and os.path.realpath(cwd) in reales
+
+
+def test_el_tablero_oculta_las_sesiones_internas(projects, tmp_path):
+    guia, copiloto = tmp_path / "guia", tmp_path / "reunion-copiloto"
+    snap = _snapshot_con_internas(str(guia), str(copiloto))
+    board = build_board(snap, DigestService(projects), interna=_interna([guia, copiloto]))
+    assert [w["id"] for w in board["workspaces"]] == ["w1", "w2"]
+    tabs = [t["id"] for w in board["workspaces"] for t in w["tabs"]]
+    assert "w3:t1" not in tabs and "w4:t1" not in tabs
+    panes = [a["pane_id"] for w in board["workspaces"] for t in w["tabs"] for a in t["agents"]]
+    assert panes == ["w1:p1", "w2:p9"]
+
+
+def test_el_tablero_no_oculta_carpetas_parecidas(projects, tmp_path):
+    guia = tmp_path / "guia"
+    snap = _snapshot_con_internas(str(tmp_path / "guia-otra"), str(guia / "sub"))
+    board = build_board(snap, DigestService(projects), interna=_interna([guia]))
+    assert [w["id"] for w in board["workspaces"]] == ["w1", "w2", "w3", "w4"]
+
+
+def test_el_tablero_oculta_la_pestana_interna_de_un_espacio_mixto(projects, tmp_path):
+    guia = tmp_path / "guia"
+    snap = make_snapshot()
+    snap["tabs"].append({"tab_id": "w1:t2", "workspace_id": "w1", "label": "ayudante"})
+    snap["panes"].append({"pane_id": "w1:p5", "tab_id": "w1:t2", "workspace_id": "w1", "cwd": str(guia)})
+    board = build_board(snap, DigestService(projects), interna=_interna([guia]))
+    tabs = [t["id"] for w in board["workspaces"] for t in w["tabs"]]
+    assert "w1:t2" not in tabs and "w1:t1" in tabs
+    assert all(t["terminales"] == [] for w in board["workspaces"] for t in w["tabs"] if t["id"] == "w1:t1")
+    assert "w1:p5" not in str(board)

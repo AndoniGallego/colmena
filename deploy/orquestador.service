@@ -7,6 +7,8 @@ Type=simple
 WorkingDirectory=%h/Proyectos/orquestador
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=%h/.config/orquestador/orquestador.env
+# Pocas arenas de malloc: con una por hilo, la memoria que liberan los hilos de to_thread no vuelve al sistema.
+Environment=MALLOC_ARENA_MAX=2
 ExecStart=%h/.local/bin/uv run orquestador
 Restart=on-failure
 RestartSec=3

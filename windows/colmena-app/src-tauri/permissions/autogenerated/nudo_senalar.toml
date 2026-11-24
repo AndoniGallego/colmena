@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-senalar"
+description = "Enables the nudo_senalar command without any pre-configured scope."
+commands.allow = ["nudo_senalar"]
+
+[[permission]]
+identifier = "deny-nudo-senalar"
+description = "Denies the nudo_senalar command without any pre-configured scope."
+commands.deny = ["nudo_senalar"]

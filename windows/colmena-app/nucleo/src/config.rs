@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::posicion::Ancla;
+use crate::reunion::ventana::VentanaGuardada;
 use crate::atajo_teclas::atajo_valido;
 use crate::validar::{validar_destino, validar_monitor, validar_origen};
 
@@ -20,6 +21,18 @@ pub struct Config {
     pub notebook: Option<Destino>,
     #[serde(default)]
     pub atajos: Atajos,
+    #[serde(default)]
+    pub nudo: ConfigNudo,
+    #[serde(default)]
+    pub reunion_ventana: Option<VentanaGuardada>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+pub struct ConfigNudo {
+    #[serde(default)]
+    pub prendido: bool,
+    #[serde(default)]
+    pub se_ve_al_compartir: bool,
 }
 
 /// Acciones con atajo global.
@@ -28,16 +41,18 @@ pub enum Accion {
     Notas,
     Notch,
     Colmena,
+    Guia,
 }
 
 impl Accion {
-    pub const TODAS: [Accion; 3] = [Accion::Notas, Accion::Notch, Accion::Colmena];
+    pub const TODAS: [Accion; 4] = [Accion::Notas, Accion::Notch, Accion::Colmena, Accion::Guia];
 
     pub fn default_atajo(self) -> &'static str {
         match self {
             Accion::Notas => "Ctrl+Alt+N",
             Accion::Notch => "Ctrl+Alt+M",
             Accion::Colmena => "Ctrl+Alt+C",
+            Accion::Guia => "Ctrl+Alt+V",
         }
     }
 
@@ -46,6 +61,7 @@ impl Accion {
             Accion::Notas => 0,
             Accion::Notch => 1,
             Accion::Colmena => 2,
+            Accion::Guia => 3,
         }
     }
 
@@ -54,6 +70,7 @@ impl Accion {
             Accion::Notas => "notas",
             Accion::Notch => "notch",
             Accion::Colmena => "colmena",
+            Accion::Guia => "guia",
         }
     }
 
@@ -62,6 +79,7 @@ impl Accion {
             Accion::Notas => "Notas",
             Accion::Notch => "Notch",
             Accion::Colmena => "Colmena",
+            Accion::Guia => "Guía",
         }
     }
 
@@ -78,6 +96,8 @@ pub struct Atajos {
     pub notch: String,
     #[serde(default = "default_colmena")]
     pub colmena: String,
+    #[serde(default = "default_guia")]
+    pub guia: String,
 }
 
 fn default_notas() -> String {
@@ -89,10 +109,13 @@ fn default_notch() -> String {
 fn default_colmena() -> String {
     Accion::Colmena.default_atajo().into()
 }
+fn default_guia() -> String {
+    Accion::Guia.default_atajo().into()
+}
 
 impl Default for Atajos {
     fn default() -> Self {
-        Self { notas: default_notas(), notch: default_notch(), colmena: default_colmena() }
+        Self { notas: default_notas(), notch: default_notch(), colmena: default_colmena(), guia: default_guia() }
     }
 }
 
@@ -102,6 +125,7 @@ impl Atajos {
             Accion::Notas => &self.notas,
             Accion::Notch => &self.notch,
             Accion::Colmena => &self.colmena,
+            Accion::Guia => &self.guia,
         }
     }
 
@@ -111,6 +135,7 @@ impl Atajos {
             Accion::Notas => self.notas = v,
             Accion::Notch => self.notch = v,
             Accion::Colmena => self.colmena = v,
+            Accion::Guia => self.guia = v,
         }
     }
 }
@@ -128,6 +153,8 @@ impl Default for Config {
             ancla: None,
             notebook: None,
             atajos: Atajos::default(),
+            nudo: ConfigNudo::default(),
+            reunion_ventana: None,
         }
     }
 }
@@ -192,8 +219,19 @@ mod tests {
             ancla: None,
             notebook: None,
             atajos: Atajos::default(),
+            ..Config::default()
         };
         assert_eq!(leer_config(&escribir_config(&c)), c);
+    }
+
+    #[test]
+    fn config_ventana_reunion_ida_y_vuelta() {
+        let c = Config {
+            reunion_ventana: Some(VentanaGuardada { x: 10, y: 20, ancho: 420, alto: 640 }),
+            ..Config::default()
+        };
+        assert_eq!(leer_config(&escribir_config(&c)), c);
+        assert_eq!(leer_config("{}").reunion_ventana, None);
     }
 
     #[test]
@@ -205,6 +243,7 @@ mod tests {
             ancla: None,
             notebook: None,
             atajos: Atajos::default(),
+            ..Config::default()
         };
         assert_eq!(leer_config(&escribir_config(&c)), c);
     }
@@ -218,6 +257,7 @@ mod tests {
             ancla: Some(Ancla { x: 400, y: 5 }),
             notebook: None,
             atajos: Atajos::default(),
+            ..Config::default()
         };
         assert_eq!(leer_config(&escribir_config(&c)), c);
     }
@@ -233,6 +273,7 @@ mod tests {
                 ancla: None,
                 notebook: None,
                 atajos: Atajos::default(),
+                ..Config::default()
             }
         );
     }
@@ -250,6 +291,7 @@ mod tests {
                 ancla: None,
                 notebook: None,
                 atajos: Atajos::default(),
+                ..Config::default()
             }
         );
         assert_eq!(
@@ -261,6 +303,7 @@ mod tests {
                 ancla: None,
                 notebook: None,
                 atajos: Atajos::default(),
+                ..Config::default()
             }
         );
     }
@@ -276,6 +319,7 @@ mod tests {
                 ancla: None,
                 notebook: None,
                 atajos: Atajos::default(),
+                ..Config::default()
             }
         );
         assert_eq!(
@@ -287,6 +331,7 @@ mod tests {
                 ancla: None,
                 notebook: None,
                 atajos: Atajos::default(),
+                ..Config::default()
             }
         );
         assert_eq!(
@@ -298,6 +343,7 @@ mod tests {
                 ancla: None,
                 notebook: None,
                 atajos: Atajos::default(),
+                ..Config::default()
             }
         );
     }
@@ -310,11 +356,28 @@ mod tests {
     }
 
     #[test]
-    fn defaults_de_los_tres_atajos() {
+    fn defaults_de_los_cuatro_atajos() {
         let a = Config::default().atajos;
+        assert_eq!(a.get(Accion::Guia), "Ctrl+Alt+V");
         assert_eq!(a.get(Accion::Notas), "Ctrl+Alt+N");
         assert_eq!(a.get(Accion::Notch), "Ctrl+Alt+M");
         assert_eq!(a.get(Accion::Colmena), "Ctrl+Alt+C");
+    }
+
+    #[test]
+    fn config_vieja_sin_guia_usa_el_default() {
+        let c = leer_config(r#"{"arranque":true,"atajos":{"notas":"Ctrl+Alt+K","notch":"Ctrl+Alt+M","colmena":"Ctrl+Alt+C"}}"#);
+        assert_eq!(c.atajos.get(Accion::Guia), "Ctrl+Alt+V");
+        assert_eq!(c.atajos.get(Accion::Notas), "Ctrl+Alt+K");
+    }
+
+    #[test]
+    fn guia_tiene_clave_y_nombre() {
+        assert_eq!(Accion::desde_clave("guia"), Some(Accion::Guia));
+        assert_eq!(Accion::Guia.nombre(), "Guía");
+        let mut a = Atajos::default();
+        a.set(Accion::Guia, "Ctrl+Alt+G");
+        assert_eq!(a.get(Accion::Guia), "Ctrl+Alt+G");
     }
 
     #[test]
@@ -408,5 +471,19 @@ mod tests {
         );
         assert_eq!(c.notebook, None);
         assert_eq!(c.destino(), None);
+    }
+
+    #[test]
+    fn config_sin_nudo_queda_apagado_y_oculto() {
+        let c = leer_config("{}");
+        assert!(!c.nudo.prendido);
+        assert!(!c.nudo.se_ve_al_compartir);
+    }
+
+    #[test]
+    fn config_nudo_ida_y_vuelta() {
+        let mut c = Config::default();
+        c.nudo = ConfigNudo { prendido: true, se_ve_al_compartir: true };
+        assert_eq!(leer_config(&escribir_config(&c)), c);
     }
 }

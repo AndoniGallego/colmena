@@ -22,9 +22,16 @@ let api: Api
 export interface ArranqueOpts {
   presencia?: boolean
   ligero?: boolean
+  pcNudo?: boolean
+  /** Ventana "Reunión" de la app de Windows: sigue la reunión pero no atiende al nudo, la guía ni el lector. */
+  vistaReunion?: boolean
 }
 
 let arranqueOpts: ArranqueOpts = {}
+let salirNudoDe = ''
+
+/** La página del notch corre dentro de la app de Windows: ahí existe el panel de Reunión. */
+export const pcNudoActivo = ref(false)
 
 export const auth = ref<AuthState>('checking')
 
@@ -90,14 +97,84 @@ function startBoard() {
       void import('./dialogo').then((m) => m.onPermisosPedidos(pedidos))
     },
     onGuardado: (g) => (guardados[g.id] = g),
+    onNudo: (orden, device) => {
+      const invoke = window.__TAURI__?.core?.invoke
+      if (arranqueOpts.pcNudo !== true || arranqueOpts.vistaReunion || typeof invoke !== 'function') return
+      void import('../lib/nudoPuente').then((m) => {
+        if (salirNudoDe !== device) {
+          salirNudoDe = device
+          void m
+            .escucharSalirNudo(device, { listen: window.__TAURI__?.event?.listen, post: m.postJson })
+            .then((ok) => {
+              if (!ok && salirNudoDe === device) salirNudoDe = ''
+            })
+        }
+        const o = m.normalizarOrdenNudo(orden)
+        if (o) void m.atenderOrdenNudo(o, device, { invoke, post: m.postJson })
+      }).catch((e) => console.warn('[nudo] no se pudo cargar el puente', e))
+    },
+    onReunion: (evento, data, device) => {
+      if (arranqueOpts.pcNudo !== true) return
+      void import('./reunion').then((m) => {
+        m.fijarDevice(device)
+        m.aplicarServidor(evento, data)
+      })
+    },
+    onGuia: (data, device) => {
+      if (arranqueOpts.pcNudo !== true || arranqueOpts.vistaReunion) return
+      void import('./guia').then((m) => {
+        m.fijarDevice(device)
+        void m.aplicarServidorGuia(data)
+      })
+    },
+    onPcListo: (device) => {
+      if (arranqueOpts.pcNudo !== true) return
+      void conectarReunion(device)
+      if (!arranqueOpts.vistaReunion) void import('./guia').then((m) => m.fijarDevice(device))
+    },
     onAbrirTerminal: (e) =>
       manejarAbrirTerminalSse(e, { presenciaActiva: arranqueOpts.presencia !== false, esEscritorio: desktop.value }, (paneId, titulo) => {
         void import('./terminalVivo').then((m) => m.abrirVivo(paneId, titulo))
       }),
   }, {
     presencia: arranqueOpts.presencia !== false,
+    pcNudo: arranqueOpts.pcNudo === true,
     escritorio: () => desktop.value,
   })
+}
+
+let lectorReunionDe = ''
+let soltarLector: (() => void) | null = null
+
+/** Con la app de Windows: engancha el lector de subtítulos (una vez por conexión) y se pone al día con el back. */
+async function conectarReunion(device: string) {
+  const invoke = window.__TAURI__?.core?.invoke
+  const listen = window.__TAURI__?.event?.listen
+  try {
+    const m = await import('./reunion')
+    m.fijarDevice(device)
+    if (!arranqueOpts.vistaReunion && lectorReunionDe !== device && typeof invoke === 'function' && typeof listen === 'function') {
+      lectorReunionDe = device
+      soltarLector?.()
+      soltarLector = null
+      m.fijarLector(null)
+      const puente = await import('../lib/reunionPuente')
+      const nuevo = await puente.conectarLector({
+        listen: listen as never,
+        invoke,
+        post: m.postear,
+        reunionId: m.idParaTexto,
+        device,
+        alLector: m.alLector,
+      })
+      soltarLector = nuevo
+      m.fijarLector(nuevo)
+    }
+    await m.alReconectar()
+  } catch (e) {
+    lectorReunionDe = ''
+    console.warn('[reunion] no se pudo conectar el lector', e)
+  }
 }
 
 export const abrirEnPc: Api['abrirEnPc'] = (...args) => api.abrirEnPc(...args)
@@ -246,6 +323,7 @@ export const getLibrary: Api['getLibrary'] = (...args) => api.getLibrary(...args
 export const getLibraryItem: Api['getLibraryItem'] = (...args) => api.getLibraryItem(...args)
 export const getLibrarySessions: Api['getLibrarySessions'] = (...args) => api.getLibrarySessions(...args)
 export const getLibraryText: Api['getLibraryText'] = (...args) => api.getLibraryText(...args)
+export const getLibraryCharla: Api['getLibraryCharla'] = (...args) => api.getLibraryCharla(...args)
 export const getTerminalSalida: Api['getTerminalSalida'] = (...args) => api.getTerminalSalida(...args)
 export const getTerminalConfig: Api['getTerminalConfig'] = () => api.getTerminalConfig()
 export const getTerminalesCarpetas: Api['getTerminalesCarpetas'] = () => api.getTerminalesCarpetas()
@@ -310,6 +388,7 @@ export async function revokeAllSessions(): Promise<boolean> {
 export function init(a: Api, opts?: ArranqueOpts) {
   api = a
   arranqueOpts = opts ?? {}
+  pcNudoActivo.value = arranqueOpts.pcNudo === true && !arranqueOpts.vistaReunion
 }
 
 export function onUnauthorized() {

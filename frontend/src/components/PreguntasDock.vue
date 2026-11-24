@@ -399,15 +399,24 @@ defineExpose({
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  position: relative;
   background: var(--accent);
-  box-shadow: 0 0 0 0 var(--accent);
+}
+.dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.6;
+  pointer-events: none;
   animation: ping 1.8s var(--ease-out) infinite;
 }
 @keyframes ping {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); }
-  70%, 100% { box-shadow: 0 0 0 8px transparent; }
+  0% { transform: scale(1); opacity: 0.6; }
+  70%, 100% { transform: scale(3); opacity: 0; }
 }
-:root[data-motion='soft'] .dot { animation: none; }
+:root[data-motion='soft'] .dot::after { animation: none; }
 .ptxt {
   min-width: 0;
   overflow: hidden;

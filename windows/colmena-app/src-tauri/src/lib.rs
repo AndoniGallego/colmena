@@ -1,21 +1,26 @@
 mod atajos;
 mod bandeja;
+mod captura;
 mod entornos;
+mod nudo;
+mod reunion;
 mod tuneles;
+mod uia;
 mod ventanas;
 
 use colmena_nucleo::config::{escribir_config, leer_config, Config};
 use colmena_nucleo::notas_pendiente::AperturaNotas;
 use colmena_nucleo::posicion::Ancla;
 use colmena_nucleo::validar::{
-    es_url_local, mismo_origen, validar_aviso, validar_origen, validar_sesion, validar_tamano,
+    es_url_local, mismo_origen, url_biblioteca, validar_aviso, validar_origen, validar_sesion,
+    validar_tamano,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::ipc::CapabilityBuilder;
-use tauri::menu::CheckMenuItem;
+use tauri::menu::{CheckMenuItem, Menu, MenuItem};
 use tauri::{AppHandle, Listener, Manager, RunEvent, State, WebviewWindow, Wry};
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -30,6 +35,12 @@ pub struct Estado {
     pub ancla_guardado_gen: Arc<AtomicU64>,
     pub tuneles: tuneles::Tuneles,
     pub apertura_notas: Mutex<AperturaNotas>,
+    pub apertura_guia: Mutex<AperturaNotas>,
+    pub nudo: nudo::EstadoNudo,
+    pub aviso_atajo: Mutex<Option<String>>,
+    pub nudo_checks: Mutex<Option<(CheckMenuItem<Wry>, CheckMenuItem<Wry>)>>,
+    pub reunion: reunion::EstadoReunion,
+    pub reunion_bandeja: Mutex<Option<(Menu<Wry>, MenuItem<Wry>)>>,
 }
 
 pub(crate) fn programar_guardado_ancla(estado: &Estado, ancla: Option<Ancla>) {
@@ -45,8 +56,19 @@ pub(crate) fn programar_guardado_ancla(estado: &Estado, ancla: Option<Ancla>) {
             .map(|t| leer_config(&t))
             .unwrap_or_default();
         cfg.ancla = ancla;
-        let _ = std::fs::write(&ruta, escribir_config(&cfg));
+        let _ = escribir_config_archivo(&ruta, &escribir_config(&cfg));
     });
+}
+
+/// Escribe la config sin que un lector la vea a medias: temporal en el mismo directorio y rename encima.
+pub(crate) fn escribir_config_archivo(ruta: &std::path::Path, texto: &str) -> std::io::Result<()> {
+    let mut tmp = ruta.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    std::fs::write(&tmp, texto)?;
+    std::fs::rename(&tmp, ruta).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 fn leer_config_archivo(ruta: &PathBuf) -> Config {
@@ -76,6 +98,11 @@ pub(crate) fn exige_ventana(
     Ok(origen)
 }
 
+/// Los comandos de la reunión los puede pedir el notch o la ventana "Reunión".
+pub(crate) fn exige_notch_o_reunion(window: &WebviewWindow, estado: &Estado) -> Result<String, String> {
+    exige_ventana(window, estado, "notch").or_else(|_| exige_ventana(window, estado, "reunion"))
+}
+
 fn exige_notch(window: &WebviewWindow, estado: &Estado) -> Result<String, String> {
     exige_ventana(window, estado, "notch")
 }
@@ -95,9 +122,40 @@ pub fn arrancar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
             .window("notch")
             .permission("allow-notch-tamano")
             .permission("allow-abrir-colmena")
+            .permission("allow-abrir-biblioteca")
             .permission("allow-mostrar-aviso")
             .permission("allow-notch-arrastrar")
             .permission("allow-notch-forma")
+            .permission("allow-nudo-controles")
+            .permission("allow-nudo-senalar")
+            .permission("allow-nudo-marcar")
+            .permission("allow-nudo-mostrar")
+            .permission("allow-nudo-senalar-zona")
+            .permission("allow-nudo-marcar-zonas")
+            .permission("allow-nudo-limpiar")
+            .permission("allow-nudo-guia-paso")
+            .permission("allow-nudo-estado")
+            .permission("allow-reunion-escuchar")
+            .permission("allow-reunion-pausar")
+            .permission("allow-reunion-seguir")
+            .permission("allow-reunion-terminar")
+            .permission("allow-reunion-estado")
+            .permission("allow-reunion-mostrar-ventana")
+            .permission("core:event:allow-listen")
+            .permission("core:event:allow-emit"),
+    )
+    .map_err(|e| e.to_string())?;
+
+    app.add_capability(
+        CapabilityBuilder::new("reunion-remoto")
+            .remote(format!("{origen}/*"))
+            .local(false)
+            .window("reunion")
+            .permission("allow-reunion-escuchar")
+            .permission("allow-reunion-pausar")
+            .permission("allow-reunion-seguir")
+            .permission("allow-reunion-terminar")
+            .permission("allow-reunion-estado")
             .permission("core:event:allow-listen")
             .permission("core:event:allow-emit"),
     )
@@ -122,6 +180,9 @@ pub fn arrancar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
     let cfg = leer_config_archivo(&estado.ruta_config);
     bandeja::aplicar_arranque(app, &cfg);
     atajos::arrancar(app, &cfg.atajos);
+    if let Err(e) = ventanas::crear_nudo(app) {
+        eprintln!("nudo: no se pudo preparar, queda apagado: {e}");
+    }
     Ok(())
 }
 
@@ -185,6 +246,18 @@ async fn abrir_colmena(
 }
 
 #[tauri::command]
+async fn abrir_biblioteca(
+    app: AppHandle,
+    window: WebviewWindow,
+    estado: State<'_, Estado>,
+    item: String,
+) -> Result<(), String> {
+    let origen = exige_notch(&window, &estado)?;
+    let url = url_biblioteca(&origen, &item).ok_or_else(|| "ítem inválido".to_string())?;
+    ventanas::abrir_colmena_url(&app, &url)
+}
+
+#[tauri::command]
 fn mostrar_aviso(
     window: WebviewWindow,
     estado: State<'_, Estado>,
@@ -221,7 +294,7 @@ async fn guardar_origen(
 
     let mut cfg = leer_config_archivo(&estado.ruta_config);
     cfg.origen = Some(nuevo.clone());
-    std::fs::write(&estado.ruta_config, escribir_config(&cfg)).map_err(|e| e.to_string())?;
+    escribir_config_archivo(&estado.ruta_config, &escribir_config(&cfg)).map_err(|e| e.to_string())?;
     *estado.origen.lock().unwrap() = Some(nuevo);
 
     if had {
@@ -261,6 +334,7 @@ pub fn run() {
             notch_forma,
             notch_arrastrar,
             abrir_colmena,
+            abrir_biblioteca,
             mostrar_aviso,
             guardar_origen,
             entornos::entorno_abrir,
@@ -273,7 +347,27 @@ pub fn run() {
             atajos::pausar_atajos,
             atajos::reanudar_atajos,
             atajos::probar_atajo,
-            atajos::guardar_atajo
+            atajos::guardar_atajo,
+            nudo::nudo_listo,
+            nudo::nudo_salir,
+            nudo::nudo_pagina_estado,
+            nudo::nudo_controles,
+            nudo::nudo_senalar,
+            nudo::nudo_marcar,
+            nudo::nudo_mostrar,
+            nudo::nudo_senalar_zona,
+            nudo::nudo_marcar_zonas,
+            nudo::nudo_limpiar,
+            nudo::nudo_guia_paso,
+            nudo::nudo_guia,
+            nudo::nudo_estado,
+            nudo::nudo_visibilidad,
+            reunion::reunion_escuchar,
+            reunion::reunion_pausar,
+            reunion::reunion_seguir,
+            reunion::reunion_terminar,
+            reunion::reunion_estado,
+            reunion::reunion_mostrar_ventana
         ])
         .setup(|app| {
             let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
@@ -293,9 +387,21 @@ pub fn run() {
                 ancla_guardado_gen: Arc::new(AtomicU64::new(0)),
                 tuneles: Default::default(),
                 apertura_notas: Mutex::new(AperturaNotas::default()),
+                apertura_guia: Mutex::new(AperturaNotas::default()),
+                nudo: Default::default(),
+                aviso_atajo: Mutex::new(None),
+                nudo_checks: Mutex::new(None),
+                reunion: Default::default(),
+                reunion_bandeja: Mutex::new(None),
             });
+            let _ = app
+                .state::<Estado>()
+                .nudo
+                .uia
+                .set(uia::arrancar_hilo(uia::arrancar_vigia_foreground(app.handle().clone())));
 
             let handle = app.handle().clone();
+            app.manage(reunion::arrancar_hilo(handle.clone()));
             let para_listo = handle.clone();
             handle.listen(atajos::EVENTO_NOTCH_LISTO, move |_| {
                 atajos::notch_listo(&para_listo);

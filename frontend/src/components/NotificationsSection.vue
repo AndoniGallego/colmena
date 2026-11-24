@@ -133,7 +133,7 @@ onMounted(() => void refreshPush())
 
     <Transition name="nswap" mode="out-in">
       <div :key="pushState.status" class="n-body">
-        <p v-if="pushState.status === 'checking'" class="n-skel" aria-hidden="true" />
+        <p v-if="pushState.status === 'checking'" class="n-skel sk-sweep" aria-hidden="true" />
 
         <p v-else-if="pushState.status === 'unsupported'" class="n-note">
           <template v-if="DEMO">La demo no manda avisos al dispositivo.</template>
@@ -304,10 +304,12 @@ onMounted(() => void refreshPush())
   height: 34px;
   margin: 0;
   border-radius: var(--r-md);
-  background: linear-gradient(100deg, var(--bg-2) 30%, var(--surface-hover) 50%, var(--bg-2) 70%) 0 0 / 220% 100%;
-  animation: shimmer 1.4s linear infinite;
+  --sk-bg: linear-gradient(100deg, var(--bg-2) 30%, var(--surface-hover) 50%, var(--bg-2) 70%);
+  --sk-left: -220%;
+  --sk-w: 440%;
+  --sk-dx: 32.7273%;
+  --sk-dur: 1.4s;
 }
-@keyframes shimmer { to { background-position: -120% 0; } }
 
 .n-card {
   display: flex;

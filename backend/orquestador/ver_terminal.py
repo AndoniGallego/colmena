@@ -14,6 +14,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from orquestador.guardian.protocolo import VERSION, leer_mensaje
+from orquestador.guardian.lanzador import es_carpeta_interna
+from orquestador.internas import pane_interno
 from orquestador.terminales import short_cwd
 
 _ESCAPE_SALIR = "\x1d"  # Ctrl+]
@@ -27,7 +29,11 @@ def ruta_guardian_socket(environ: dict | None = None) -> Path | None:
     return Path(base) / "colmena-guardian" / "guardian.sock"
 
 
-def filas_de_tablero(tab: dict) -> list[dict]:
+def es_cwd_interno(cwd: str) -> bool:
+    return es_carpeta_interna("copiloto", cwd) or es_carpeta_interna("guia", cwd)
+
+
+def filas_de_tablero(tab: dict, es_interna=None) -> list[dict]:
     espacios: dict[str, str] = {}
     for e in tab.get("espacios") or []:
         if isinstance(e, dict) and isinstance(e.get("id"), str):
@@ -48,6 +54,8 @@ def filas_de_tablero(tab: dict) -> list[dict]:
         lid = s.get("linea_id")
         eid = s.get("espacio_id")
         if not isinstance(sid, str):
+            continue
+        if pane_interno({"cwd": s.get("cwd"), "foreground_cwd": s.get("cwd_primer_plano")}, es_interna):
             continue
         tarjeta = espacios.get(eid or "", eid or "?")
         pestana = lineas.get(lid or "", ("", "?"))[1] if lid else "?"
@@ -324,7 +332,7 @@ def ver_terminal(sel: str | None) -> int:
     except (OSError, RuntimeError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    filas = filas_de_tablero(tab)
+    filas = filas_de_tablero(tab, es_cwd_interno)
     if not sel:
         imprimir_listado(filas)
         return 0

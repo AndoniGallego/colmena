@@ -20,8 +20,9 @@ MAX_TERMINOS = 8
 MAX_POR_SESION = 3
 SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 FECHA_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# Turnos de contexto interno y sesiones lanzadas en scratchpads: no son trabajo del usuario.
-DIR_EXCLUIDO = re.compile(r"(-data-context$|^-tmp-)")
+# Turnos de contexto interno, sesiones lanzadas en scratchpads y las de las reuniones (la charla es privada):
+# no son trabajo del usuario.
+DIR_EXCLUIDO = re.compile(r"(-data-context$|-data-reunion-claude$|-orquestador-reunion-copiloto$|-orquestador-guia$|^-tmp-)")
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS archivos(path TEXT PRIMARY KEY, ino INTEGER, size INTEGER, offset INTEGER,

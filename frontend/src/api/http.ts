@@ -7,6 +7,7 @@ import { EVENTO_CURSOR, EVENTO_PROGRAMADAS } from '../lib/tareas'
 import { normalizeClaudeUso } from '../lib/usoClaude'
 import { extFor } from '../lib/voz'
 import { tracked } from '../lib/update'
+import { deviceId } from '../lib/device'
 import { ApiError, type Api, type CategoriaPermiso, type CloseBlocker, type ConnectionState, type LimpiezaHandlers, type RegistroPermiso, type SubscribeOpts } from './types'
 
 let mirando: string | null = null
@@ -143,12 +144,8 @@ function uploadWithProgress(file: File, onProgress: (fraction: number) => void, 
 
 const PRESENCE_RENEW_MS = 60_000
 
-function newDeviceId(): string {
-  const c = globalThis.crypto
-  if (c?.randomUUID) return c.randomUUID()
-  return Array.from({ length: 4 }, () => Math.random().toString(36).slice(2, 10)).join('')
-}
-
+/** Eventos SSE del copiloto de reuniones. */
+const EVENTOS_REUNION = ['reunion-estado', 'reunion-linea', 'reunion-respuesta', 'reunion-descartada', 'reunion-anotada', 'reunion-guardada'] as const
 const STALE_MS = 40_000
 const RESUME_MS = 8_000
 
@@ -264,16 +261,17 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
           .then((d) => Math.max(0, Number(d?.no_leidos) || 0)),
       ),
 
-    subscribeBoard({ onBoard, onState, onSession, onLibrary, onBuild, onAviso, onAvisosLeidos, onOrdenTablero, onOrdenPestanas, onPlegadas, onSilenciadas, onMrs, onNotas, onPermisos, onGuardado, onAbrirTerminal, onPedidoPestana }, opts?: SubscribeOpts) {
+    subscribeBoard({ onBoard, onState, onSession, onLibrary, onBuild, onAviso, onAvisosLeidos, onOrdenTablero, onOrdenPestanas, onPlegadas, onSilenciadas, onMrs, onNotas, onPermisos, onGuardado, onAbrirTerminal, onPedidoPestana, onNudo, onGuia, onReunion, onPcListo }, opts?: SubscribeOpts) {
       const presencia = opts?.presencia !== false
       const escritorio = opts?.escritorio
+      const pcNudo = opts?.pcNudo === true
       let es: EventSource | null = null
       let timer: ReturnType<typeof setTimeout> | undefined
       let watchdog: ReturnType<typeof setTimeout> | undefined
       let attempt = 0
       let closed = false
       let hiddenAt = 0
-      const device = newDeviceId()
+      const device = deviceId(pcNudo)
       let lastReport = 0
 
       // El servidor no manda push mientras la app está a la vista; solo avisamos cuando cambia (o cada ~1 min como renovación).
@@ -332,10 +330,11 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
       const connect = () => {
         if (closed) return
         setState(attempt === 0 ? 'connecting' : 'reconnecting')
-        es = new EventSource(`/api/events?cid=${device}`, { withCredentials: true })
+        es = new EventSource(`/api/events?cid=${device}${pcNudo ? '&pc=1' : ''}`, { withCredentials: true })
         es.addEventListener('open', () => {
           attempt = 0
           setState('live')
+          if (pcNudo) onPcListo?.(device)
           feed()
         })
         es.addEventListener('ping', (ev) => {
@@ -372,6 +371,22 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
           if (e) onPedidoPestana?.(e)
           feed()
         })
+        es.addEventListener('nudo', (ev) => {
+          const data = parseData((ev as MessageEvent).data)
+          if (data) onNudo?.(data, device)
+          feed()
+        })
+        es.addEventListener('guia', (ev) => {
+          const data = parseData((ev as MessageEvent).data)
+          if (data) onGuia?.(data, device)
+          feed()
+        })
+        for (const nombre of EVENTOS_REUNION) {
+          es.addEventListener(nombre, (ev) => {
+            onReunion?.(nombre, parseData((ev as MessageEvent).data), device)
+            feed()
+          })
+        }
         es.addEventListener('abrir_terminal', (ev) => {
           const data = parseData((ev as MessageEvent).data)
           const pane_id = typeof data?.pane_id === 'string' ? data.pane_id : ''
@@ -652,6 +667,12 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
     async getLibraryText(id) {
       const d = await guard(json(`/api/biblioteca/${encodeURIComponent(id)}/texto`))
       return typeof d?.text === 'string' ? d.text : ''
+    },
+
+    async getLibraryCharla(id) {
+      const d = await guard(json(`/api/biblioteca/${encodeURIComponent(id)}/charla`))
+      if (typeof d?.charla !== 'string') throw new ApiError(502, 'Respuesta inválida')
+      return d.charla
     },
 
     async getTerminalSalida(paneId, rev, signal) {

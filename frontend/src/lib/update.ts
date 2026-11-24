@@ -40,11 +40,13 @@ export interface UpdateContext {
   working: boolean
   visible: boolean
   idleMs: number
+  /** Hay una reunión en curso: recargar cambiaría el dispositivo y la cortaría. */
+  meeting?: boolean
 }
 
 export function reloadDecision(c: UpdateContext): Decision {
   if (!isStale(c.own, c.remote)) return 'none'
-  if (c.typing || c.working) return 'wait'
+  if (c.meeting || c.typing || c.working) return 'wait'
   if (!c.visible || c.trigger === 'visible') return 'reload'
   return c.idleMs >= IDLE_MS ? 'reload' : 'wait'
 }

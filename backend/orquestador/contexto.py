@@ -6,9 +6,9 @@ from typing import Optional
 from .digest import DigestService
 from .statusline import context_window, ctx_dir, parse_timestamp, read_snapshot, used_tokens
 
-TAIL_BYTES = 4 * 1024 * 1024
+TAIL_BYTES = 256 * 1024
 MAX_BACK_BYTES = 32 * 1024 * 1024
-CHUNK = 4 * 1024 * 1024
+CHUNK = 1024 * 1024
 CACHE_SIZE = 64
 MARK = b"compact_boundary"
 

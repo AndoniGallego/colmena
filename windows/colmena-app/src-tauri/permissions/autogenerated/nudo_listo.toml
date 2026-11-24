@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nudo-listo"
+description = "Enables the nudo_listo command without any pre-configured scope."
+commands.allow = ["nudo_listo"]
+
+[[permission]]
+identifier = "deny-nudo-listo"
+description = "Denies the nudo_listo command without any pre-configured scope."
+commands.deny = ["nudo_listo"]

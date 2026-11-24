@@ -2,7 +2,7 @@ import json
 import os
 import stat
 
-from orquestador.memoria_indice import MAX_TURNO, IndiceMemoria, buscar, leer, titulo_de
+from orquestador.memoria_indice import DIR_EXCLUIDO, MAX_TURNO, IndiceMemoria, buscar, leer, titulo_de
 
 SID = "aaaaaaaa-1111-2222-3333-444444444444"
 
@@ -194,3 +194,23 @@ def test_borrar(tmp_path):
     assert indice.estado()["indexados"] == 0
     indice.actualizar()
     assert indice.estado()["indexados"] == 1
+
+
+def test_excluye_las_carpetas_de_las_reuniones():
+    # La charla de una reunión no puede aparecer en las búsquedas de Memoria de otras sesiones.
+    for slug in ("-home-u--local-share-orquestador-reunion-copiloto",
+                 "-home-u-xdg-orquestador-reunion-copiloto",
+                 "-home-u-Proyectos-orquestador-data-reunion-claude",
+                 "-home-u-Proyectos-orquestador-data-context", "-tmp-x"):
+        assert DIR_EXCLUIDO.search(slug), slug
+    for slug in ("-home-u-development-reunion-copiloto-app", "-home-u-development-tienda",
+                 "-home-u-Proyectos-orquestador"):
+        assert not DIR_EXCLUIDO.search(slug), slug
+
+
+def test_excluye_la_carpeta_de_la_guia():
+    # La charla del ayudante de la guía tampoco aparece en las búsquedas de Memoria.
+    for slug in ("-home-u--local-share-orquestador-guia", "-home-u-xdg-orquestador-guia"):
+        assert DIR_EXCLUIDO.search(slug), slug
+    for slug in ("-home-u-development-guia-app", "-home-u-development-orquestador-guia-x"):
+        assert not DIR_EXCLUIDO.search(slug), slug

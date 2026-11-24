@@ -95,6 +95,7 @@ class EstadoSesiones:
         self.sin_dueno: collections.deque[dict] = collections.deque(maxlen=_MAX_SIN_DUENO)
         self.ignorados: collections.deque[str] = collections.deque(maxlen=_MAX_IGNORADOS)
         self.observadores: list[Callable[[str, str], None]] = []
+        self.al_stop: list[Callable[[str, str], None]] = []
 
     def vistos_count(self) -> int:
         return len(self._vistos)
@@ -220,6 +221,7 @@ class EstadoSesiones:
                 if pend and (reg.pr_desde is None or reg.pr_desde < reg.pre_desde):
                     reg.estado = "blocked"
         elif evento == "Stop":
+            self._llamar_al_stop(pane_id, msg)
             previa = self._esperas.pop(pane_id, None)
             if previa is not None:
                 previa[0].cancel()
@@ -230,6 +232,16 @@ class EstadoSesiones:
 
         self._avisar(pane_id, evento)
         return True
+
+    def _llamar_al_stop(self, pane_id: str, msg: MensajeGancho) -> None:
+        crudo = msg.datos.get("last_assistant_message")
+        if not isinstance(crudo, str):
+            return
+        for cb in list(self.al_stop):
+            try:
+                cb(pane_id, crudo)
+            except Exception:
+                log.exception("al_stop falló")
 
     def _aplicar_stop(self, reg: RegistroSesion, pane_id: str, msg: MensajeGancho, ahora: float) -> None:
         reg.estado = "done"

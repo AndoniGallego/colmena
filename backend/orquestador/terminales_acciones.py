@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .dialogo import visibles
 from .enchufe import NoDisponible, TerminalesError, Tiempo
 from .enchufe.modelo import Lanzamiento
-from .guardian.lanzador import MODOS_POR_LANZAMIENTO
+from .guardian.lanzador import MODOS_INTERNOS, MODOS_POR_LANZAMIENTO, carpeta_de_modo, es_carpeta_interna
 from .nueva_tarea import (Worktrees, borrar_copia, base_por_defecto, crear_worktree, es_raiz_repo, mensaje_ticket,
                           nombre_pestana, nombre_ticket, quitar_recien_creado, rama_existe, rama_para, ruta_libre,
                           slug_de, validar_rama, validar_ticket)
@@ -777,15 +777,29 @@ class TerminalActions:
         grupo: str | None,
         al_crear: Callable[[], None] | None = None,
         permiso: str | None = None,
+        dirs_extra: list[str] | None = None,
     ) -> dict:
-        """`permiso` (solo `default`/`plan`) endurece el modo de cada Claude del pedido; None usa el global."""
-        if permiso is not None and permiso not in MODOS_POR_LANZAMIENTO:
+        """`permiso` (`default`/`plan`, o `copiloto`/`guia` solo en su carpeta fija) endurece el modo de cada Claude; None usa el global.
+
+        `dirs_extra` (solo con `copiloto`) son los repos que el guardián agrega con --add-dir."""
+        if permiso is not None and permiso not in MODOS_POR_LANZAMIENTO | MODOS_INTERNOS:
             raise ValueError("permiso por lanzamiento inválido")
+        if dirs_extra and permiso != "copiloto":
+            raise ValueError("dirs_extra solo vale con el permiso copiloto")
+        if permiso in MODOS_INTERNOS:
+            carpetas = [item.get("carpeta")] if not item.get("pestanas") else [
+                p.get("carpeta") or item.get("carpeta") for p in item["pestanas"]]
+            if not all(isinstance(c, str) and es_carpeta_interna(permiso, os.path.expanduser(c)) for c in carpetas):
+                raise ValueError("permiso interno fuera de su carpeta")
         cached = self._nueva_cache.get(idempotencia)
         if cached is not None:
             return cached
         if idempotencia in self._inflight:
             raise TraspasoError(409, "Ya la estoy abriendo")
+        permitidas = self.plan_cwds()
+        if permiso in MODOS_INTERNOS:
+            # Ya se verificó que todas las carpetas son la del modo: solo esa se suma, solo para este modo.
+            permitidas = [*permitidas, str(carpeta_de_modo(permiso))]
         raw_pest = item.get("pestanas")
         if raw_pest:
             plan = [dict(p) for p in raw_pest]
@@ -820,7 +834,7 @@ class TerminalActions:
         try:
             g = self._guardian_backend()
             for idx, pest in enumerate(plan):
-                cwd = validar_carpeta(pest["carpeta"], self.plan_cwds())
+                cwd = validar_carpeta(pest["carpeta"], permitidas)
                 nombre_tab = normalizar_nombre(pest.get("nombre") or None, cwd)
                 tipo = pest["tipo"]
                 arrancar_claude = False
@@ -864,8 +878,10 @@ class TerminalActions:
                         try:
                             if permiso is None:
                                 await g.arrancar_claude(pane, agente)
-                            else:
+                            elif not dirs_extra:
                                 await g.arrancar_claude(pane, agente, modo=permiso)
+                            else:
+                                await g.arrancar_claude(pane, agente, modo=permiso, dirs_extra=dirs_extra)
                         except (NoDisponible, TerminalesError) as exc:
                             raise TraspasoError(
                                 503,
@@ -942,7 +958,9 @@ class TerminalActions:
             else:
                 titulo = f"Terminal nueva en {abiertos[0]['nombre']}"
             tag = "terminal-nueva-claude" if abiertos[0]["tipo"] == "claude" else "terminal-nueva-shell"
-            await self._push(op, titulo, ctx.device, tag)
+            # La guía y el Copiloto son ayudantes internos: abrirlos no es algo que tenga que llegar al celu.
+            if permiso not in MODOS_INTERNOS:
+                await self._push(op, titulo, ctx.device, tag)
             return out
         except TraspasoError as exc:
             if not abiertos:

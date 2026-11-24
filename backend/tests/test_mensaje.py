@@ -264,3 +264,10 @@ def test_lo_que_mandas_o_confirmas_llega_al_workspace_protegido(authed, enchufe,
     _proteger_uno(enchufe)
     assert post(authed, payload(origen=origen)).status_code == 200
     assert len(prompts(enchufe)) == 1
+
+
+def test_origen_copiloto_valido():
+    from orquestador.mensaje import MensajeBody
+
+    b = MensajeBody(id="cop-12345678", pane_id="w1:p1", texto="hola", origen="copiloto")
+    assert b.origen == "copiloto"

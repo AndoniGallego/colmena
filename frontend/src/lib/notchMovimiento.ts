@@ -1,4 +1,4 @@
-export type ModoNotch = 'cerrado' | 'panel' | 'aviso' | 'notas'
+export type ModoNotch = 'cerrado' | 'panel' | 'aviso' | 'notas' | 'reunion' | 'guia'
 
 export const UMBRAL_ARRASTRE = 5
 
@@ -21,8 +21,8 @@ export function morph(soft: boolean): { duration: number; ease: string } {
 export function anchoPara(modo: ModoNotch, cara: number, pantalla: number): number {
   if (modo === 'cerrado') return cara + 2
   const max = pantalla - 24
-  if (modo === 'panel') return Math.min(ANCHO_PANEL, max)
-  if (modo === 'notas') return Math.min(ANCHO_NOTAS, max)
+  if (modo === 'panel' || modo === 'reunion') return Math.min(ANCHO_PANEL, max)
+  if (modo === 'notas' || modo === 'guia') return Math.min(ANCHO_NOTAS, max)
   return Math.min(ANCHO_AVISO, max)
 }
 

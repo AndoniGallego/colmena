@@ -50,7 +50,7 @@ export const ATAJOS: Atajo[] = [
   { grupo: BIBLIOTECA, teclas: ['['], tambien: [']'], que: 'Archivo anterior / siguiente', donde: 'En la Biblioteca' },
   { grupo: BIBLIOTECA, teclas: ['F'], que: 'Pantalla completa', donde: 'En la Biblioteca' },
   { grupo: BIBLIOTECA, teclas: ['G'], que: 'Pasar de grilla a lista', donde: 'En la Biblioteca' },
-  { grupo: BIBLIOTECA, teclas: ['1', '–', '7'], que: 'Filtrar por tipo de archivo', donde: 'En la Biblioteca' },
+  { grupo: BIBLIOTECA, teclas: ['1', '–', '8'], que: 'Filtrar por tipo de archivo', donde: 'En la Biblioteca' },
   { grupo: BIBLIOTECA, teclas: ['O'], que: 'Abrir en claude.ai', donde: 'En la Biblioteca' },
   { grupo: BIBLIOTECA, teclas: ['S'], que: 'Ir a la sesión del archivo', donde: 'En la Biblioteca' },
   { grupo: BIBLIOTECA, teclas: ['C'], que: 'Copiar la ruta', donde: 'En la Biblioteca' },

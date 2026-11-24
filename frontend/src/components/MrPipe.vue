@@ -23,9 +23,9 @@ const texto = computed(() => props.label ?? { ok: 'Verde', fallo: 'Falló', corr
 .manual { --c: var(--st-blocked); --bgc: var(--st-blocked-soft); }
 .dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .corriendo .dot::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid var(--c); border-right-color: transparent; animation: spin 0.9s linear infinite; }
-.fallo .dot { animation: beat 1.8s ease-in-out infinite; }
+.fallo .dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--c); pointer-events: none; animation: beat 1.8s ease-in-out infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@keyframes beat { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 50%, transparent); } 50% { box-shadow: 0 0 0 4px transparent; } }
+@keyframes beat { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(2.1429); opacity: 0; } }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 :root[data-motion='soft'] .dot, :root[data-motion='soft'] .dot::after { animation: none; }
 @media (prefers-reduced-motion: reduce) { .dot, .dot::after { animation: none; } }

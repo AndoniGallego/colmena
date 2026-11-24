@@ -16,6 +16,14 @@ describe('isStale', () => {
 })
 
 describe('reloadDecision', () => {
+  it('con una reunión en curso nunca recarga: espera a que termine', () => {
+    for (const trigger of ['visible', 'notice', 'idle'] as const) {
+      expect(reloadDecision(ctx({ trigger, meeting: true, idleMs: 9e9 }))).toBe('wait')
+      expect(reloadDecision(ctx({ trigger, meeting: true, visible: false }))).toBe('wait')
+    }
+    expect(reloadDecision(ctx({ trigger: 'idle', meeting: false, idleMs: 9e9 }))).toBe('reload')
+  })
+
   it('no hace nada si el build es el mismo', () => {
     expect(reloadDecision(ctx({ remote: 'aaa', trigger: 'visible' }))).toBe('none')
   })

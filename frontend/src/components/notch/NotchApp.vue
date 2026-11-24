@@ -3,31 +3,39 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { debeFundirTextoResumen, partesResumen, textoResumen } from '../../lib/notchCeldas'
 import {
   claveAvisoNotch,
-  debeCerrarPanelAlPerderFoco,
+  cerrarTrasBlur,
+  GRACIA_BLUR_MS,
   reducirFocoNotch,
   type AccionFocoNotch,
 } from '../../lib/notchFoco'
 import { esCampoTextoNotch } from '../../lib/notchTeclado'
-import { crearPuente } from '../../lib/notchPuente'
+import { guiaMontada } from '../../lib/notchGuia'
+import { crearPuente, escuchar as escucharApp } from '../../lib/notchPuente'
+import { accionAlTocarNotch, reunionViva } from '../../lib/notchReunionVentana'
 import { useNow } from '../../lib/time'
 import { vaciarCola } from '../../lib/notasCola'
-import { auth } from '../../state/app'
+import { auth, pcNudoActivo } from '../../state/app'
 import { crearNota, pendientes } from '../../state/notas'
 import {
   abrirColmena,
+  abrirReunion,
   abrirSesion,
   alternarPanel,
   celdas,
+  cerrarGuia,
   cerrarNotas,
   cerrarPanel,
+  cerrarReunion,
   enVivo,
   grupos,
   modo,
   sesiones,
+  puente,
   setPuente,
   iniciarEscuchaNotas,
 } from '../../state/notch'
 import { brilloPillDesdeAviso, ETIQUETA_AVISO } from '../../lib/notchAvisos'
+import { reunion, terminar as terminarReunion } from '../../state/reunion'
 import { avisoActual, cerrarAviso, iniciarAvisosNotch } from '../../state/notchAvisos'
 import { iniciarResumenVisible, resumenVisible } from '../../state/notchResumen'
 import { initPedidosPestana } from '../../state/pedidosPestana'
@@ -36,8 +44,10 @@ import LogoPanal from '../logo/LogoPanal.vue'
 import NotchLogin from './NotchLogin.vue'
 import NotchAviso from './NotchAviso.vue'
 import NotchCaptura from './NotchCaptura.vue'
+import NotchGuia from './NotchGuia.vue'
 import NotchNotas from './NotchNotas.vue'
 import NotchPanel from './NotchPanel.vue'
+import NotchReunion from './NotchReunion.vue'
 import NotchPill from './NotchPill.vue'
 
 const now = useNow()
@@ -45,6 +55,10 @@ const foco = ref(false)
 const lbl = ref<HTMLElement | null>(null)
 const marca = ref<HTMLElement | null>(null)
 const { run } = useGsap()
+
+/** Con una reunión escuchando, la cara del notch lo dice aunque esté cerrado. */
+const escuchando = computed(() => reunion.value.estado === 'escuchando')
+const reunionEnCurso = computed(() => reunion.value.estado === 'escuchando' || reunion.value.estado === 'pausada')
 
 const partes = computed(() => partesResumen(resumenVisible.value))
 
@@ -64,17 +78,52 @@ function aplicarFoco(accion: AccionFocoNotch) {
 }
 
 function onAlternar() {
-  aplicarFoco({ tipo: 'alternar', eraPanel: modo.value === 'panel' })
+  if (accionAlTocarNotch({ modo: modo.value, estadoReunion: reunion.value.estado, enPrograma: puente().enPrograma }) === 'mostrar_ventana') {
+    puente().mostrarReunion()
+    return
+  }
+  aplicarFoco({ tipo: 'alternar', eraPanel: modo.value === 'panel' || modo.value === 'reunion' || modo.value === 'guia' })
   alternarPanel()
 }
 
 function onEsc(e: KeyboardEvent) {
-  if (e.key !== 'Escape' || (modo.value !== 'panel' && modo.value !== 'notas')) return
+  if (e.key !== 'Escape' || (modo.value !== 'panel' && modo.value !== 'notas' && modo.value !== 'reunion' && modo.value !== 'guia')) return
   if (esCampoTextoNotch(e.target)) return
   aplicarFoco({ tipo: 'esc' })
   if (modo.value === 'notas') cerrarNotas()
+  else if (modo.value === 'guia') cerrarGuia()
+  else if (modo.value === 'reunion') cerrarReunion()
   else cerrarPanel()
 }
+
+function onCerrarGuia() {
+  aplicarFoco({ tipo: 'esc' })
+  cerrarGuia()
+}
+
+/** Con la reunión en marcha la sigue la ventana "Reunión": el notch no se expande a esa vista. */
+watch(
+  () => reunionViva(reunion.value.estado) && puente().enPrograma,
+  (viva) => {
+    if (viva) cerrarReunion()
+  },
+)
+
+// ---------- guía ----------
+/** La cajita sigue montada un rato al cerrarse, para animar su salida mientras la pastilla se achica. */
+const guiaVisible = ref(guiaMontada(modo.value, undefined, false).visible)
+let guiaTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(modo, (m, prev) => {
+  clearTimeout(guiaTimer)
+  const r = guiaMontada(m, prev, guiaVisible.value)
+  guiaVisible.value = r.visible
+  if (r.quitarEn !== null) {
+    guiaTimer = setTimeout(() => {
+      if (modo.value === 'cerrado') guiaVisible.value = false
+    }, r.quitarEn)
+  }
+})
 
 // ---------- notas ----------
 /** La captura sigue montada mientras la pastilla se cierra; la clave la renueva en cada apertura. */
@@ -160,11 +209,18 @@ watch(enVivo, (vivo, antes) => {
   if (vivo && antes === false) vaciarNotasPendientes()
 })
 
+let blurTimer: ReturnType<typeof setTimeout> | undefined
+
 function onBlur() {
-  aplicarFoco({ tipo: 'blur' })
-  if (debeCerrarPanelAlPerderFoco(modo.value)) {
-    cerrarPanel()
-  }
+  clearTimeout(blurTimer)
+  blurTimer = setTimeout(() => {
+    if (document.hasFocus()) return
+    aplicarFoco({ tipo: 'blur' })
+    if (cerrarTrasBlur(modo.value, false, reunionEnCurso.value)) {
+      if (modo.value === 'reunion') cerrarReunion()
+      else cerrarPanel()
+    }
+  }, GRACIA_BLUR_MS)
 }
 
 const sesionAviso = computed(() => {
@@ -187,6 +243,8 @@ onMounted(() => {
   document.documentElement.classList.add('notch')
   setPuente(crearPuente())
   iniciarEscuchaNotas()
+  // La ventana "Reunión" no tiene el lector: el cierre (que vuelca la cola de texto) lo hace el notch.
+  void escucharApp('reunion-terminar-pedido', () => void terminarReunion())
   iniciarAvisosNotch()
   initPedidosPestana()
   iniciarResumenVisible()
@@ -196,6 +254,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearTimeout(capturaTimer)
+  clearTimeout(guiaTimer)
+  clearTimeout(blurTimer)
   clearTimeout(guardadaTimer)
   clearTimeout(confirmacionTimer)
   document.documentElement.classList.remove('notch')
@@ -250,7 +310,14 @@ watch(
 </script>
 
 <template>
-  <NotchPill :modo="modo" :foco="foco" :brillo="brilloPill" :pendientes="pendientes" @alternar="onAlternar">
+  <NotchPill
+    :modo="modo"
+    :foco="foco"
+    :brillo="brilloPill"
+    :pendientes="pendientes"
+    :escuchando="escuchando"
+    @alternar="onAlternar"
+  >
     <template #cara>
       <span ref="marca" class="mark-wrap">
         <LogoPanal
@@ -313,12 +380,21 @@ watch(
       <NotchNotas v-else-if="capturaVisible" :key="capturaClave" :anotar="false" @pointerdown="onAvisoPointerDown">
         <NotchCaptura @guardada="onNotaGuardada" @cerrar="cerrarNotas" />
       </NotchNotas>
+      <NotchReunion v-else-if="auth === 'ready' && modo === 'reunion'" @pointerdown="onAvisoPointerDown" />
+      <NotchGuia
+        v-else-if="auth === 'ready' && guiaVisible"
+        :saliendo="modo !== 'guia'"
+        @pointerdown="onAvisoPointerDown"
+        @cerrar="onCerrarGuia"
+      />
       <NotchPanel
         v-else-if="auth === 'ready'"
         :grupos="grupos"
         :now="now"
+        :reunion-disponible="pcNudoActivo"
         @abrir-sesion="abrirSesion"
         @abrir-colmena="abrirColmena"
+        @abrir-reunion="abrirReunion"
       />
     </template>
   </NotchPill>
@@ -340,6 +416,15 @@ html.notch body::after {
 }
 html.notch .fx-layer {
   display: none;
+}
+/* Regla base: todo lo clicable del notch muestra la manito. Con :where no pesa nada,
+   así cada componente puede pedir otro cursor (por ejemplo, una fila que no se abre). */
+:where(html.notch)
+  :where(button, [role='button'], a[href], summary, label[for], select, input[type='checkbox'], input[type='radio']):not(
+    :disabled,
+    [aria-disabled='true']
+  ) {
+  cursor: pointer;
 }
 </style>
 

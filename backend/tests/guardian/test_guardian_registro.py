@@ -94,3 +94,17 @@ def test_modos_por_conversacion_persisten_con_tope_y_validan(tmp_path):
     for i in range(mod.MAX_MODOS_CLAUDE + 5):
         r2.recordar_modo_claude(f"x{i}", "default")
     assert len(r2.modos_claude) == mod.MAX_MODOS_CLAUDE and r2.modo_de_claude("c1") is None
+
+
+def test_resume_de_copiloto_mantiene_el_perfil(tmp_path):
+    ruta = tmp_path / "registro.json"
+    r = Registro(ruta)
+    e = r.nuevo_espacio("Esp", "/cwd")
+    l = r.nueva_linea(e.id, "Lin")
+    s = r.nueva_sesion(l.id, "Ses", "/cwd", "claude", "00000000-0000-0000-0000-000000000001")
+    r.actualizar_sesion(s.id, modo_permisos="copiloto")
+    r.recordar_modo_claude("c1", "copiloto")
+    r2 = Registro(ruta)
+    r2.cargar()
+    assert r2.sesiones[s.id].modo_permisos == "copiloto"
+    assert r2.modo_de_claude("c1") == "copiloto"

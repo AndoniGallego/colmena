@@ -342,11 +342,21 @@ defineExpose({ entrar, reveal, altoMax })
   scale: var(--press-scale);
 }
 .b.auto {
+  position: relative;
+}
+.b.auto::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 14px -2px var(--accent);
+  opacity: 0;
+  pointer-events: none;
   animation: fl-auto 1.4s ease-in-out infinite;
 }
-:root[data-motion='soft'] .b.auto { animation: none; }
+:root[data-motion='soft'] .b.auto::after { animation: none; }
 @keyframes fl-auto {
-  50% { box-shadow: inset 0 0 0 1px var(--accent-line), 0 0 14px -2px var(--accent); }
+  50% { opacity: 1; }
 }
 @media (hover: hover) {
   .b:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }

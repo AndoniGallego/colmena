@@ -170,6 +170,12 @@ describe('modo nueva tarea', () => {
     expect(armarCuerpoTarea(repo, 'Hacer', ' Mi tab ', ' feature/x ', 'nt1234567890')).toEqual({ id: 'nt1234567890', repo: '~/Proyectos/orq', tarea: 'Hacer', nombre: 'Mi tab', rama: 'feature/x' })
   })
 
+  it('armarCuerpoTarea manda el grupo elegido, así la tarea se abre en ese workspace', () => {
+    const repo = { ruta: '~/Proyectos/orq', nombre: 'orq', repo: true }
+    expect(armarCuerpoTarea(repo, 'Hacer', '', '', 'nt1234567890', '', 'w2')).toEqual({ id: 'nt1234567890', repo: '~/Proyectos/orq', tarea: 'Hacer', grupo: 'w2' })
+    expect(armarCuerpoTarea(repo, 'Hacer', '', '', 'nt1234567890', '', '')).not.toHaveProperty('grupo')
+  })
+
   it('validarTicket: vacío vale; forma de clave de Jira, en cualquier caja', () => {
     expect(validarTicket('')).toBe('')
     expect(validarTicket('  abc-123 ')).toBe('')
