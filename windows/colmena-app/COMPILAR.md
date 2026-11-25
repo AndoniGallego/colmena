@@ -2,6 +2,22 @@
 
 Guía para armar el instalador de la app de Windows de Colmena (notch y ventana Entornos) en una PC con Windows (PowerShell). Es opcional: Colmena funciona sin esta app.
 
+## Atajo: colmena.ps1
+
+Con las herramientas de los pasos 1 y 2 ya instaladas, `windows\scripts\colmena.ps1` hace por vos los pasos de bajar el ZIP, compilar e instalar (y, aparte, subirlo al repo público). El ZIP lo arma la notebook con `scripts/entregar.sh`.
+
+```powershell
+colmena.ps1 instalar    # baja el último ZIP, compila, cierra la app, instala en silencio y la abre
+colmena.ps1 publicar    # baja el ZIP y su mensaje, deja el repo público igual al ZIP, commit y push
+```
+
+- Hace falta `ssh`, `scp`, `git`, `node` y `cargo` en el PATH, y llegar a la notebook por la red de casa.
+- La primera vez pregunta la notebook (`usuario@dirección`), la carpeta de build (por defecto `C:\dev\colmena`), la carpeta del repo público (por defecto `colmena-publico` en tu carpeta de usuario) y la carpeta de entregas en la notebook (por defecto `~/Desktop`). Lo guarda en `.colmena-pc.json`, en tu carpeta de usuario, fuera del repo.
+- Corta en el primer error con un mensaje. `publicar` hace `git push` directo, sin pedir confirmación.
+- No corre los tests del núcleo (paso 4): si hace falta, corrélos a mano antes.
+
+Los pasos de abajo siguen valiendo para hacerlo a mano.
+
 ## 1. Build Tools de Visual Studio 2022
 
 Instalá las herramientas de compilación con la carga de trabajo de escritorio en C++ (trae MSVC y el SDK de Windows):
@@ -308,3 +324,18 @@ Marcá cuando pruebes cada ítem. Aviso: la app ya no trae una notebook por defe
 - [ ] **128.** Tocá **Terminar** en la ventana: se cierra sola, la reunión se guarda en la Biblioteca y no quedó texto sin mandar. Lo mismo con "Reunión: dejar de escuchar" de la bandeja.
 - [ ] **129.** Con una reunión en curso, compartí pantalla en una videollamada: la ventana "Reunión" no se ve en lo compartido (igual que el notch). Si prendés "se ve al compartir" en la bandeja, sí se ve.
 - [ ] **130.** Con los Subtítulos en vivo cerrados, tocá **Escuchar**: mientras Windows los abre, la ventana "Reunión" no muestra "Sin subtítulos" ni "No encuentro los subtítulos"; cuando aparecen, la lectura arranca en un segundo. Si los cerrás a mano durante la reunión, el aviso sí aparece.
+
+Ítems 131 a 135: la marca de la guía paso a paso se esconde cuando otra ventana pasa al frente.
+
+- [ ] **131.** Con una guía en curso (Ctrl + Alt + V) y la marca, la abejita y el globo a la vista, hacé Alt + Tab a otra aplicación: la marca, la abejita y el globo desaparecen y no quedan dibujados sobre la ventana nueva. La guía no termina.
+- [ ] **132.** Siguiendo el 131, volvé con Alt + Tab a la ventana marcada: la marca, la abejita y el globo reaparecen sobre el mismo control.
+- [ ] **133.** Con la marca a la vista, abrí un menú o desplegable de la ventana marcada (por ejemplo el menú de tres puntos de Chrome): la marca, la abejita y el globo siguen a la vista.
+- [ ] **134.** Alt + Tab a otra aplicación, volvé a la ventana marcada y movela de lugar: la marca se reacomoda sobre el control en la posición nueva.
+- [ ] **135.** Con la marca escondida por un Alt + Tab, terminá la guía desde el notch o con el atajo, o hacé que el paso siga con Listo en el ayudante: la guía termina y al volver a la ventana no reaparece ninguna marca.
+- [ ] **136.** Empezá una reunión con los Subtítulos en vivo CERRADOS (los abre Colmena). Hablá 1 minuto: la ventana "Reunión" muestra texto y líneas, y al terminar el resumen guarda la conversación.
+- [ ] **137.** Con los Subtítulos en vivo en «Superpuesto en la pantalla» (rueda de ajustes de la cajita → Posición), tocá **Escuchar**: la cajita desaparece de la pantalla y de la barra de tareas. Compartí la pantalla entera en Meet: no se ve. Hablá: las líneas siguen llegando.
+- [ ] **138.** Durante esa reunión, apretá Windows + Ctrl + L (cierra Subtítulos) y de nuevo Windows + Ctrl + L (los abre): la cajita queda visible, Colmena no la vuelve a esconder y las líneas siguen llegando. Con Subtítulos acoplados (caso 139), pasalos a «Superpuesto» y reabrilos igual: ahí sí se esconde y el aviso se va.
+- [ ] **139.** Con los Subtítulos acoplados arriba, tocá **Escuchar**: la cajita no se esconde y el notch muestra «Poné Subtítulos en "Superpuesto en la pantalla" para que no se vea al compartir».
+- [ ] **140.** Abrí vos los Subtítulos (en «Superpuesto»), tocá **Escuchar** y después **Terminar**: la cajita vuelve a quedar visible.
+- [ ] **141.** Con la cajita escondida en una reunión, cerrá Colmena desde el Administrador de tareas y volvé a abrirla: la cajita aparece de nuevo.
+- [ ] **142.** Igual que el 139 pero con los Subtítulos acoplados abajo (quedan encima de la barra de tareas): tampoco se esconde y sale el mismo aviso.

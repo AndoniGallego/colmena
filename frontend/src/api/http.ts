@@ -8,7 +8,7 @@ import { normalizeClaudeUso } from '../lib/usoClaude'
 import { extFor } from '../lib/voz'
 import { tracked } from '../lib/update'
 import { deviceId } from '../lib/device'
-import { ApiError, type Api, type CategoriaPermiso, type CloseBlocker, type ConnectionState, type LimpiezaHandlers, type RegistroPermiso, type SubscribeOpts } from './types'
+import { ApiError, type Api, type CategoriaPermiso, type CloseBlocker, type ConfianzaPreparar, type PrepararResumen, type ConnectionState, type LimpiezaHandlers, type RegistroPermiso, type SubscribeOpts } from './types'
 
 let mirando: string | null = null
 let reportNow: (() => void) | null = null
@@ -20,10 +20,13 @@ export function informarMirando(id: string | null) {
   reportNow?.()
 }
 
-async function errorBody(res: Response): Promise<{ detail: string; bloqueantes: CloseBlocker[]; sinCuerpo: boolean }> {
+async function errorBody(res: Response): Promise<{ detail: string; bloqueantes: CloseBlocker[]; sinCuerpo: boolean; codigo?: string; confianza?: ConfianzaPreparar }> {
   try {
     const body = await res.clone().json()
-    if (typeof body?.detail === 'string') return { detail: body.detail, bloqueantes: normalizeBlockers(body.bloqueantes), sinCuerpo: false }
+    if (typeof body?.detail === 'string') {
+      const conf = body.codigo === 'requiere_confianza' && body.confianza && typeof body.confianza === 'object' ? body.confianza : undefined
+      return { detail: body.detail, bloqueantes: normalizeBlockers(body.bloqueantes), sinCuerpo: false, ...(conf ? { codigo: 'requiere_confianza', confianza: normalizarConfianza(conf) } : {}) }
+    }
   } catch {
     /* not json */
   }
@@ -39,13 +42,44 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   const res = await (init.method && init.method !== 'GET' ? tracked(send) : send)
   if (!res.ok) {
     const ra = Number(res.headers.get('Retry-After'))
-    const { detail, bloqueantes, sinCuerpo } = await errorBody(res)
-    throw new ApiError(res.status, detail, Number.isFinite(ra) && ra > 0 ? ra : null, bloqueantes, sinCuerpo)
+    const { detail, bloqueantes, sinCuerpo, codigo, confianza } = await errorBody(res)
+    throw new ApiError(res.status, detail, Number.isFinite(ra) && ra > 0 ? ra : null, bloqueantes, sinCuerpo, codigo, confianza)
   }
   return res
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
+
+function normalizarConfianza(c: Record<string, unknown>): ConfianzaPreparar {
+  const o = (v: unknown) => (typeof v === 'string' ? v : null)
+  return {
+    repo: str(c.repo),
+    base: str(c.base),
+    origen: str(c.origen),
+    setup_toml: str(c.setup_toml),
+    setup_sha256: str(c.setup_sha256),
+    script: o(c.script),
+    script_contenido: o(c.script_contenido),
+    script_sha256: o(c.script_sha256),
+    copiar: Array.isArray(c.copiar) ? c.copiar.filter((x): x is string => typeof x === 'string') : [],
+    puertos: typeof c.puertos === 'number' ? c.puertos : 0,
+    docker: c.docker === true,
+  }
+}
+
+function normalizarPreparar(p: unknown): PrepararResumen | undefined {
+  if (!p || typeof p !== 'object') return undefined
+  const d = p as Record<string, unknown>
+  const lista = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  return {
+    puerto: typeof d.puerto === 'number' ? d.puerto : null,
+    puertos: typeof d.puertos === 'number' ? d.puertos : 0,
+    copiados: lista(d.copiados),
+    omitidos: lista(d.omitidos),
+    ...(typeof d.setup_pane_id === 'string' ? { setup_pane_id: d.setup_pane_id } : {}),
+    ...(d.puertos_fijos === true ? { puertos_fijos: true } : {}),
+  }
+}
 
 export function normalizePregunta(raw: unknown): PreguntaSesion {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
@@ -145,7 +179,7 @@ function uploadWithProgress(file: File, onProgress: (fraction: number) => void, 
 const PRESENCE_RENEW_MS = 60_000
 
 /** Eventos SSE del copiloto de reuniones. */
-const EVENTOS_REUNION = ['reunion-estado', 'reunion-linea', 'reunion-respuesta', 'reunion-descartada', 'reunion-anotada', 'reunion-guardada'] as const
+const EVENTOS_REUNION = ['reunion-estado', 'reunion-linea', 'reunion-respuesta', 'reunion-descartada', 'reunion-anotada', 'reunion-memoria', 'reunion-guardada'] as const
 const STALE_MS = 40_000
 const RESUME_MS = 8_000
 
@@ -186,6 +220,14 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
           return { orden, pestanas, plegadas, silenciadas }
         }),
       ),
+    getAtajos: () =>
+      guard(
+        json('/api/atajos').then((raw) => {
+          const a = raw && typeof raw === 'object' ? (raw as { atajos?: unknown }).atajos : null
+          return a && typeof a === 'object' && !Array.isArray(a) ? (a as Record<string, string>) : {}
+        }),
+      ),
+    setAtajos: (atajos) => guard(request('/api/atajos', { method: 'PUT', body: JSON.stringify({ atajos }) }).then(() => undefined)),
     setOrdenTablero: (orden) => guard(request('/api/tablero/orden', { method: 'PUT', body: JSON.stringify({ orden }) }).then(() => undefined)),
     setOrdenPestanas: (grupo, orden) =>
       guard(request('/api/tablero/orden-pestanas', { method: 'PUT', body: JSON.stringify({ grupo, orden }) }).then(() => undefined)),
@@ -711,7 +753,12 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
     async postTerminalesNuevaTarea(body) {
       const d = await guard(post('/api/terminales/nueva-tarea', body).then((r) => r.json()))
       if (!d?.ok || typeof d.pane_id !== 'string' || typeof d.ruta !== 'string' || typeof d.rama !== 'string') throw new ApiError(502, 'Respuesta rara del servidor')
-      return { ok: true as const, pane_id: d.pane_id, ruta: d.ruta, rama: d.rama, ...(d.pegado === false ? { pegado: false as const } : {}) }
+      return { ok: true as const, pane_id: d.pane_id, ruta: d.ruta, rama: d.rama, ...(d.pegado === false ? { pegado: false as const } : {}), ...(normalizarPreparar(d.preparar) ? { preparar: normalizarPreparar(d.preparar) } : {}) }
+    },
+    async postTerminalesNuevaTareaConfiar(body) {
+      const d = await guard(post('/api/terminales/nueva-tarea/confiar', body).then((r) => r.json()))
+      if (!d?.ok) throw new ApiError(502, 'Respuesta rara del servidor')
+      return { ok: true as const }
     },
     async postBorrarCopia(ruta) {
       const d = await guard(post('/api/terminales/nueva-tarea/borrar-copia', { ruta }).then((r) => r.json()))

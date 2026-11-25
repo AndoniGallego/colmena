@@ -13,6 +13,7 @@ vi.mock('../../state/guia', async () => {
   const real = await vi.importActual<typeof import('../../state/guia')>('../../state/guia').catch(() => null)
   return {
     guia: ref({ estado: 'vacia', guia: null, paso: 0, total: 0, texto: '', sigue: false }),
+    preguntaGuia: ref(''),
     guiaActiva: real?.guiaActiva,
     seguirViva: real?.seguirViva,
     puedeSiguiente: real?.puedeSiguiente,
@@ -25,7 +26,7 @@ vi.mock('../../state/guia', async () => {
 vi.mock('../../state/notch', () => ({ modo: { value: 'cerrado' } }))
 vi.mock('../../state/reunion', () => ({ reunion: { value: {} }, enCurso: () => false }))
 
-const { guia } = await import('../../state/guia')
+const { guia, preguntaGuia } = await import('../../state/guia')
 const { default: NotchGuia } = await import('./NotchGuia.vue')
 const fuente = (await import('./NotchGuia.vue?raw')).default as string
 
@@ -40,6 +41,19 @@ describe('NotchGuia', () => {
     h.siguiente.mockClear()
     h.terminar.mockClear()
     poner({})
+    preguntaGuia.value = ''
+  })
+
+  it('muestra lo que le mandaste mientras dura la guía', () => {
+    preguntaGuia.value = 'Cómo comparto la pantalla'
+    poner({ estado: 'paso', guia: 1, paso: 1, total: 2, texto: 'Tocá Compartir' })
+    const w = mount(NotchGuia)
+    expect(w.get('.pregunta').text()).toContain('Cómo comparto la pantalla')
+  })
+
+  it('sin pregunta no muestra la línea', () => {
+    const w = mount(NotchGuia)
+    expect(w.find('.pregunta').exists()).toBe(false)
   })
 
   it('Enter con texto llama a pedir y limpia el campo', async () => {

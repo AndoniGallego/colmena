@@ -1,3 +1,5 @@
+import { coincideCtrlOCmd } from './teclas'
+
 export type CarpetaItem = { ruta: string; nombre: string; repo?: boolean }
 
 export type GrupoItem = { id: string; nombre: string; carpeta: string | null }
@@ -165,6 +167,6 @@ export function armarCuerpoTarea(repo: CarpetaItem, tarea: string, nombre: strin
   return body
 }
 
-export function esAtajoEnviar(e: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
-  return e.key === 'Enter' && (e.ctrlKey || e.metaKey)
+export function esAtajoEnviar(e: { key: string; ctrlKey: boolean; metaKey: boolean; altKey?: boolean; shiftKey?: boolean }, combo: string = 'mod+enter'): boolean {
+  return coincideCtrlOCmd(e, combo)
 }

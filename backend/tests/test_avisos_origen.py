@@ -281,3 +281,24 @@ def test_aviso_libre_descarta_sin_destino_o_texto_largo():
     a.aviso.encolar({"session_id": SID}, "x" * (MAX_TEXT + 1))
     a.aviso.encolar({"session_id": SID}, "")
     assert a.tareas == []
+
+
+# --- MCP (CA14) ---
+
+def test_descarte_de_un_pedido_por_mcp_no_avisa():
+    a = Armado("idle")
+    a.avisos.al_descarte({**ORIGEN_SESION, "via": "mcp"}, "fila_llena")
+    a.correr()
+    assert a.enviados == []
+
+
+def test_descarte_de_la_marca_sigue_avisando_con_el_store():
+    from orquestador.pedidos_pestana import PedidosPestanaStore
+
+    a = Armado("idle")
+    store = PedidosPestanaStore()
+    store.on_descarte(a.avisos.al_descarte)
+    store.descartar(ORIGEN_SESION, "carpeta_colmena")
+    store.descartar({**ORIGEN_SESION, "via": "mcp"}, "carpeta_colmena")
+    a.correr()
+    assert len(a.enviados) == 1

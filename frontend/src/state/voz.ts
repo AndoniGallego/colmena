@@ -2,6 +2,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Ref }
 import type { VozEstado } from '../api/types'
 import { createVozRecorder, type LevelMeter, type VozSnapshot } from '../lib/vozRecorder'
 import { insertAtCursor, isIOS, isVozShortcut } from '../lib/voz'
+import { capturandoAtajo, comboDe } from './atajosEstado'
 import { getVozEstado, transcribirVoz } from './app'
 
 export const vozEstado = ref<VozEstado | null>(null)
@@ -111,7 +112,7 @@ export function useVozInput(ta: Ref<HTMLTextAreaElement | null>, text: Ref<strin
   onBeforeUnmount(() => document.removeEventListener('keydown', onEsc, true))
 
   function onKeydown(e: KeyboardEvent) {
-    if (!isVozShortcut(e) || e.isComposing || !voz.available.value) return
+    if (capturandoAtajo.value || !isVozShortcut(e, comboDe('dictar')) || e.isComposing || !voz.available.value) return
     e.preventDefault()
     voz.toggle()
   }

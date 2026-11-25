@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { detalleTokens, itemsDesglose, limiteEstado, normalizeClaudeUso, pctLabel, reinicioLabel, type UsoFila } from './usoClaude'
+import { detalleTokens, fmtUsd, itemsDesglose, limiteEstado, normalizeClaudeUso, pctLabel, reinicioLabel, usoHoyLine, type UsoFila } from './usoClaude'
 
 const tk = (total: number) => ({ input: 1, cache_write: 2, cache_read: total - 4, output: 1, mensajes: 3, total })
-const fila = (id: string, total: number, tipo: UsoFila['tipo'] = ''): UsoFila => ({ id, nombre: id.toUpperCase(), detalle: '', tipo, ...tk(total) })
+const fila = (id: string, total: number, tipo: UsoFila['tipo'] = ''): UsoFila => ({ id, nombre: id.toUpperCase(), detalle: '', tipo, usd: null, usdParcial: false, ...tk(total) })
 
 describe('normalizeClaudeUso', () => {
   it('rellena lo que falta y descarta basura', () => {
@@ -14,13 +14,27 @@ describe('normalizeClaudeUso', () => {
     })
     expect(u.totales.hoy.total).toBe(5)
     expect(u.totales['7d'].total).toBe(0)
-    expect(u.totales['30d']).toEqual({ input: 0, cache_write: 0, cache_read: 0, output: 0, mensajes: 0, total: 0 })
+    expect(u.totales['30d']).toEqual({ input: 0, cache_write: 0, cache_read: 0, output: 0, mensajes: 0, total: 0, usd: null, usdParcial: false })
     expect(u.historial.map((d) => d.fecha)).toEqual(['2026-05-01'])
-    expect(u.desglose.hoy.sesiones).toEqual([{ id: 's1', nombre: 'Login', detalle: '', tipo: '', input: 0, cache_write: 0, cache_read: 0, output: 0, mensajes: 0, total: 9 }])
+    expect(u.desglose.hoy.sesiones).toEqual([{ id: 's1', nombre: 'Login', detalle: '', tipo: '', usd: null, usdParcial: false, input: 0, cache_write: 0, cache_read: 0, output: 0, mensajes: 0, total: 9 }])
     expect(u.desglose.hoy.modelos).toEqual([])
     expect(u.desglose['30d'].proyectos).toEqual([])
     expect(u.limites?.fiveHour).toEqual({ pct: 100, resetsAt: '2026-05-01T10:00:00Z', vencido: false })
     expect(u.limites?.sevenDay).toBeNull()
+  })
+
+  it('conserva el usd y pone null si falta o no es un número válido', () => {
+    const u = normalizeClaudeUso({
+      totales: { hoy: { total: 5, usd: 4.1, usd_parcial: true }, '7d': { total: 5, usd: 'mucho' }, '30d': { total: 5, usd: -2 } },
+      historial: [{ fecha: '2026-05-01', total: 10, usd: 1.5 }],
+      desglose: { hoy: { sesiones: [{ id: 'a', total: 1, usd: 0 }, { id: 'b', total: 1, usd: null }, { id: 'c', total: 1 }] } },
+    })
+    expect(u.totales.hoy.usd).toBe(4.1)
+    expect(u.totales.hoy.usdParcial).toBe(true)
+    expect(u.totales['7d'].usd).toBeNull()
+    expect(u.totales['30d'].usd).toBeNull()
+    expect(u.historial[0].usd).toBe(1.5)
+    expect(u.desglose.hoy.sesiones.map((f) => f.usd)).toEqual([0, null, null])
   })
 
   it('sin límites del plan no inventa nada', () => {
@@ -73,5 +87,22 @@ describe('detalles', () => {
     expect(pctLabel(0, 0)).toBe('0')
     expect(pctLabel(33.6, 3)).toBe('34')
     expect([limiteEstado(10), limiteEstado(80), limiteEstado(97)]).toEqual(['ok', 'aviso', 'tope'])
+  })
+})
+
+describe('formato de dólares', () => {
+  const usd = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD' }).format(n)
+  it('usa Intl en USD con coma decimal y deja guion si no hay precio', () => {
+    expect(fmtUsd(4.1)).toBe(usd(4.1))
+    expect(fmtUsd(4.1)).toContain('4,10')
+    expect(fmtUsd(0)).toBe(usd(0))
+    expect(fmtUsd(null)).toBe('—')
+  })
+  it('usoHoyLine: tokens y dólares de hoy, o solo tokens sin precio, o nada sin uso', () => {
+    expect(usoHoyLine({ total: 312_000, usd: 4.1 })).toBe(`312 k tok · ≈ ${usd(4.1)} hoy`)
+    expect(usoHoyLine({ total: 312_000, usd: null })).toBe('312 k tok · ≈ — hoy')
+    expect(usoHoyLine({ total: 0, usd: 0 })).toBe('')
+    expect(usoHoyLine(null)).toBe('')
+    expect(usoHoyLine(undefined)).toBe('')
   })
 })

@@ -81,6 +81,18 @@ describe('TopBar', () => {
     expect(html).toContain('aria-label="Tareas programadas"')
   })
 
+  it('los íconos de escritorio no llevan title y sí la descripción accesible', async () => {
+    const html = await renderBar({ compact: false })
+    for (const n of ['Ajustes', 'Entornos', 'Kit', 'Tareas programadas', 'Limpiar sesiones', 'Salir de Colmena', 'Tema oscuro']) {
+      const tag = html.match(new RegExp(`<button[^>]*aria-label="${n}"[^>]*>`))?.[0] ?? ''
+      expect(tag, n).not.toBe('')
+      expect(tag, n).not.toContain('title=')
+      expect(tag, n).toContain('aria-description=')
+    }
+    expect(html).toMatch(/class="conn"[^>]*aria-description="Conexión en vivo con la notebook"/)
+    expect(html).toContain('aria-description="Pedidos que corren solos a su hora"')
+  })
+
   it('en celu (compact) mantiene el menú de puntos', async () => {
     const html = await renderBar({ compact: true })
     expect(html).toContain('aria-label="Más opciones"')

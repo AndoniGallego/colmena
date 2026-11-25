@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fecha": "2026-11-25",
+  "fuente": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "unidad": "USD por millón de tokens",
+  "modelos": {
+    "claude-opus-5-5":   {"input": 4,    "output": 20,  "cache_write_5m": 5,     "cache_write_1h": 8,   "cache_read": 0.20},
+    "claude-sonnet-5-5": {"input": 2,    "output": 10,  "cache_write_5m": 2.5,   "cache_write_1h": 4,   "cache_read": 0.10},
+    "claude-haiku-5-5":  {"input": 0.10, "output": 0.5, "cache_write_5m": 0.125, "cache_write_1h": 0.2, "cache_read": 0.01},
+    "claude-fable-5-2":  {"input": 8,    "output": 40,  "cache_write_5m": 10,    "cache_write_1h": 16,  "cache_read": 0.20},
+    "claude-fable-5-1":  {"input": 10,   "output": 50,  "cache_write_5m": 12.5,  "cache_write_1h": 20,  "cache_read": 0.25},
+    "<synthetic>":       {"input": 0,    "output": 0,   "cache_write_5m": 0,     "cache_write_1h": 0,   "cache_read": 0}
+  },
+  "alias": {
+    "opus": "claude-opus-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "haiku": "claude-haiku-5-5",
+    "fable": "claude-fable-5-2"
+  }
+}

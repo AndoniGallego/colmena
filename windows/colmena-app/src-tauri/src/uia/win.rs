@@ -9,6 +9,7 @@ use colmena_nucleo::nudo::controles::{
 };
 use colmena_nucleo::nudo::coords::a_overlay;
 use colmena_nucleo::nudo::orden::foto_vigente;
+use colmena_nucleo::nudo::visible::decidir;
 use colmena_nucleo::nudo::pc::{
     codigo_de_error, cuenta_como_expandido, es_efimera, popups_de_la_guardada, rect_utilizable, ventana_de_sistema,
     Guardada, VentanaListada, VentanaNueva,
@@ -307,6 +308,10 @@ fn es_efimera_de_la_guardada(hwnd: HWND) -> bool {
     es_efimera(&datos_de(hwnd, &clase), Some(g))
 }
 
+pub(super) fn guardada_actual() -> Option<Guardada> {
+    guardada()
+}
+
 fn guardada() -> Option<Guardada> {
     let guardada = hwnd_de(VIGIA.get()?);
     if guardada.0.is_null() {
@@ -381,6 +386,23 @@ fn hwnd_de(vigia: &AtomicIsize) -> HWND {
     HWND(vigia.load(Ordering::SeqCst) as *mut core::ffi::c_void)
 }
 
+/// La marca, la abejita y el globo solo se ven con la ventana marcada al frente (la guía no termina).
+fn esconder_o_mostrar_marca(hwnd: HWND) {
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let clase = clase_de(hwnd);
+    let es_colmena = pid_de(hwnd) == std::process::id();
+    let cambio = decidir(
+        crate::nudo::ventana_marcada(app),
+        hwnd.0 as isize,
+        &datos_de(hwnd, &clase),
+        es_colmena,
+        crate::nudo::marca_escondida(app),
+    );
+    crate::nudo::aplicar_cambio(app, cambio);
+}
+
 unsafe extern "system" fn al_cambiar_frente(
     _hook: HWINEVENTHOOK,
     _evento: u32,
@@ -396,6 +418,8 @@ unsafe extern "system" fn al_cambiar_frente(
     }
     // Un menú o popup puede haberse puesto sobre el notch y el globo.
     reafirmar_arriba();
+    // Antes de recordar la ventana nueva: la marca sigue a la ventana marcada, no a la última ajena.
+    esconder_o_mostrar_marca(hwnd);
     if es_efimera_de_la_guardada(hwnd) {
         EFIMERA.store(hwnd.0 as isize, Ordering::SeqCst);
         return;

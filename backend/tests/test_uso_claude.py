@@ -1,5 +1,7 @@
 import json
 import os
+
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from orquestador.uso import UsoStore
@@ -14,11 +16,14 @@ def ts(days_back=0, hour=12):
     return (NOW - timedelta(days=days_back)).replace(hour=hour).isoformat().replace("+00:00", "Z")
 
 
-def asst(mid, inp=0, out=0, cw=0, cr=0, model="claude-opus-5-5", when=None, sid=S1, cwd="/home/x/proyA", side=False):
-    return {"type": "assistant", "isSidechain": side, "sessionId": sid, "cwd": cwd, "timestamp": when or ts(),
+def asst(mid, inp=0, out=0, cw=0, cr=0, model="claude-opus-5-5", when=None, sid=S1, cwd="/home/x/proyA", side=False, cw1h=None):
+    entry = {"type": "assistant", "isSidechain": side, "sessionId": sid, "cwd": cwd, "timestamp": when or ts(),
             "requestId": "req-" + mid,
             "message": {"id": mid, "model": model, "usage": {"input_tokens": inp, "output_tokens": out,
                                                              "cache_creation_input_tokens": cw, "cache_read_input_tokens": cr}}}
+    if cw1h is not None:
+        entry["message"]["usage"]["cache_creation"] = {"ephemeral_1h_input_tokens": cw1h, "ephemeral_5m_input_tokens": cw - cw1h}
+    return entry
 
 
 def write(path, entries, extra=""):
@@ -195,3 +200,125 @@ def test_tokens_de_hoy_por_sesion(tmp_path):
     assert u.tokens_de_hoy("") == 0
     assert u.tokens_de_hoy(S2) == 0
     assert u.tokens_de_hoy(S1) == 10 + 2 + 1 + 3 + 5
+
+
+M = 1_000_000
+
+
+def test_costo_usa_precio_1h_para_cache_write(tmp_path):
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=M, out=M, cw=2 * M, cw1h=3 * M // 2, cr=10 * M)])
+    s = svc(tmp_path).summary()
+    # Opus 5.5: entrada 4, escritura 5m 5, escritura 1h 8, lectura 0.20, salida 20 (USD por millón)
+    assert s["totales"]["hoy"]["usd"] == pytest.approx(4 + 0.5 * 5 + 1.5 * 8 + 10 * 0.2 + 20)
+    assert s["desglose"]["hoy"]["sesiones"][0]["usd"] == pytest.approx(40.5)
+    assert s["desglose"]["hoy"]["modelos"][0]["usd"] == pytest.approx(40.5)
+    assert s["historial"][-1]["usd"] == pytest.approx(40.5)
+
+
+def test_cache_write_sin_desglose_cuenta_como_5m(tmp_path):
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", cw=M)])
+    assert svc(tmp_path).summary()["totales"]["hoy"]["usd"] == pytest.approx(5)
+
+
+def test_modelo_desconocido_usd_none(tmp_path):
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=M, model="claude-nuevo-9")])
+    write(main_file(tmp_path, sid=S2), [asst("m2", inp=M, sid=S2)])
+    s = svc(tmp_path).summary()
+    modelos = {m["id"]: m["usd"] for m in s["desglose"]["hoy"]["modelos"]}
+    assert modelos == {"claude-nuevo-9": None, "claude-opus-5-5": pytest.approx(4)}
+    assert s["totales"]["hoy"]["usd"] == pytest.approx(4) and s["totales"]["hoy"]["usd_parcial"] is True
+    ses = {f["id"]: f["usd"] for f in s["desglose"]["hoy"]["sesiones"]}
+    assert ses[S1] is None and ses[S2] == pytest.approx(4)
+
+
+def test_synthetic_cuesta_cero(tmp_path):
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=M, model="<synthetic>")])
+    s = svc(tmp_path).summary()
+    assert s["totales"]["hoy"]["usd"] == 0 and s["totales"]["hoy"]["usd_parcial"] is False
+
+
+def test_cache_v1_se_descarta_y_relee(tmp_path):
+    (tmp_path / "data").mkdir()
+    path = main_file(tmp_path)
+    write(path, [asst("m1", inp=M, cw=M, cw1h=M)])
+    hoy = NOW.astimezone().date().isoformat()
+    st = path.stat()
+    viejo = {"v": 1, "files": {str(path): {"inode": st.st_ino, "size": st.st_size, "mtime_ns": st.st_mtime_ns,
+                                           "offset": st.st_size, "session": S1, "sub": False, "cwd": "/home/x/proyA", "title": "",
+                                           "days": {hoy: {"claude-opus-5-5": [1, 1, 0, 0, 1]}}, "tail": {}}}}
+    (tmp_path / "data" / "uso-claude.json").write_text(json.dumps(viejo), encoding="utf-8")
+    u = svc(tmp_path)
+    assert u.files == {}
+    tot = u.summary()["totales"]["hoy"]
+    assert tot["input"] == M and tot["usd"] == pytest.approx(4 + 8)
+    assert json.loads((tmp_path / "data" / "uso-claude.json").read_text())["v"] == 2
+
+
+def test_precio_nuevo_es_retroactivo(tmp_path):
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=M)])
+    u = svc(tmp_path)
+    assert u.summary()["totales"]["hoy"]["usd"] == pytest.approx(4)
+    u.precios.modelos["claude-opus-5-5"]["input"] = 10.0
+    assert u.summary()["totales"]["hoy"]["usd"] == pytest.approx(10)
+
+
+def test_override_de_precio_y_alias(tmp_path):
+    from orquestador.precios import Precios
+    base = {"input": 1, "output": 1, "cache_write_5m": 1, "cache_write_1h": 1, "cache_read": 1}
+    p = Precios(override={"claude-opus-5-5": base})
+    assert p.usd("claude-opus-5-5", [M, 0, 0, 0, 1, 0]) == pytest.approx(1)
+    assert Precios().usd("opus", [M, 0, 0, 0, 1, 0]) == pytest.approx(4)
+    assert Precios().usd("claude-opus-5-5-20261001", [M, 0, 0, 0, 1, 0]) == pytest.approx(4)
+    assert Precios().usd("otro", [M, 0, 0, 0, 1, 0]) is None
+
+
+def test_por_sesion_hoy(tmp_path):
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=M, out=1), asst("m0", inp=5, when=ts(3))])
+    write(tmp_path / "projects" / "-home-x-proyA" / S1 / "subagents" / "agent-a1.jsonl",
+          [asst("s1", inp=M, side=True, model="claude-sonnet-5-5")])
+    write(main_file(tmp_path, sid=S2), [asst("x", inp=7, sid=S2, model="claude-nuevo-9")])
+    u = svc(tmp_path)
+    r = u.por_sesion_hoy()
+    assert r[S1]["total"] == 2 * M + 1 and r[S1]["usd"] == pytest.approx(4 + 2 + 20 / M)
+    assert r[S2] == {"total": 7, "usd": None}
+    assert "otra" not in r
+
+
+def test_por_sesion_hoy_sin_escanear_no_lee_ni_espera(tmp_path):
+    # El tablero lo pide en cada armado: no escanea (lo hace un loop aparte) ni espera a un escaneo en curso.
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=10)])
+    u = svc(tmp_path)
+    assert u.por_sesion_hoy(escanear=False) == {}
+    u.scan(force=True)
+    antes = u.por_sesion_hoy(escanear=False)
+    assert antes[S1]["total"] == 10
+    write(main_file(tmp_path, sid=S2), [asst("x", inp=7, sid=S2)])
+    with u._lock:
+        assert u.por_sesion_hoy(escanear=False) == antes
+
+
+def test_worktree_se_agrupa_bajo_repo(tmp_path):
+    repo = tmp_path / "repos" / "colmena"
+    gitdir = repo / ".git" / "worktrees" / "wt1"
+    gitdir.mkdir(parents=True)
+    (gitdir / "commondir").write_text("../..\n")
+    wt = tmp_path / "repos" / "colmena" / ".claude" / "worktrees" / "wt1"
+    wt.mkdir(parents=True)
+    (wt / ".git").write_text(f"gitdir: {gitdir}\n")
+    otro = tmp_path / "otro" / "wt-fuera"
+    otro.mkdir(parents=True)
+    (otro / ".git").write_text(f"gitdir: {gitdir}\n")
+    (tmp_path / "data").mkdir()
+    write(main_file(tmp_path), [asst("m1", inp=10, cwd=str(repo))])
+    write(main_file(tmp_path, sid=S2, proj="-wt"), [asst("m2", inp=5, sid=S2, cwd=str(wt))])
+    sid3 = "cccccccc-0000-0000-0000-000000000003"
+    write(main_file(tmp_path, sid=sid3, proj="-fuera"), [asst("m3", inp=2, sid=sid3, cwd=str(otro))])
+    proy = {f["id"]: f["total"] for f in svc(tmp_path).summary()["desglose"]["hoy"]["proyectos"]}
+    assert proy == {"colmena": 17}

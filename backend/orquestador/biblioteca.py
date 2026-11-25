@@ -33,6 +33,7 @@ MAX_ASSET = 20 * MB
 MAX_DIAGRAMA_BYTES = 64 * 1024
 MAX_REUNION_RAW_BYTES = 64 * 1024
 REUNION_TITULO_CHARS = 200
+REUNION_TEMA_CHARS = 200  # igual que reunion.TEMA_MAX
 REUNION_ITEM_CHARS = 400
 MAX_PRUEBAS_CASOS = 60
 PRUEBAS_RESULTADOS = ("ok", "falla", "omitida")
@@ -1522,6 +1523,7 @@ class Library:
         out["titulo"] = clip(datos.get("titulo"), REUNION_TITULO_CHARS)
         out["resumen"] = textos(datos.get("resumen"))
         out["pendientes"] = textos(datos.get("pendientes"))
+        out["tema"] = clip(datos.get("tema") if isinstance(datos.get("tema"), str) else "", REUNION_TEMA_CHARS)
         out["repos"] = [clip(x, REUNION_TITULO_CHARS) for x in (datos.get("repos") or []) if isinstance(x, str)][:20]
         tocadas = [t for t in map(tocada, datos.get("tocadas") or []) if t is not None]
         for t in tocadas:

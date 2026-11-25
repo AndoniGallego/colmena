@@ -2,8 +2,6 @@ import type { Aviso, Board, LibItem } from '../api/types'
 import { destinoDeAviso, etiquetaAviso, type AvisoDePieza } from './avisos'
 import { estadoEfectivo } from './fondo'
 
-export const ATAJO = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'
-
 export type GrupoId = 'reciente' | 'ir' | 'accion' | 'sesion' | 'tablero' | 'biblioteca' | 'aviso'
 
 export const GRUPOS: Record<GrupoId, string> = {

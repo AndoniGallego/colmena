@@ -93,8 +93,12 @@ class Guardian:
         vida_minima: float = 5.0,
         historial: int = 5000,
         reloj: Callable[[], float] | None = None,
+        mcp_config: Path | None = None,
+        claude_version: tuple | None = None,
     ) -> None:
         self._registro = registro
+        self._mcp_config = mcp_config
+        self._claude_version = claude_version
         self._ajustes = ajustes
         self._settings = settings
         self._entorno = dict(entorno)
@@ -232,9 +236,14 @@ class Guardian:
             codigo = rt.codigo if rt else None
             titulo = rt.pantalla.titulo if rt else ""
             pid = None
+            pid_claude = None
             cwd_fp = None
             if rt and rt.proceso and rt.proceso.vivo:
                 pid = rt.proceso.pid
+                # El proceso que lanzó el guardián: Claude mismo (argv_claude lo ejecuta directo). `pid` puede ser
+                # el primer plano (un Bash hijo); la identidad del canal MCP se compara contra este.
+                if ses.programa == "claude":
+                    pid_claude = rt.proceso.pid
                 fp = rt.proceso.primer_plano()
                 if fp.get("pid"):
                     pid = fp["pid"]
@@ -252,6 +261,8 @@ class Guardian:
                     "cwd_primer_plano": cwd_fp,
                     "titulo": titulo,
                     "pid": pid,
+                    "pid_claude": pid_claude,
+                    "modo": ses.modo_permisos if ses.modo_permisos in MODOS_INTERNOS else None,
                     "codigo": codigo,
                     "listo": rt.listo.is_set() if rt else False,
                 }
@@ -334,6 +345,8 @@ class Guardian:
             modo=rt.registro.modo_permisos,
             dirs_extra=rt.registro.dirs_extra if rt.registro.modo_permisos in MODOS_INTERNOS else None,
             entorno=self._entorno,
+            mcp_config=self._mcp_config,
+            claude_version=self._claude_version,
         )
         rt.pantalla = Pantalla(self._ajustes.columnas, self._ajustes.filas, self._historial)
         await self._lanzar(rt, argv, con_resume=resume is not None,

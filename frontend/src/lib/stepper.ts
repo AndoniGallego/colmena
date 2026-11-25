@@ -1,5 +1,6 @@
 import { groupReply, replyText, type Opciones } from './opciones'
 import { parseSegments } from './segments'
+import { coincide } from './teclas'
 
 export type Respuesta = { kind: 'opcion'; i: number } | { kind: 'texto'; text: string }
 
@@ -162,13 +163,14 @@ export interface KeyLike {
 }
 
 /** What a key does in the stepper; `typing` is true while the free-text field has focus. */
-export function stepperKey(e: KeyLike, typing: boolean): StepperKey | null {
-  if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return null
+export function stepperKey(e: KeyLike, typing: boolean, minimizar: string = 'm'): StepperKey | null {
+  if (e.isComposing) return null
+  if (!typing && coincide(e, minimizar)) return { type: 'minimize' }
+  if (e.ctrlKey || e.metaKey || e.altKey) return null
   if (e.key === 'Escape') return { type: 'escape' }
   if (e.key === 'Enter') return e.shiftKey ? null : { type: 'enter' }
   if (typing) return null
   if (/^[1-6]$/.test(e.key)) return { type: 'pick', i: Number(e.key) - 1 }
-  if (e.key === 'm' || e.key === 'M') return { type: 'minimize' }
   if (e.key === 'ArrowLeft' || e.key === 'Backspace') return { type: 'back' }
   if (e.key === 'ArrowRight') return { type: 'forward' }
   return null

@@ -6,6 +6,7 @@ export interface ReunionGuardada {
   fin: string
   duracion_s: number
   repos: string[]
+  tema: string
   motivo: 'terminada' | 'sin_pc' | 'interrumpida' | 'llena'
   resumen: string[]
   pendientes: string[]
@@ -69,6 +70,7 @@ export function toReunion(raw: unknown): ReunionGuardada | null {
     fin: fechaReunion(o.fin),
     duracion_s: dur,
     repos: lista(o.repos, MAX_REPOS, 80),
+    tema: txt(o.tema, 200),
     motivo: (MOTIVOS.includes(o.motivo as string) ? o.motivo : 'interrumpida') as ReunionGuardada['motivo'],
     resumen: lista(o.resumen, MAX_LISTA),
     pendientes: lista(o.pendientes, MAX_LISTA),

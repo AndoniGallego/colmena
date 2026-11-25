@@ -10,13 +10,14 @@ EVENTOS_ASYNC = (
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
     "Notification",
     "Stop",
 )
 TIMEOUT_ASYNC = 10
 SCRIPT = Path(__file__).with_name("colmena_gancho.py").resolve()
 
-_EVENTOS_CON_MATCHER = frozenset({"PreToolUse", "PostToolUse", "PermissionRequest"})
+_EVENTOS_CON_MATCHER = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"})
 
 
 def comando(script: Path, origen: str = "global", espera: int | None = None) -> str:

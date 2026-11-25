@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .mensaje import MensajeGancho
 
 _LOG = logging.getLogger(__name__)
+_EVENTOS_DETECTOR = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit"})
 
 
 class Enrutador:
@@ -23,11 +24,13 @@ class Enrutador:
         hub: BoardHub,
         *,
         post_tool_use=None,
+        al_evento=None,
     ) -> None:
         self.estados = estados
         self.permisos = permisos
         self.hub = hub
         self.post_tool_use = post_tool_use
+        self.al_evento = al_evento
 
     async def manejar(self, msg: MensajeGancho, conexion: Conexion) -> None:
         try:
@@ -38,6 +41,11 @@ class Enrutador:
                     self.post_tool_use(msg, pane)
                 except Exception as exc:
                     _LOG.warning("aviso de sesión falló: %s", type(exc).__name__)
+            if msg.evento in _EVENTOS_DETECTOR and self.al_evento is not None:
+                try:
+                    self.al_evento(msg, pane)
+                except Exception as exc:
+                    _LOG.warning("detector de trabas falló: %s", type(exc).__name__)
             if msg.evento != "PermissionRequest" and msg.ids.claude:
                 await self.permisos.senal(msg.ids.claude, msg.evento, msg.tool_use_id)
             pedido = None

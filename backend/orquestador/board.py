@@ -30,8 +30,21 @@ def build_board(snapshot: dict, digests: DigestService, self_pane_id: Optional[s
                 hidden: frozenset = frozenset(), contexto: Optional[ContextoService] = None,
                 hidden_workspaces: frozenset = frozenset(),
                 fondo: Optional[FondoService] = None,
-                interna: Optional[Callable[[str], bool]] = None) -> dict:
+                interna: Optional[Callable[[str], bool]] = None,
+                uso_hoy: Optional[Callable[[], dict]] = None) -> dict:
     snapshot = filtrar_snapshot(snapshot, interna)
+    uso_cache: list = []
+
+    def _uso(session_id: Optional[str]) -> Optional[dict]:
+        if uso_hoy is None or not session_id:
+            return None
+        if not uso_cache:
+            try:
+                uso_cache.append(uso_hoy() or {})
+            except Exception as exc:
+                log.warning("uso de hoy falló: %s", exc)
+                uso_cache.append({})
+        return uso_cache[0].get(session_id)
 
     def _agent_entry(agent: dict) -> dict:
         pane_id = agent.get("pane_id")
@@ -77,6 +90,7 @@ def build_board(snapshot: dict, digests: DigestService, self_pane_id: Optional[s
             "last_activity": (digest.last_message or digest.last_activity) if digest else None,
             "transcript_mtime": digest.last_activity if digest else None,
             "ctx": contexto.for_session(session_id) if contexto and session_id else None,
+            "uso": _uso(session_id),
         }
 
     agents_by_tab: dict = {}
@@ -154,6 +168,7 @@ class BoardHub:
         self.env_pane = sesion_propia()
         self.terminals = ProcessInfoCache(enchufe)
         self.contexto = ContextoService(digests)
+        self.uso_hoy: Optional[Callable[[], dict]] = None
         self.pinned: frozenset = frozenset()
         self.board: Optional[dict] = None
         self.source = "idle"
@@ -168,6 +183,18 @@ class BoardHub:
         self.sombra = None
         self.crudo: dict | None = None
         self.interna: Callable[[str], bool] | None = None
+        self.trabas: Callable[[str], Optional[dict]] | None = None
+
+    def _marcar_trabas(self, board: dict) -> None:
+        if self.trabas is None:
+            return
+        for agent in _agents(board):
+            sid = agent.get("session_id")
+            traba = self.trabas(sid) if sid else None
+            if traba:
+                agent["traba"] = traba
+            else:
+                agent.pop("traba", None)
 
     def _fuente_efectiva(self) -> str:
         try:
@@ -181,6 +208,7 @@ class BoardHub:
         return self._fp if board is self.board else fingerprint(board)
 
     def _publicar(self, board: dict, force: bool = False) -> dict:
+        self._marcar_trabas(board)
         if self.replies is not None:
             self.replies.observe(self.board, board)
             self.replies.annotate(board)
@@ -215,7 +243,7 @@ class BoardHub:
         info = await self.terminals.many(terminal_panes(snapshot, hidden))
         board = await asyncio.to_thread(
             build_board, snapshot, self.digests, self.self_pane_id, self.pinned, info,
-            hidden, self.contexto, frozenset(), self.fondo, self.interna,
+            hidden, self.contexto, frozenset(), self.fondo, self.interna, self.uso_hoy,
         )
         board["terminales"] = "ok"
         board["conflictos"] = snapshot.get("conflictos", [])

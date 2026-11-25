@@ -416,7 +416,7 @@ class PermisosService:
     def _senal_resuelve_pedido(
         p: Pedido, evento: str, tool_use_id: str | None
     ) -> bool:
-        if evento == "PostToolUse" and tool_use_id == p.tool_use_id:
+        if evento in ("PostToolUse", "PostToolUseFailure") and tool_use_id == p.tool_use_id:
             return True
         return evento in ("Stop", "UserPromptSubmit")
 

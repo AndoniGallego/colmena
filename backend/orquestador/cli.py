@@ -228,6 +228,11 @@ def serve() -> int:
     nudo_socket = ruta_nudo()
     if nudo_socket is None:
         log.warning("XDG_RUNTIME_DIR no definido; socket del nudo desactivado")
+    from .mcp_canal import ruta_socket as ruta_mcp
+
+    mcp_socket = ruta_mcp(os.environ)
+    if mcp_socket is None:
+        log.warning("XDG_RUNTIME_DIR no definido; canal del MCP desactivado")
     app = create_app(
         cfg,
         load_secret(directory),
@@ -236,6 +241,7 @@ def serve() -> int:
         ganchos_socket=ganchos_socket,
         recarga_socket=recarga_socket,
         nudo_socket=nudo_socket,
+        mcp_socket=mcp_socket,
     )
     asyncio.run(_run(app, cfg))
     return 0

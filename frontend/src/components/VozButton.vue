@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Voz } from '../state/voz'
-import { SHORTCUT_LABEL } from '../lib/voz'
+import { partesDe } from '../state/atajosEstado'
 import Icon from './Icon.vue'
 
 const props = defineProps<{ voz: Voz; disabled?: boolean; size?: number; fill?: boolean }>()
@@ -15,7 +15,7 @@ const label = computed(() => {
   if (phase.value === 'transcribing') return 'Transcribiendo'
   return 'Dictar con el micrófono'
 })
-const tip = computed(() => (recording.value ? `Terminar (${SHORTCUT_LABEL}) · Esc cancela` : `Dictar (${SHORTCUT_LABEL}). El audio se transcribe en tu notebook y nunca se envía solo.`))
+const tip = computed(() => (recording.value ? `Terminar (${partesDe('dictar').join('+')}) · Esc cancela` : `Dictar (${partesDe('dictar').join('+')}). El audio se transcribe en tu notebook y nunca se envía solo.`))
 
 function press() {
   if (working.value && phase.value !== 'requesting') return

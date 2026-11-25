@@ -16,7 +16,7 @@ import { openEntornos } from '../state/entornos'
 import { openKit } from '../state/kit'
 import { openTareas } from '../state/tareas'
 import { abrirPaleta } from '../state/buscador'
-import { ATAJO } from '../lib/buscador'
+import { etiquetaDe } from '../state/atajosEstado'
 import BrandLockup from './BrandLockup.vue'
 import SinConexion from './SinConexion.vue'
 import Icon from './Icon.vue'
@@ -27,6 +27,8 @@ import RollingNumber from './RollingNumber.vue'
 import { gsap, isSoft, ring, useGsap } from '../motion'
 import { useFocusTrap } from '../lib/focusTrap'
 import { useTopBarMenu } from './useTopBarMenu'
+import { ACCIONES_BARRA as AB } from '../lib/accionesBarra'
+import { vCartel } from '../lib/vCartel'
 
 const seccionesPieza = piezas().flatMap((p) => (p.seccion ? [{ id: p.id, ...p.seccion }] : []))
 const piezaVisible = computed(() => seccionesPieza.some((s) => s.visible.value))
@@ -207,7 +209,7 @@ onBeforeUnmount(() => {
 
     <div class="right">
       <UsoPlanPill :compact="compact" />
-      <span class="conn" :data-conn="conn" :title="connLabel">
+      <span v-cartel="{ nombre: connLabel, desc: AB.conexion.desc }" class="conn" :data-conn="conn">
         <i />
         <span class="conn-lbl">{{ connLabel }}</span>
       </span>
@@ -215,33 +217,33 @@ onBeforeUnmount(() => {
       <button v-if="!compact" class="search" aria-label="Buscar" aria-keyshortcuts="Control+K Meta+K" @click="abrirPaleta">
         <Icon name="search" :size="14" />
         <span>Buscar</span>
-        <kbd>{{ ATAJO }}</kbd>
+        <kbd>{{ etiquetaDe('buscador') }}</kbd>
       </button>
       <button v-else class="icon-btn hit" aria-label="Buscar" @click="abrirPaleta"><Icon name="search" :size="16" /></button>
       <AvisosBell />
-      <button class="icon-btn hit" :aria-label="theme === 'dark' ? 'Tema claro' : 'Tema oscuro'" @click="toggleTheme($event)">
+      <button v-cartel="{ nombre: theme === 'dark' ? 'Tema claro' : 'Tema oscuro', desc: AB.tema.desc }" class="icon-btn hit" :aria-label="theme === 'dark' ? 'Tema claro' : 'Tema oscuro'" @click="toggleTheme($event)">
         <Transition name="icon-swap" mode="out-in">
           <Icon :key="theme" :name="theme === 'dark' ? 'sun' : 'moon'" :size="16" />
         </Transition>
       </button>
       <template v-if="!compact && desktop">
-        <button type="button" class="icon-btn hit" aria-label="Ajustes" title="Ajustes" @click="openAjustes">
+        <button v-cartel="AB.ajustes" type="button" class="icon-btn hit" aria-label="Ajustes" @click="openAjustes">
           <Icon name="grid" :size="16" />
         </button>
-        <button type="button" class="icon-btn hit" aria-label="Entornos" title="Entornos: tiendas y servicios de la notebook" @click="openEntornos">
+        <button v-cartel="AB.entornos" type="button" class="icon-btn hit" aria-label="Entornos" @click="openEntornos">
           <Icon name="monitor" :size="16" />
         </button>
-        <button type="button" class="icon-btn hit" aria-label="Kit" title="Kit: reglas, skills y hooks de Claude" @click="openKit">
+        <button v-cartel="AB.kit" type="button" class="icon-btn hit" aria-label="Kit" @click="openKit">
           <Icon name="hex" :size="16" />
         </button>
-        <button type="button" class="icon-btn hit" aria-label="Tareas programadas" title="Tareas programadas" @click="openTareas">
+        <button v-cartel="AB.tareas" type="button" class="icon-btn hit" aria-label="Tareas programadas" @click="openTareas">
           <Icon name="clock" :size="16" />
         </button>
-        <button type="button" class="icon-btn hit" aria-label="Limpiar sesiones" title="Limpiar sesiones" @click="abrirLimpiezaSesiones()">
+        <button v-cartel="AB.limpiar" type="button" class="icon-btn hit" aria-label="Limpiar sesiones" @click="abrirLimpiezaSesiones()">
           <Icon name="broom" :size="16" />
         </button>
         <div ref="salirBtnRef" class="menu-wrap salir-wrap">
-          <button type="button" class="icon-btn hit" aria-label="Salir de Colmena" title="Salir de Colmena" @click="toggleSalirPopover">
+          <button v-cartel="AB.salir" type="button" class="icon-btn hit" aria-label="Salir de Colmena" @click="toggleSalirPopover">
             <Icon name="power" :size="16" />
           </button>
           <Teleport to="body">
@@ -268,27 +270,27 @@ onBeforeUnmount(() => {
           <div v-if="menuOpen" ref="menuPop" class="menu" role="menu" :style="{ top: `${menuPos.top}px`, right: `${menuPos.right}px` }">
             <button v-if="!confirming" class="item" role="menuitem" @click="menuOpen = false; openAjustes()">
               <Icon name="grid" :size="14" />
-              <span class="item-txt">Ajustes<small>Apariencia, avisos, permisos</small></span>
+              <span class="item-txt">Ajustes<small>{{ AB.ajustes.desc }}</small></span>
             </button>
             <button v-if="!confirming" class="item" role="menuitem" @click="menuOpen = false; openEntornos()">
               <Icon name="monitor" :size="14" />
-              <span class="item-txt">Entornos<small>Tiendas y servicios de la notebook</small></span>
+              <span class="item-txt">Entornos<small>{{ AB.entornos.desc }}</small></span>
             </button>
             <button v-if="!confirming" class="item" role="menuitem" @click="menuOpen = false; openKit()">
               <Icon name="hex" :size="14" />
-              <span class="item-txt">Kit<small>Reglas, skills y hooks de Claude</small></span>
+              <span class="item-txt">Kit<small>{{ AB.kit.desc }}</small></span>
             </button>
             <button v-if="!confirming" class="item" role="menuitem" @click="menuOpen = false; openTareas()">
               <Icon name="clock" :size="14" />
-              <span class="item-txt">Tareas programadas<small>Pedidos que corren solos a su hora</small></span>
+              <span class="item-txt">Tareas programadas<small>{{ AB.tareas.desc }}</small></span>
             </button>
             <button v-if="!confirming && desktop" class="item" role="menuitem" @click="menuOpen = false; abrirLimpiezaSesiones()">
               <Icon name="broom" :size="14" />
-              <span class="item-txt">Limpiar sesiones…<small>Cierra las que están quietas</small></span>
+              <span class="item-txt">Limpiar sesiones…<small>{{ AB.limpiar.desc }}</small></span>
             </button>
             <button v-if="!confirming" class="item" role="menuitem" @click="confirming = true">
               <Icon name="power" :size="14" />
-              <span class="item-txt">Salir de Colmena<small>En todos tus dispositivos</small></span>
+              <span class="item-txt">Salir de Colmena<small>{{ AB.salir.desc }}</small></span>
             </button>
             <div v-else class="confirm">
               <p>Salís de Colmena en todos tus dispositivos, este incluido, y vas a tener que poner el PIN de nuevo. Las terminales y las sesiones de Claude no se tocan.</p>

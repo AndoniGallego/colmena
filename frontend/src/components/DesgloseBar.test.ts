@@ -19,8 +19,8 @@ describe('DesgloseBar', () => {
 
   it('con filas muestra nombre, detalle y el desglose para hover', async () => {
     const items = itemsDesglose([
-      { id: 's1', nombre: 'Arreglar login', detalle: 'tienda', tipo: '', ...tk(9000, 4) },
-      { id: 's2', nombre: 'Otra sesión', detalle: 'kit', tipo: '', ...tk(1000, 1) },
+      { id: 's1', nombre: 'Arreglar login', detalle: 'tienda', tipo: '', usd: 2.5, usdParcial: false, ...tk(9000, 4) },
+      { id: 's2', nombre: 'Otra sesión', detalle: 'kit', tipo: '', usd: null, usdParcial: false, ...tk(1000, 1) },
     ])
     const html = await render(DesgloseBar, { items, label: 'Uso por sesiones hoy' })
     expect(html).toContain('aria-label="Uso por sesiones hoy"')
@@ -30,6 +30,8 @@ describe('DesgloseBar', () => {
     expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('900 entrada · 7.2 k caché · 900 salida · 4 mensajes')
     expect(html).toMatch(/>90<!--[^>]*-->%|>90%/)
+    expect(html).toContain('2,50')
+    expect(html).toMatch(/≈ —/)
   })
 })
 

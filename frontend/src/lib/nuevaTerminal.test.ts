@@ -206,3 +206,11 @@ describe('modo nueva tarea', () => {
     expect(esAtajoEnviar({ key: 'a', ctrlKey: true, metaKey: false })).toBe(false)
   })
 })
+
+describe('esAtajoEnviar con la combinación cambiada', () => {
+  it('usa la efectiva', () => {
+    const e = { key: 'Enter', ctrlKey: true, metaKey: false, altKey: true }
+    expect(esAtajoEnviar(e, 'mod+alt+enter')).toBe(true)
+    expect(esAtajoEnviar({ ...e, altKey: false }, 'mod+alt+enter')).toBe(false)
+  })
+})

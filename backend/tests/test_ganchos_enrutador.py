@@ -292,3 +292,21 @@ def test_aviso_que_falla_no_frena_la_senal_de_permisos():
                         datos={"tool_name": "Bash", "tool_input": {"command": "ls"}})
     asyncio.run(enr.manejar(msg, SimpleNamespace(cerrada=asyncio.Event())))
     assert senales == [("sid-1", "PostToolUse")]
+
+
+def test_enrutador_avisa_al_detector_en_herramientas_y_prompt():
+    from types import SimpleNamespace
+
+    vistos = []
+
+    class Permisos:
+        async def senal(self, sid, evento, tool_use_id):
+            pass
+
+    enr = Enrutador(SimpleNamespace(recibir=lambda msg, pane: False), Permisos(), SimpleNamespace(board=None),
+                    al_evento=lambda msg, pane: vistos.append((msg.evento, pane)))
+    ids = Ids(None, None, None, None, "sid-1")
+    for ev in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop"):
+        asyncio.run(enr.manejar(MensajeGancho(ev, "global", ids, {"tool_name": "Bash", "tool_use_id": "t"}),
+                                SimpleNamespace(cerrada=asyncio.Event())))
+    assert [e for e, _ in vistos] == ["PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit"]

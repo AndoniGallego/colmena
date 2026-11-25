@@ -45,7 +45,11 @@ export interface Agent {
   unread?: boolean
   last_activity: string | null
   fondo?: FondoTarea[]
+  /** La sesión parece trabada o en loop; el servidor la saca solo cuando se va la condición. */
+  traba?: Traba
   ctx?: AgentCtx | null
+  /** Tokens y costo equivalente en la API de lo que la sesión usó hoy. */
+  uso?: { total: number; usd: number | null } | null
 }
 
 export type TerminalEstado = 'prompt' | 'corriendo' | 'desconocido'
@@ -450,7 +454,7 @@ export interface BoardHandlers {
 
 export type OrdenTableroData = { orden: string[]; pestanas: Record<string, string[]>; plegadas: string[]; silenciadas: string[] }
 
-export type PedidoPestanaEstado = 'pendiente' | 'abierto' | 'rechazado' | 'vencido'
+export type PedidoPestanaEstado = 'pendiente' | 'abierto' | 'rechazado' | 'vencido' | 'descartado'
 
 export interface PedidoPestanaOrigen {
   pane_id: string
@@ -506,13 +510,22 @@ export interface PedidoPestana {
   nombre?: string
   tarjeta?: string
   pestanas?: PedidoPestanaTab[]
-  /** Sin acción, el pedido abre pestañas; 'cerrar' pide cerrar `terminal`; 'cursor' pide un trabajador Cursor. */
-  accion?: 'cerrar' | 'cursor'
+  /** Sin acción, el pedido abre pestañas; 'cerrar' pide cerrar `terminal`; 'cursor' pide un trabajador Cursor.
+   *  'mensaje', 'programada' y 'tarea' los pide una sesión por el MCP de Colmena. */
+  accion?: 'cerrar' | 'cursor' | 'mensaje' | 'programada' | 'tarea'
   terminal?: PedidoPestanaTerminal
   /** Con accion 'cerrar' de sesión, pestaña o tarjeta (sin `terminal`). */
   cierre?: PedidoPestanaCierre
   /** Solo con accion 'cursor': `nombre` es la etiqueta, `mensaje` el pedido y `carpeta` el repo. */
   cursor?: { modelo?: string }
+  /** accion 'mensaje': sesión destino; `mensaje` es el texto. */
+  envio?: { pane_id: string; nombre: string }
+  /** accion 'programada': hora HH:MM y sesión destino; `mensaje` es el texto. */
+  programada?: { cuando: string; pane_id: string; nombre: string }
+  /** accion 'tarea': ticket; `carpeta` es el repo y `mensaje` la nota. */
+  tarea?: { ticket: string }
+  /** La sesión que pide leyó otra sesión antes de este pedido (últimos 30 min). */
+  leyo_otra_sesion?: { nombre: string; ts: number }
   origen: PedidoPestanaOrigen
   ts: number
   vence: number
@@ -737,6 +750,29 @@ export interface RespuestaPreguntaRequest {
   texto: string
 }
 
+export interface ConfianzaPreparar {
+  repo: string
+  base: string
+  origen: string
+  setup_toml: string
+  setup_sha256: string
+  script: string | null
+  script_contenido: string | null
+  script_sha256: string | null
+  copiar: string[]
+  puertos: number
+  docker: boolean
+}
+
+export interface PrepararResumen {
+  puerto: number | null
+  puertos: number
+  copiados: string[]
+  omitidos: string[]
+  setup_pane_id?: string
+  puertos_fijos?: boolean
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -744,6 +780,8 @@ export class ApiError extends Error {
     public retryAfter: number | null = null,
     public bloqueantes: CloseBlocker[] = [],
     public sinCuerpo?: boolean,
+    public codigo?: string,
+    public confianza?: ConfianzaPreparar,
   ) {
     super(detail)
   }
@@ -825,7 +863,16 @@ export interface Subagente {
   tokens: number | null
 }
 
-export type AvisoKindBase = 'asks' | 'blocked' | 'done' | 'terminal' | 'cierre' | 'encadenar' | 'vigia' | 'mr' | 'entorno' | 'test' | 'progreso' | 'pestana'
+export type TrabaTipo = 'repetida' | 'fallando' | 'colgada' | 'quieta'
+
+export interface Traba {
+  tipo: TrabaTipo
+  /** Segundos desde epoch. */
+  desde: number
+  detalle: string
+}
+
+export type AvisoKindBase = 'asks' | 'blocked' | 'done' | 'terminal' | 'cierre' | 'encadenar' | 'vigia' | 'mr' | 'entorno' | 'test' | 'progreso' | 'pestana' | 'trabada'
 /** Los del núcleo más los que registran las piezas montadas. */
 export type AvisoKind = AvisoKindBase | (string & {})
 
@@ -877,6 +924,8 @@ export interface Api {
   getBoard(): Promise<Board>
   getOrdenTablero(): Promise<OrdenTableroData>
   setOrdenTablero(orden: string[]): Promise<void>
+  getAtajos(): Promise<Record<string, string>>
+  setAtajos(atajos: Record<string, string>): Promise<void>
   setPlegadas(plegadas: string[]): Promise<void>
   setSilencio(sid: string, on: boolean): Promise<void>
   irAPc(sid: string): Promise<void>
@@ -925,7 +974,8 @@ export interface Api {
   getTerminalSalida(paneId: string, rev: string, signal: AbortSignal): Promise<TerminalSalida>
   getTerminalConfig(): Promise<TerminalConfig>
   getTerminalesCarpetas(): Promise<{ carpetas: { ruta: string; nombre: string; repo?: boolean }[]; grupos: { id: string; nombre: string; carpeta: string | null }[] }>
-  postTerminalesNuevaTarea(body: { id: string; repo: string; tarea: string; nombre?: string; rama?: string }): Promise<{ ok: true; pane_id: string; ruta: string; rama: string; pegado?: false }>
+  postTerminalesNuevaTarea(body: { id: string; repo: string; tarea: string; nombre?: string; rama?: string }): Promise<{ ok: true; pane_id: string; ruta: string; rama: string; pegado?: false; preparar?: PrepararResumen }>
+  postTerminalesNuevaTareaConfiar(body: { repo: string; setup_sha256: string; script_sha256: string | null }): Promise<{ ok: true }>
   postBorrarCopia(ruta: string): Promise<{ ok: true }>
   postTerminalesNueva(body: { carpeta: string; tipo: 'shell' | 'claude'; id: string; nombre?: string; grupo?: string }): Promise<{ ok: true; espacio_id: string; sesion_id: string }>
   getSesionesViejas(qs?: string): Promise<{ session_id: string; titulo: string; carpeta: string; ultimo_ts: string; ultima_frase: string }[]>

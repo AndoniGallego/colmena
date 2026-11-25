@@ -18,6 +18,7 @@ import {
 } from '../lib/stepper'
 import { autosizeArea } from '../lib/autosize'
 import { finePointer, gsap, haptic, isSoft, ring, useGsap } from '../motion'
+import { capturandoAtajo, comboDe, etiquetaDe } from '../state/atajosEstado'
 import Icon from './Icon.vue'
 
 const props = defineProps<{
@@ -31,6 +32,7 @@ const props = defineProps<{
   dismissLabel?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [s: StepperState]; send: [text: string]; dismiss: []; minimize: [] }>()
+const minTecla = computed(() => etiquetaDe('minimizar-preguntas').replace(' ', '+'))
 
 const n = computed(() => props.questions.length)
 const st = computed(() => props.modelValue)
@@ -182,7 +184,8 @@ function minimize() {
 
 function onKey(e: KeyboardEvent) {
   const typing = (e.target as HTMLElement | null)?.tagName === 'TEXTAREA'
-  const k = stepperKey(e, typing)
+  if (capturandoAtajo.value) return
+  const k = stepperKey(e, typing, comboDe('minimizar-preguntas'))
   if (!k) return
   if (k.type === 'escape') {
     e.preventDefault()
@@ -353,7 +356,7 @@ defineExpose({
 
     <footer v-if="n > 1" class="nav">
       <button type="button" class="ghost" :disabled="st.step === 0 || sending" @click="goBack"><Icon name="back" :size="14" /><span>Atrás</span></button>
-      <span v-if="desk" class="hint mono">{{ summary ? 'Enter envía · M minimiza' : freeOnly ? 'Enter sigue' : '1–' + (q?.opciones.length ?? 6) + ' elige · Enter sigue · M minimiza' }}</span>
+      <span v-if="desk" class="hint mono">{{ summary ? 'Enter envía · ' + minTecla + ' minimiza' : freeOnly ? 'Enter sigue' : '1–' + (q?.opciones.length ?? 6) + ' elige · Enter sigue · ' + minTecla + ' minimiza' }}</span>
       <button
         v-if="summary"
         ref="sendBtn"
@@ -366,7 +369,7 @@ defineExpose({
         <span>Siguiente</span><Icon name="arrow-right" :size="14" />
       </button>
     </footer>
-    <p v-else-if="desk" class="hint solo mono">{{ freeOnly ? 'Enter envía · Shift+Enter salto de línea' : `1–${q?.opciones.length ?? 6} responde · Esc ${dismissLabel ? 'para después' : 'para escribir otra cosa'} · M minimiza` }}</p>
+    <p v-else-if="desk" class="hint solo mono">{{ freeOnly ? 'Enter envía · Shift+Enter salto de línea' : `1–${q?.opciones.length ?? 6} responde · Esc ${dismissLabel ? 'para después' : 'para escribir otra cosa'} · ${minTecla} minimiza` }}</p>
   </section>
 </template>
 

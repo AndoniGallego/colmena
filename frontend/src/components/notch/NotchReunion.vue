@@ -20,6 +20,8 @@ import {
   tocar,
   descartar,
   anotar,
+  guardarEnMemoria,
+  guardandoMemoria,
 } from '../../state/reunion'
 import { abrirBiblioteca, abrirColmena } from '../../state/notch'
 import { pcNudoActivo } from '../../state/app'
@@ -55,11 +57,21 @@ function alternarRepo(ruta: string) {
   elegidos.value = i >= 0 ? elegidos.value.filter((r) => r !== ruta) : [...elegidos.value, ruta]
 }
 
+const tema = ref('')
+
+/** Enter en el tema empieza, salvo mientras el IME está componiendo una palabra. */
+function alEnterTema(ev: KeyboardEvent) {
+  if (ev.isComposing || ev.keyCode === 229) return
+  ev.preventDefault()
+  void empezar()
+}
+
 async function empezar() {
   if (ocupado.value) return
   ocupado.value = true
   try {
-    await escuchar(elegidos.value, todos.value)
+    await escuchar(elegidos.value, todos.value, tema.value)
+    if (errorReunion.value === null) tema.value = ''
   } finally {
     ocupado.value = false
   }
@@ -68,6 +80,8 @@ async function empezar() {
 const e = computed(() => reunion.value)
 const enCurso = computed(() => ['escuchando', 'pausada', 'sin_pc', 'llena', 'terminando'].includes(e.value.estado))
 const terminada = computed(() => e.value.estado === 'guardada')
+const sinTexto = computed(() => e.value.estado === 'escuchando' && e.value.sinTexto)
+const cajitaAcoplada = computed(() => e.value.cajitaAcoplada && e.value.estado === 'escuchando')
 const sinSubtitulos = computed(() => e.value.lector === 'sin_subtitulos' && e.value.estado === 'escuchando')
 const pedirAMano = computed(() => e.value.estado !== 'terminando' && (e.value.tope || e.value.soloAMano))
 const puedeTerminar = computed(() => ['escuchando', 'pausada', 'sin_pc', 'llena'].includes(e.value.estado))
@@ -89,11 +103,11 @@ function verEnBiblioteca() {
   else abrirColmena()
 }
 
-const TIPO: Record<LineaReunion['tipo'], string> = { pregunta: 'Pregunta', requerimiento: 'Pedido', manual: 'A mano', mostrar: 'Mostrame' }
+const TIPO: Record<LineaReunion['tipo'], string> = { pregunta: 'Pregunta', requerimiento: 'Pedido', clave: 'Clave', manual: 'A mano', mostrar: 'Mostrame' }
 
 const respondiendo = (l: LineaReunion) => l.respuesta?.estado === 'buscando' || l.respuesta?.estado === 'en_cola'
 const conAcciones = (l: LineaReunion) => l.tipo !== 'mostrar'
-const tocable = (l: LineaReunion) => l.tipo !== 'mostrar' && (!l.respuesta || l.respuesta.estado === 'error')
+const tocable = (l: LineaReunion) => l.tipo !== 'mostrar' && l.tipo !== 'clave' && (!l.respuesta || l.respuesta.estado === 'error')
 
 /** El chip muestra el final de la ruta: lo que importa es el archivo, la ruta completa queda en el title. */
 const corto = (ruta: string) => ruta.split('/').filter(Boolean).slice(-2).join('/') || ruta
@@ -156,6 +170,18 @@ watch(scroller, (el) => {
           @click="alternarRepo(r.ruta)"
         >{{ r.nombre }}</button>
       </div>
+      <label class="rotulo" for="reunion-tema">Tema (opcional)</label>
+      <input
+        id="reunion-tema"
+        v-model="tema"
+        type="text"
+        class="tema-campo"
+        maxlength="200"
+        placeholder="De qué trata, para que el Copiloto arranque con contexto"
+        enterkeyhint="go"
+        autocomplete="off"
+        @keydown.enter="alEnterTema"
+      />
       <p class="ayuda">Abrí Subtítulos en vivo (Win+Ctrl+L) antes de empezar.</p>
       <button type="button" class="primario" :disabled="ocupado" @click="empezar">Escuchar</button>
     </div>
@@ -172,7 +198,9 @@ watch(scroller, (el) => {
     <!-- En curso -->
     <template v-else>
       <div class="extras">
+      <p v-if="cajitaAcoplada" class="ayuda" role="status">Poné Subtítulos en "Superpuesto en la pantalla" para que no se vea al compartir</p>
       <p v-if="sinSubtitulos" class="aviso aviso-alerta" role="status">No encuentro los subtítulos: abrilos con Win+Ctrl+L</p>
+      <p v-if="sinTexto" class="aviso aviso-alerta" role="status">Hace 2 minutos que no llega texto de los Subtítulos. Revisá que estén abiertos y mostrando lo que se dice.</p>
       <p v-if="e.estado === 'sin_pc'" class="aviso aviso-alerta" role="status">Perdí la conexión con la PC. Si no vuelve, guardo la reunión como quedó.</p>
       <p v-if="e.estado === 'llena'" class="aviso aviso-alerta" role="status">La charla llegó al largo máximo: tocá Terminar para guardarla.</p>
       <p v-if="e.estado === 'terminando'" class="aviso" role="status">Guardando la reunión…</p>
@@ -252,7 +280,21 @@ watch(scroller, (el) => {
                 </svg>
               </button>
             </div>
-            <p v-if="l.nota" class="sello">Anotada</p>
+            <div v-if="l.nota" class="fila-nota">
+              <p class="sello">Anotada</p>
+              <span v-if="l.memoria" class="en-memoria" role="status">En tu memoria</span>
+              <button
+                v-else-if="e.memoriaTrabajo"
+                type="button"
+                class="acc mem"
+                aria-label="Guardar en mi memoria de trabajo"
+                title="Guardar en mi memoria de trabajo"
+                :disabled="guardandoMemoria.includes(l.id)"
+                @click.stop="guardarEnMemoria(l.id)"
+              >
+                Guardar en mi memoria
+              </button>
+            </div>
             <p v-if="l.respuesta && respondiendo(l)" class="resp espera loop" role="status">
               {{ l.respuesta.estado === 'buscando' ? 'buscando…' : 'en cola…' }}
             </p>
@@ -450,6 +492,25 @@ button {
   background: var(--accent-soft);
   border-color: var(--accent-line);
   color: var(--text);
+}
+.tema-campo {
+  min-width: 0;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-md);
+  transition: border-color 120ms ease-out;
+}
+.tema-campo::placeholder {
+  color: var(--text-3);
+}
+.tema-campo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .ayuda,
 .nota {
@@ -777,6 +838,38 @@ button:focus-visible {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.fila-nota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 8px;
+}
+.fila-nota .sello {
+  margin: 0;
+}
+.acc.mem {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  font-size: var(--t-xs);
+  touch-action: manipulation;
+}
+.acc.mem::before {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
+}
+.en-memoria {
+  color: var(--text-3);
+  font-size: var(--t-xs);
+}
 .texto {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -810,6 +903,9 @@ button:focus-visible {
 }
 .tipo.t-requerimiento {
   color: var(--miel);
+}
+.tipo.t-clave {
+  color: var(--st-fondo);
 }
 .cuerpo {
   min-width: 0;

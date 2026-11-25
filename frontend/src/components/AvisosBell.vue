@@ -16,6 +16,8 @@ import {
 import ListoOverlay from './ListoOverlay.vue'
 import PedidoPestanaCard from './PedidoPestanaCard.vue'
 import Icon from './Icon.vue'
+import { ACCIONES_BARRA } from '../lib/accionesBarra'
+import { vCartel } from '../lib/vCartel'
 
 const { run } = useGsap()
 const btn = ref<HTMLElement | null>(null)
@@ -65,7 +67,7 @@ function cardDeAviso(a: { pedido?: string }) {
 </script>
 
 <template>
-  <button ref="btn" class="bell hit" :aria-label="av.noLeidos ? `Avisos, ${av.noLeidos} sin leer` : 'Avisos'" aria-haspopup="dialog" :aria-expanded="av.open" @click="toggle">
+  <button ref="btn" v-cartel="ACCIONES_BARRA.avisos" class="bell hit" :aria-label="av.noLeidos ? `Avisos, ${av.noLeidos} sin leer` : 'Avisos'" aria-haspopup="dialog" :aria-expanded="av.open" @click="toggle">
     <Icon name="bell" :size="16" />
     <Transition name="pip">
       <b v-if="av.noLeidos" class="pip mono">{{ badge }}</b>

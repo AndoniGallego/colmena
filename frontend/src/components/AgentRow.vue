@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import type { Agent, AgentStatus } from '../api/types'
 import { enSegundoPlano, estadoEfectivo, masFondo, mostrarMeta, rotuloTarea } from '../lib/fondo'
+import { rotuloTraba } from '../lib/trabas'
 import { ago } from '../lib/time'
 import { plainPreview } from '../lib/preview'
 import { lineasEstado } from '../lib/estado'
@@ -18,6 +19,7 @@ import MrPipe from './MrPipe.vue'
 import { irAMr, mrDeSesion } from '../state/mrs'
 import CtxRing from './CtxRing.vue'
 import { ctxLine } from '../lib/contexto'
+import { usoHoyLine } from '../lib/usoClaude'
 import { esSesionTerminal, esTerminalPropia } from '../lib/terminalPropia'
 import { abrirMudanza, puedeMudar } from '../state/mudanza'
 import { silenciadasGuardado, silencioError, silenciarSesion } from '../state/ordenTablero'
@@ -60,12 +62,15 @@ const fondoLinea = computed(() => {
   const extra = masFondo(props.agent.fondo?.length ?? 0)
   return extra ? `${rotuloTarea(t)} ${extra}` : rotuloTarea(t)
 })
+const trabaRotulo = computed(() => (props.agent.traba ? rotuloTraba(props.agent.traba, props.now) : ''))
 const meta = computed(() => mostrarMeta({
+  traba: !!props.agent.traba,
   unread: !!props.agent.unread, pide: !!props.agent.asks_user || !!props.agent.pendiente, pill: showPill.value, doing: resumenEnCabecera.value && showDoing.value, mr: !!mr.value,
   otroKind: !!props.agent.kind && props.agent.kind !== 'claude', fondo: resumenEnCabecera.value && !!fondoLinea.value,
 }))
 const when = computed(() => ago(props.agent.last_activity, props.now))
 const ctxText = computed(() => (props.agent.ctx ? ctxLine(props.agent.ctx, props.now) : ''))
+const usoText = computed(() => usoHoyLine(props.agent.uso))
 const canOpen = computed(() => !!props.agent.session_id)
 // Contraída solo se ven título, píldoras, tiempo y ctx; el resumen vive en el cajón.
 // Sin session_id no hay cajón que abrir, así que el resumen se queda en la cabecera.
@@ -252,6 +257,7 @@ function contestar() {
       </div>
       <div v-if="meta" class="meta">
         <span v-if="agent.unread" ref="chip" class="new-chip"><i aria-hidden="true" />Nueva respuesta</span>
+        <span v-if="agent.traba" class="traba-chip" role="status" :title="agent.traba.detalle"><Icon name="warn" :size="12" />{{ trabaRotulo }}</span>
         <StatusPill v-if="showPill" :status="efectivo" small />
         <button v-if="agent.asks_user" type="button" class="pide hit" aria-label="Abrir el chat de la sesión" @click.stop="contestar"><Icon name="ask" :size="12" />Te pregunta</button>
         <button v-if="agent.asks_user && canOpen" type="button" class="marcar-leido hit" :disabled="marcando" @click.stop="marcarLeido"><Icon name="check" :size="12" />Marcar leído</button>
@@ -286,6 +292,7 @@ function contestar() {
             </p>
           </div>
           <p v-if="ctxText" class="ctx-line mono">{{ ctxText }}</p>
+          <p v-if="usoText" class="ctx-line uso-line mono" title="Equivalente a precio de API, no lo que pagás con el plan">{{ usoText }}</p>
           <p v-if="terminalPropia" class="ctx-line mono">En tu terminal propia</p>
           <SessionPreview v-if="opened && agent.session_id && !pending" :agent="agent" />
           <div class="btns">
@@ -422,6 +429,31 @@ function contestar() {
   background: currentColor;
   opacity: 0.7;
 }
+.traba-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px 0 6px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--st-blocked);
+  background: var(--st-blocked-soft);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: traba-in 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes traba-in {
+  from { opacity: 0; transform: translateY(2px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .traba-chip { animation: none; }
+}
 .pide:active,
 .respond:active {
   scale: var(--press-scale);
@@ -487,6 +519,7 @@ function contestar() {
   line-height: 1.4;
   color: var(--text-3);
 }
+.uso-line { font-variant-numeric: tabular-nums; color: var(--text-4); }
 .when {
   flex: none;
   padding-top: 2px;

@@ -754,3 +754,33 @@ def test_subscribe_rechaza_pref_invalida(pclient, push_app):
     assert pclient.post("/api/push/subscribe", json=subscribe_body(**{"no-va": True})).status_code == 422
     assert pclient.post("/api/push/subscribe", json=subscribe_body(demo=False)).status_code == 200
     assert push_app[1].store.subs[0]["prefs"]["demo"] is False
+
+
+def test_dispatch_traba_respeta_pref_y_deja_entrada_trabada(sender, clock, tmp_path):
+    svc = PushService(tmp_path, sender=sender, clock=clock)
+    svc.store.upsert({"endpoint": APPLE, "keys": KEYS, "device": "a", "prefs": {"trabada": False}})
+    assert asyncio.run(svc.dispatch_traba("Uno", "Grep repetido 4 veces con lo mismo", SID, "w1:p1")) == 0
+    assert svc.avisos.items[-1]["kind"] == "trabada"
+    svc.store.upsert({"endpoint": APPLE, "keys": KEYS, "device": "a", "prefs": {"trabada": True, "texto": False}})
+    assert asyncio.run(svc.dispatch_traba("Uno", "Grep repetido", SID, "w1:p1")) == 1
+    assert sender.sent[-1][1]["kind"] == "trabada"
+    assert sender.sent[-1][1]["body"] == "Revisá la sesión en Colmena."
+    ultimo = svc.avisos.items[-1]
+    assert ultimo["session_id"] == SID and ultimo["pane_id"] == "w1:p1" and ultimo["tag"] == f"trabada-{SID}"
+
+
+def test_prefs_trae_trabada_prendida_por_defecto():
+    from orquestador.push import Prefs
+    assert Prefs().trabada is True
+
+
+def test_dispatch_traba_con_texto_apagado_no_pone_el_titulo_de_la_sesion(sender, clock, tmp_path):
+    svc = PushService(tmp_path, sender=sender, clock=clock)
+    svc.store.upsert({"endpoint": APPLE, "keys": KEYS, "device": "a", "prefs": {"trabada": True, "texto": False}})
+    assert asyncio.run(svc.dispatch_traba("Proyecto secreto", "Grep repetido", SID, "w1:p1")) == 1
+    enviado = sender.sent[-1][1]
+    assert "Proyecto secreto" not in enviado["title"]
+    assert enviado["title"] == "Una sesión parece trabada"
+    svc.store.upsert({"endpoint": APPLE, "keys": KEYS, "device": "a", "prefs": {"trabada": True, "texto": True}})
+    asyncio.run(svc.dispatch_traba("Proyecto secreto", "Grep repetido", SID, "w1:p1"))
+    assert sender.sent[-1][1]["title"] == "Proyecto secreto parece trabada"

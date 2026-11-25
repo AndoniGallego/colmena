@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { revokeAllSessions, revokeSessionsErr } from '../state/app'
 import { closeAjustes } from '../state/ajustes'
 import { abrirLimpieza } from '../state/limpieza'
@@ -10,6 +10,8 @@ import { setTheme, theme } from '../lib/theme'
 import { motionPref, setMotion, systemReduced } from '../motion'
 import type { Theme } from '../lib/storage'
 import { gruposDeAtajos } from '../lib/atajos'
+import { armarCombo, EDITABLES, partesCombo, validarCombo } from '../lib/teclas'
+import { atajosError, cambiarAtajo, capturandoAtajo, comboDe, efectivos, restaurarAtajo } from '../state/atajos'
 import Icon from './Icon.vue'
 import SegControl from './SegControl.vue'
 import ClaudePanel from './ClaudePanel.vue'
@@ -79,6 +81,60 @@ function partes(teclas: string[], mod?: boolean): { txt: string; tecla: boolean 
   return out
 }
 
+const original = (id: string) => EDITABLES.find((a) => a.id === id)?.original
+const textoPartes = (id: string) => partesCombo(comboDe(id), esMac).flatMap((t, i) => (i ? [{ txt: '+', tecla: false }, { txt: t, tecla: true }] : [{ txt: t, tecla: true }]))
+
+const capturando = ref<string | null>(null)
+const errorAt = ref<{ id: string; texto: string } | null>(null)
+
+function enfocarBoton(id: string) {
+  void nextTick(() => document.querySelector<HTMLElement>(`[data-atajo="${id}"]`)?.focus())
+}
+function terminarCaptura() {
+  window.removeEventListener('keydown', onCaptura, true)
+  capturando.value = null
+  capturandoAtajo.value = false
+}
+function empezarCaptura(id: string) {
+  errorAt.value = null
+  atajosError.value = ''
+  if (!capturando.value) window.addEventListener('keydown', onCaptura, true)
+  capturando.value = id
+  capturandoAtajo.value = true
+}
+function cancelarCaptura() {
+  const id = capturando.value
+  terminarCaptura()
+  errorAt.value = null
+  if (id) enfocarBoton(id)
+}
+function onCaptura(e: KeyboardEvent) {
+  const id = capturando.value
+  e.preventDefault()
+  e.stopImmediatePropagation()
+  if (!id || e.isComposing || e.repeat) return
+  if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) return cancelarCaptura()
+  const combo = armarCombo(e)
+  if (!combo) return
+  if (combo === comboDe(id)) return cancelarCaptura()
+  const err = validarCombo(id, combo, efectivos())
+  if (err) {
+    errorAt.value = { id, texto: err }
+    return
+  }
+  terminarCaptura()
+  errorAt.value = null
+  enfocarBoton(id)
+  void cambiarAtajo(id, combo).then((ok) => {
+    if (!ok) errorAt.value = { id, texto: atajosError.value || 'No pude guardar el atajo' }
+  })
+}
+async function volverAlOriginal(id: string) {
+  errorAt.value = null
+  if (!(await restaurarAtajo(id))) errorAt.value = { id, texto: atajosError.value || 'No pude guardar el atajo' }
+}
+onBeforeUnmount(terminarCaptura)
+
 const current = computed(() => sections.value.find((x) => x.id === active.value) ?? sections.value[0])
 
 function recordada(): string {
@@ -119,7 +175,10 @@ function onTabsKey(e: KeyboardEvent) {
 function centrarActiva() {
   tablist.value?.querySelector<HTMLElement>(`#aj-tab-${current.value.id}`)?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
 }
-watch(() => current.value.id, () => nextTick(centrarActiva))
+watch(() => current.value.id, () => {
+  terminarCaptura()
+  void nextTick(centrarActiva)
+})
 
 onMounted(async () => {
   panel.value = root.value
@@ -219,17 +278,25 @@ onMounted(async () => {
                 <h3>{{ g.grupo }}</h3>
                 <ul>
                   <li v-for="(a, i) in g.items" :key="i" class="atajo">
-                    <span class="at-keys">
-                      <template v-for="(p, k) in partes(a.teclas, a.mod)" :key="k">
+                    <span v-if="a.id && capturando === a.id" class="at-keys at-captura" role="status">Apretá la combinación nueva… Esc para cancelar</span>
+                    <span v-else-if="a.teclas.length" class="at-keys">
+                      <template v-for="(p, k) in (a.id ? textoPartes(a.id) : partes(a.teclas, a.mod))" :key="k">
                         <kbd v-if="p.tecla">{{ p.txt }}</kbd>
                         <span v-else class="at-plus" aria-hidden="true">{{ p.txt }}</span>
                       </template>
-                      <template v-if="a.tambien">
+                      <template v-if="a.tambien && !a.id">
                         <span class="at-o">o</span>
                         <kbd v-for="(t, k) in teclasDe(a.tambien, a.mod)" :key="k">{{ t }}</kbd>
                       </template>
                     </span>
-                    <span class="at-txt">{{ a.que }}<small>{{ a.donde }}</small></span>
+                    <span class="at-txt">{{ a.que }}<small>{{ a.donde }}</small>
+                      <small v-if="a.id && errorAt?.id === a.id" class="at-error" role="alert">{{ errorAt.texto }}</small>
+                    </span>
+                    <span v-if="a.id" class="at-acc">
+                      <button v-if="capturando === a.id" type="button" class="btn btn-ghost btn-sm" :data-atajo="a.id" @click="cancelarCaptura">Cancelar</button>
+                      <button v-else type="button" class="btn btn-ghost btn-sm" :data-atajo="a.id" :aria-label="`Cambiar el atajo de ${a.que}`" @click="empezarCaptura(a.id)">Cambiar</button>
+                      <button v-if="comboDe(a.id) !== original(a.id)" type="button" class="btn btn-ghost btn-sm" @click="volverAlOriginal(a.id)">Volver al original</button>
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -362,6 +429,11 @@ onMounted(async () => {
 kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 6px; font: 600 12px/1 var(--font-mono); color: var(--text-2); background: var(--keycap); box-shadow: inset 0 0 0 1px var(--line); }
 .at-txt { display: grid; gap: 2px; font-size: 14px; color: var(--text); }
 .at-txt small { font-size: 12px; color: var(--text-4); }
+.at-captura { font-size: 13px; color: var(--accent); }
+.at-error { color: var(--danger) !important; }
+.at-acc { display: flex; flex-wrap: wrap; gap: 8px; }
 .desk .atajo { flex-direction: row; align-items: center; gap: 20px; }
+.desk .at-txt { flex: 1; }
+.desk .at-acc { flex: none; justify-content: flex-end; }
 .desk .at-keys { flex: none; width: 240px; }
 </style>

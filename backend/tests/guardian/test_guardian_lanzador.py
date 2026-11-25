@@ -317,9 +317,19 @@ def test_guia_y_copiloto_corren_con_sonnet():
         assert argv[i + 1] == "sonnet"
 
 
-def test_guia_y_copiloto_tienen_memoria_propia_en_engram():
-    """Cada ayudante aprende en su propio proyecto de Engram y solo puede buscar y guardar."""
+def _server_engram(argv):
     import json
+
+    i = argv.index("--mcp-config")
+    assert argv[i + 2].startswith("--")
+    config = json.loads(argv[i + 1])
+    assert list(config["mcpServers"]) == ["engram"]
+    return config["mcpServers"]["engram"]
+
+
+def test_guia_y_copiloto_tienen_memoria_propia_en_engram():
+    """Cada ayudante aprende en su proyecto de Engram, detrás del filtro que fuerza el proyecto."""
+    import sys
 
     a = lz.AjustesGuardian(memoria_contenedor="mi-engram")
     uid = str(uuid.uuid4())
@@ -327,19 +337,28 @@ def test_guia_y_copiloto_tienen_memoria_propia_en_engram():
     for modo in ("guia", "copiloto"):
         argv = lz.argv_claude(a, Path("/s.json"), session_id=uid, modo=modo)
         assert argv.count("--mcp-config") == 1 and "--strict-mcp-config" in argv
-        i = argv.index("--mcp-config")
-        config = json.loads(argv[i + 1])
-        assert argv[i + 2].startswith("--")
-        assert list(config["mcpServers"]) == ["engram"]
-        server = config["mcpServers"]["engram"]
-        assert server["command"] == "docker"
+        server = _server_engram(argv)
+        assert server["command"] == sys.executable
         args = server["args"]
-        assert args[:4] == ["exec", "-i", "mi-engram", "engram"]
-        assert "--tools=mem_search,mem_save" in args
-        proyecto = args[args.index("--project") + 1]
-        assert proyecto == f"colmena-{modo}"
-        proyectos.add(proyecto)
+        assert args[:3] == ["-I", "-m", "orquestador.memoria_filtro"]
+        sep = args.index("--")
+        propio = args[args.index("--propio") + 1]
+        assert propio == f"colmena-{modo}"
+        assert "--trabajo" not in args[:sep]
+        hijo = args[sep + 1:]
+        assert hijo[:6] == ["docker", "exec", "-i", "mi-engram", "engram", "mcp"]
+        assert "--tools=mem_search,mem_save,mem_get_observation" in hijo
+        assert hijo[hijo.index("--project") + 1] == propio
+        proyectos.add(propio)
     assert len(proyectos) == 2
+
+
+def test_memoria_de_trabajo_se_pasa_al_filtro():
+    a = lz.AjustesGuardian(memoria_contenedor="mi-engram", memoria_trabajo="mi-trabajo")
+    argv = lz.argv_claude(a, Path("/s.json"), session_id=str(uuid.uuid4()), modo="guia")
+    args = _server_engram(argv)["args"]
+    assert args[args.index("--trabajo") + 1] == "mi-trabajo"
+    assert args.index("--trabajo") < args.index("--")
 
 
 def test_sesion_normal_no_lleva_memoria_de_ayudante():
@@ -359,3 +378,11 @@ def test_memoria_contenedor_sale_de_la_config_y_se_valida():
     for malo in ("-x", "a b", "a;b", 3):
         with pytest.raises(lz.ConfigInvalida):
             lz.ajustes_de({"memoria_contenedor": malo}, {})
+
+
+def test_memoria_trabajo_sale_de_la_config_y_se_valida():
+    assert lz.ajustes_de({"memoria_trabajo": "mi-trabajo"}, {}).memoria_trabajo == "mi-trabajo"
+    assert lz.ajustes_de({}, {}).memoria_trabajo == ""
+    for malo in ("-x", "A", "a b", "a;b", 3, "x" * 65):
+        with pytest.raises(lz.ConfigInvalida):
+            lz.ajustes_de({"memoria_trabajo": malo}, {})

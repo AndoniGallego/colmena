@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 import uuid
 from collections.abc import Mapping
@@ -114,21 +115,27 @@ ARGS_COPILOTO = (
     "--model",
     "sonnet",
 )
-# Memoria de los ayudantes: cada uno en su proyecto de Engram (nunca el de Ando), y el servidor solo expone buscar
-# y guardar. El contenedor sale de `guardian.memoria_contenedor`; sin él no hay memoria. Si el contenedor no está
-# corriendo, Claude arranca igual, sin memoria.
-HERRAMIENTAS_MEMORIA = ("mem_search", "mem_save")
+# Memoria de los ayudantes: cada uno escribe en su proyecto de Engram (nunca el de Ando) y lee el suyo y, si está
+# configurada, la memoria de trabajo. Engram acepta `project` en cada llamada, así que el servidor MCP que ve Claude
+# es `orquestador.memoria_filtro`, que fuerza el proyecto y filtra las herramientas. El contenedor sale de
+# `guardian.memoria_contenedor`; sin él no hay memoria. Si el contenedor no está corriendo, Claude arranca igual.
+HERRAMIENTAS_MEMORIA = ("mem_search", "mem_save", "mem_get_observation")
 _CONTENEDOR_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_PROYECTO_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 
-def args_memoria(modo: str, contenedor: str) -> list[str]:
+def args_memoria(modo: str, contenedor: str, trabajo: str = "") -> list[str]:
     if not contenedor:
         return []
-    server = {
-        "command": "docker",
-        "args": ["exec", "-i", contenedor, "engram", "mcp",
-                 "--tools=" + ",".join(HERRAMIENTAS_MEMORIA), "--project", f"colmena-{modo}"],
-    }
+    propio = f"colmena-{modo}"
+    # sys.executable es el intérprete del venv del guardián (`uv run colmena-guardian`), donde `orquestador` está
+    # instalado; `-I` evita que la carpeta de trabajo del ayudante meta módulos propios en el import.
+    filtro = ["-I", "-m", "orquestador.memoria_filtro", "--propio", propio]
+    if trabajo:
+        filtro += ["--trabajo", trabajo]
+    hijo = ["docker", "exec", "-i", contenedor, "engram", "mcp",
+            "--tools=" + ",".join(HERRAMIENTAS_MEMORIA), "--project", propio]
+    server = {"command": sys.executable, "args": [*filtro, "--", *hijo]}
     return ["--mcp-config", json.dumps({"mcpServers": {"engram": server}}, ensure_ascii=False)]
 
 
@@ -167,6 +174,7 @@ class AjustesGuardian:
     claude_bin: str = "claude"
     shell: str = ""
     memoria_contenedor: str = ""
+    memoria_trabajo: str = ""
 
 
 def _exigir_str(raw: dict, clave: str, default: str) -> str:
@@ -214,6 +222,9 @@ def ajustes_de(raw: dict | None, entorno: Mapping[str, str]) -> AjustesGuardian:
     memoria = _exigir_str(raw, "memoria_contenedor", "")
     if memoria and not _CONTENEDOR_RE.fullmatch(memoria):
         raise ConfigInvalida("guardian.memoria_contenedor inválido")
+    trabajo = _exigir_str(raw, "memoria_trabajo", "")
+    if trabajo and not _PROYECTO_RE.fullmatch(trabajo):
+        raise ConfigInvalida("guardian.memoria_trabajo inválido")
     return AjustesGuardian(
         permission_mode=modo,
         columnas=columnas,
@@ -223,6 +234,7 @@ def ajustes_de(raw: dict | None, entorno: Mapping[str, str]) -> AjustesGuardian:
         claude_bin=claude_bin,
         shell=shell,
         memoria_contenedor=memoria,
+        memoria_trabajo=trabajo,
     )
 
 
@@ -259,6 +271,8 @@ def argv_claude(
     modo: str | None = None,
     dirs_extra: list[str] | None = None,
     entorno: Mapping[str, str] | None = None,
+    mcp_config: Path | None = None,
+    claude_version: tuple | None = None,
 ) -> list[str]:
     if (session_id is None) == (resume is None):
         raise ValueError("exactamente uno de session_id o resume")
@@ -273,15 +287,45 @@ def argv_claude(
         raise ValueError("dirs_extra solo vale en modo copiloto")
     if modo in MODOS_INTERNOS:
         # --mcp-config toma varios valores: va antes de otras opciones para que nunca se trague un argumento suelto.
-        argv = [ajustes.claude_bin, clave, valor, "--settings", str(ajustes_copiloto(settings)), *args_memoria(modo, ajustes.memoria_contenedor), *ARGS_COPILOTO]
+        argv = [ajustes.claude_bin, clave, valor, "--settings", str(ajustes_copiloto(settings)), *args_memoria(modo, ajustes.memoria_contenedor, ajustes.memoria_trabajo), *ARGS_COPILOTO]
         # `blockReadsOutsideWorkingDirectories` ignora additionalDirectories del proyecto: solo --add-dir cuenta.
         # La guía nunca lleva --add-dir: solo ve su carpeta.
         if modo == "copiloto":
             for ruta in dirs_extra_validos(dirs_extra or [], entorno):
                 argv += ["--add-dir", ruta]
         return argv
-    base = [ajustes.claude_bin, clave, valor, "--settings", str(settings)]
+    base = [ajustes.claude_bin, clave, valor]
+    if mcp_config is not None and claude_version is not None and tuple(claude_version) >= VERSION_MINIMA_MCP:
+        # Antes de --settings: --mcp-config toma varios valores y la opción siguiente lo corta.
+        base += ["--mcp-config", str(mcp_config)]
+    base += ["--settings", str(settings)]
     return [*base, "--permission-mode", modo if modo is not None else ajustes.permission_mode]
+
+
+VERSION_MINIMA_MCP = (2, 1, 304)
+_VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def parsear_version_claude(texto: str) -> tuple | None:
+    found = _VERSION_RE.search(texto or "")
+    return tuple(int(g) for g in found.groups()) if found else None
+
+
+def detectar_version_claude(claude_bin: str, entorno: Mapping[str, str], timeout: float = 5.0) -> tuple | None:
+    """`claude --version` una vez al arrancar el guardián; cualquier falla es None (sin MCP)."""
+    try:
+        res = subprocess.run([claude_bin, "--version"], capture_output=True, text=True, timeout=timeout,
+                             env=dict(entorno), stdin=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return parsear_version_claude(res.stdout) if res.returncode == 0 else None
+
+
+def escribir_mcp_config(directorio: Path, socket: Path) -> Path:
+    """`mcp-colmena.json` (0600) para --mcp-config: el MCP corre con el python del backend."""
+    directorio.mkdir(parents=True, mode=0o700, exist_ok=True)
+    return _escribir_json(directorio / "mcp-colmena.json", {"mcpServers": {"colmena": {
+        "command": sys.executable, "args": ["-I", "-m", "orquestador.mcp_colmena", "--socket", str(socket)]}}})
 
 
 def argv_shell(ajustes: AjustesGuardian, entorno: Mapping[str, str]) -> list[str]:

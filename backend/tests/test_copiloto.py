@@ -426,10 +426,10 @@ def test_mostrar_no_pasa_de_3900(tmp_path):
     assert len(msg) <= cp.PREGUNTA_MAX
 
 
-def test_ajustes_permiten_solo_buscar_y_guardar_en_la_memoria():
+def test_ajustes_permiten_solo_buscar_guardar_y_leer_observaciones():
     allow = cp.ajustes([], [])["permissions"]["allow"]
     mcp = [a for a in allow if a.startswith("mcp__")]
-    assert mcp == ["mcp__engram__mem_search", "mcp__engram__mem_save"]
+    assert mcp == ["mcp__engram__mem_search", "mcp__engram__mem_save", "mcp__engram__mem_get_observation"]
 
 
 def test_reglas_de_respaldo_hablan_de_la_memoria_sin_datos_personales():
@@ -438,6 +438,7 @@ def test_reglas_de_respaldo_hablan_de_la_memoria_sin_datos_personales():
     for regla in (cp.REGLA, REGLA_GUIA):
         assert "mem_search" in regla and "mem_save" in regla
         assert "nunca" in regla.lower()
+        assert "mem_get_observation" in regla and 'project: "trabajo"' in regla
 
 
 def test_ajustes_permiten_leer_capturas(tmp_path):
@@ -462,3 +463,25 @@ def test_borrar_transcripts_de_no_sigue_symlinks(tmp_path):
     assert not (suyo / "a.jsonl").exists() and not (suyo / "enlace").exists()
     assert (afuera / "x.jsonl").exists()
     cp.borrar_transcripts_de(projects / "no-existe", carpeta)
+
+
+def test_mensaje_inicial_con_tema():
+    assert "La reunión trata de: Plux en ps9." in cp.mensaje_inicial(["/r/a"], False, "Plux en ps9")
+
+
+def test_mensaje_inicial_sin_tema_igual_que_antes():
+    m = cp.mensaje_inicial(["/r/a"], False, "")
+    assert m == cp.mensaje_inicial(["/r/a"], False) and "trata de" not in m
+
+
+def test_abrir_pasa_el_tema(tmp_path):
+    p, tacc, *_ = _puente(tmp_path)
+    asyncio.run(p.abrir("r1", ["a"], False, "Plux"))
+    item, _ = tacc.llamadas[0]
+    assert "La reunión trata de: Plux." in item["mensaje"]
+
+
+def test_mensaje_inicial_aclara_que_el_tema_es_contexto():
+    m = cp.mensaje_inicial(["/r/a"], False, "Plux en ps9")
+    assert "es solo contexto" in m and "lo que se diga en la charla" in m
+    assert "es solo contexto" not in cp.mensaje_inicial(["/r/a"], False)

@@ -3,9 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { useFocusTrap } from '../lib/focusTrap'
 import { useSheetSwipe } from '../lib/useSheetSwipe'
 import { useKeyboard } from '../lib/keyboard'
-import { ApiError } from '../api/types'
-import { getTerminalesCarpetas, postTerminalesNueva, postTerminalesNuevaTarea } from '../state/app'
+import { ApiError, type ConfianzaPreparar } from '../api/types'
+import { getTerminalesCarpetas, postTerminalesNueva, postTerminalesNuevaTarea, postTerminalesNuevaTareaConfiar } from '../state/app'
 import { useListoPanel } from '../lib/listoPanel'
+import { capturandoAtajo, comboDe, etiquetaDe } from '../state/atajosEstado'
 import ListoOverlay from './ListoOverlay.vue'
 import {
   armarCuerpoNueva,
@@ -38,6 +39,7 @@ import Icon from './Icon.vue'
 
 const props = defineProps<{ open: boolean; grupoInicial?: string }>()
 const emit = defineEmits<{ close: [] }>()
+const atajoTexto = computed(() => etiquetaDe('crear-terminal').replace(' ', '+'))
 const { run } = useGsap()
 const kb = useKeyboard()
 const panel = ref<HTMLElement | null>(null)
@@ -61,6 +63,8 @@ const masOpciones = ref(false)
 const nombre = ref('')
 const opId = ref('')
 const abriendo = ref(false)
+const pideConfianza = ref<ConfianzaPreparar | null>(null)
+const avisoPuertos = ref(false)
 const cierre = () => emit('close')
 const { listo: listoPantalla, listoTxt, mostrarListo } = useListoPanel(cierre)
 
@@ -88,6 +92,8 @@ watch(
   async (on) => {
     if (!on) return
     error.value = busqueda.value = nombre.value = tarea.value = rama.value = ticket.value = ''
+    pideConfianza.value = null
+    avisoPuertos.value = false
     masOpciones.value = false
     modo.value = props.grupoInicial ? 'terminal' : leerModo()
     carpetaRuta.value = ''
@@ -128,24 +134,64 @@ watch(grupoId, (id) => {
   if (sug) carpetaRuta.value = sug.ruta
 })
 
-async function abrirTarea() {
-  if (!listoTarea.value || !carpetaSel.value) return
-  haptic([8, 30, 8])
+function textoListoTarea(r: Awaited<ReturnType<typeof postTerminalesNuevaTarea>>) {
+  if (r.pegado === false) return 'Tarea abierta: pegá el mensaje a mano'
+  const p = r.preparar
+  if (!p) return 'Tarea abierta'
+  const n = p.copiados.length
+  const partes = [
+    n ? `${n} ${n === 1 ? 'archivo copiado' : 'archivos copiados'}` : '',
+    p.puerto !== null ? `${p.puertos === 1 ? 'puerto' : 'puertos'} ${p.puerto}${p.puertos > 1 ? `–${p.puerto + p.puertos - 1}` : ''}` : '',
+  ].filter(Boolean)
+  return `Tarea abierta${partes.length ? `: ${partes.join(', ')}` : ''}`
+}
+
+async function enviarTarea() {
+  if (!carpetaSel.value) return
   abriendo.value = true
   error.value = ''
   try {
     const r = await postTerminalesNuevaTarea(armarCuerpoTarea(carpetaSel.value, tarea.value, nombre.value, rama.value, opId.value, ticket.value, grupoId.value))
     guardarUltimoRepo(carpetaSel.value.ruta)
-    mostrarListo(r.pegado === false ? 'Tarea abierta: pegá el mensaje a mano' : 'Tarea abierta')
+    if (r.preparar?.puertos_fijos) avisoPuertos.value = true
+    mostrarListo(textoListoTarea(r))
   } catch (e) {
-    error.value = msg(e, 'No pude abrir la tarea')
+    if (e instanceof ApiError && e.codigo === 'requiere_confianza' && e.confianza) pideConfianza.value = e.confianza
+    else error.value = msg(e, 'No pude abrir la tarea')
   } finally {
     abriendo.value = false
   }
 }
 
+async function abrirTarea() {
+  if (!listoTarea.value || !carpetaSel.value) return
+  haptic([8, 30, 8])
+  await enviarTarea()
+}
+
+async function confiarYAbrir() {
+  const c = pideConfianza.value
+  if (!c || abriendo.value) return
+  abriendo.value = true
+  try {
+    await postTerminalesNuevaTareaConfiar({ repo: c.repo, setup_sha256: c.setup_sha256, script_sha256: c.script_sha256 })
+  } catch (e) {
+    error.value = msg(e, 'No pude guardar la confianza')
+    pideConfianza.value = null
+    abriendo.value = false
+    return
+  }
+  pideConfianza.value = null
+  abriendo.value = false
+  await enviarTarea()
+}
+
+function noConfiar() {
+  pideConfianza.value = null
+}
+
 function onTareaKeydown(e: KeyboardEvent) {
-  if (!esAtajoEnviar(e)) return
+  if (capturandoAtajo.value || !esAtajoEnviar(e, comboDe('crear-terminal'))) return
   e.preventDefault()
   void abrirTarea()
 }
@@ -257,7 +303,7 @@ function onLeave(el: Element, done: () => void) {
                   class="tarea"
                   rows="5"
                   :maxlength="ramaTicket ? MAX_NOTA_TICKET : MAX_TAREA"
-                  :placeholder="ramaTicket ? 'Nota para Claude (opcional). Ctrl+Enter para abrirla.' : 'Contale a Claude la tarea. Ctrl+Enter para abrirla.'"
+                  :placeholder="ramaTicket ? `Nota para Claude (opcional). ${atajoTexto} para abrirla.` : `Contale a Claude la tarea. ${atajoTexto} para abrirla.`"
                   spellcheck="true"
                   @keydown="onTareaKeydown"
                 />
@@ -322,6 +368,25 @@ function onLeave(el: Element, done: () => void) {
             </label>
             </template>
 
+            <section v-if="pideConfianza" class="conf" role="alertdialog" aria-labelledby="nt-conf" aria-describedby="nt-conf-d">
+              <h3 id="nt-conf" class="conf-t"><Icon name="warn" :size="14" /> Este repo prepara la copia</h3>
+              <p id="nt-conf-d" class="hint">Antes de abrir la tarea, mirá qué va a hacer. Si confiás, se guarda para este contenido exacto: si cambia, te lo vuelvo a preguntar.</p>
+              <p v-if="pideConfianza.copiar.length" class="hint">Copia estos archivos ignorados: <span class="mono">{{ pideConfianza.copiar.join(', ') }}</span></p>
+              <p v-if="pideConfianza.puertos" class="hint">Reserva {{ pideConfianza.puertos }} {{ pideConfianza.puertos === 1 ? 'puerto' : 'puertos' }} para la copia.</p>
+              <span class="conf-n">setup.toml</span>
+              <pre class="conf-pre mono" tabindex="0">{{ pideConfianza.setup_toml }}</pre>
+              <template v-if="pideConfianza.script">
+                <span class="conf-n">{{ pideConfianza.script }} (se corre en una terminal de la copia)</span>
+                <pre class="conf-pre mono" tabindex="0">{{ pideConfianza.script_contenido }}</pre>
+              </template>
+              <div class="actions">
+                <button type="button" class="btn btn-primary" :disabled="abriendo" @click="confiarYAbrir">Confiar y abrir</button>
+                <button type="button" class="btn btn-ghost" :disabled="abriendo" @click="noConfiar">Cancelar</button>
+              </div>
+            </section>
+
+            <p v-if="avisoPuertos" class="hint" role="status">Con docker compose, los puertos son fijos: una copia corriendo a la vez.</p>
+
             <p v-if="error" class="problem" role="alert"><Icon name="warn" :size="14" /> <span>{{ error }}</span></p>
 
             <div class="sheet-actions actions">
@@ -371,6 +436,10 @@ input:focus,
 .st { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); }
 .warn { font-size: 12px; color: var(--st-blocked); }
 .problem { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 9px 12px; border-radius: var(--r-md); font-size: 13px; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
+.conf { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--accent-line); min-width: 0; }
+.conf-t { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.conf-n { font-size: 12px; font-weight: 600; color: var(--text-3); overflow-wrap: anywhere; }
+.conf-pre { margin: 0; padding: 10px 12px; max-height: 30dvh; overflow: auto; overscroll-behavior: contain; border-radius: 12px; font-size: 12px; line-height: 1.45; color: var(--text-2); background: var(--bg-2); border: 1px solid var(--line-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .actions { display: flex; flex-direction: column-reverse; gap: 8px; }
 @media (min-width: 640px) { .actions .btn { flex: 1; } }
 </style>

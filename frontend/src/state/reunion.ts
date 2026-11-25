@@ -11,10 +11,12 @@ type EstadoRespuesta = 'buscando' | 'en_cola' | 'lista' | 'error'
 export interface LineaReunion {
   id: string
   texto: string
-  tipo: 'pregunta' | 'requerimiento' | 'manual' | 'mostrar'
+  tipo: 'pregunta' | 'requerimiento' | 'clave' | 'manual' | 'mostrar'
   respuesta?: { estado: EstadoRespuesta; texto: string; archivos: string[] }
   /** Id de la nota en que se anotó la línea. */
   nota?: string
+  /** Ya se guardó en la memoria de trabajo. */
+  memoria?: boolean
 }
 
 export interface EstadoReunionFront {
@@ -28,15 +30,21 @@ export interface EstadoReunionFront {
   detecciones: number
   topeDetecciones: number
   copiloto: 'abriendo' | 'listo' | 'sin_copiloto'
+  /** Pasaron 2 minutos escuchando y no llegó nada de texto. */
+  sinTexto: boolean
   /** El Copiloto está atendiendo una pregunta o un Mostrame. */
   ocupado: boolean
+  /** Hay memoria de trabajo configurada: se puede guardar lo anotado. */
+  memoriaTrabajo: boolean
+  /** Subtítulos está acoplado: no se puede esconder y se ve al compartir pantalla. */
+  cajitaAcoplada: boolean
   lineas: LineaReunion[]
   biblioteca: string | null
 }
 
 const ESTADOS = ['inactiva', 'escuchando', 'pausada', 'sin_pc', 'llena', 'terminando', 'guardada'] as const
 const COPILOTO = ['abriendo', 'listo', 'sin_copiloto'] as const
-const TIPOS = ['pregunta', 'requerimiento', 'manual', 'mostrar'] as const
+const TIPOS = ['pregunta', 'requerimiento', 'clave', 'manual', 'mostrar'] as const
 const RESPUESTAS: readonly string[] = ['buscando', 'en_cola', 'lista', 'error']
 
 export function inicial(): EstadoReunionFront {
@@ -49,7 +57,10 @@ export function inicial(): EstadoReunionFront {
     detecciones: 0,
     topeDetecciones: 0,
     copiloto: 'abriendo',
+    sinTexto: false,
     ocupado: false,
+    memoriaTrabajo: false,
+    cajitaAcoplada: false,
     lineas: [],
     biblioteca: null,
   }
@@ -75,7 +86,7 @@ function lineaDe(raw: unknown): LineaReunion | null {
   if (!l || typeof l.id !== 'string' || !l.id || typeof l.texto !== 'string' || !enLista(TIPOS, l.tipo)) return null
   const respuesta = respuestaDe(l.respuesta)
   const nota = typeof l.nota === 'string' && l.nota ? l.nota : undefined
-  return { id: l.id, texto: l.texto, tipo: l.tipo, ...(respuesta ? { respuesta } : {}), ...(nota ? { nota } : {}) }
+  return { id: l.id, texto: l.texto, tipo: l.tipo, ...(respuesta ? { respuesta } : {}), ...(nota ? { nota } : {}), ...(l.memoria === true ? { memoria: true } : {}) }
 }
 
 /** Campos del estado que vienen igual en el evento `reunion-estado` y en el snapshot. */
@@ -89,7 +100,9 @@ function camposEstado(d: Record<string, unknown>, base: EstadoReunionFront): Est
     detecciones: cuenta(d.detecciones),
     topeDetecciones: cuenta(d.tope_detecciones),
     copiloto: enLista(COPILOTO, d.copiloto) ? d.copiloto : base.copiloto,
+    sinTexto: d.sin_texto === true,
     ocupado: d.ocupado === true,
+    memoriaTrabajo: d.memoria_trabajo === true,
   }
 }
 
@@ -116,7 +129,7 @@ export function aplicarEvento(e: EstadoReunionFront, evento: string, data: unkno
   if (evento === 'reunion-estado') {
     const enCurso = e.reunion !== null && e.estado !== 'guardada' && e.estado !== 'inactiva'
     if (enCurso && d.reunion !== e.reunion) return e
-    const base = d.reunion === e.reunion ? e : { ...inicial(), lector: e.lector, reunion: d.reunion }
+    const base = d.reunion === e.reunion ? e : { ...inicial(), lector: e.lector, cajitaAcoplada: e.cajitaAcoplada, reunion: d.reunion }
     return camposEstado(d, base) ?? e
   }
 
@@ -149,6 +162,14 @@ export function aplicarEvento(e: EstadoReunionFront, evento: string, data: unkno
     if (i < 0) return e
     const lineas = e.lineas.slice()
     lineas[i] = { ...lineas[i], nota: d.nota }
+    return { ...e, lineas }
+  }
+
+  if (evento === 'reunion-memoria') {
+    const i = typeof d.linea === 'string' ? e.lineas.findIndex((l) => l.id === d.linea) : -1
+    if (i < 0) return e
+    const lineas = e.lineas.slice()
+    lineas[i] = { ...lineas[i], memoria: true }
     return { ...e, lineas }
   }
 
@@ -318,7 +339,10 @@ function puedeCerrar(): boolean {
 }
 
 export function alLector(estado: EstadoLector, motivo?: string) {
-  reunion.value = { ...reunion.value, lector: estado }
+  let cajitaAcoplada = reunion.value.cajitaAcoplada
+  if (motivo === 'cajita_acoplada') cajitaAcoplada = true
+  else if (motivo === 'cajita_escondida' || estado === 'apagado') cajitaAcoplada = false
+  reunion.value = { ...reunion.value, lector: estado, cajitaAcoplada }
   if (estado === 'apagado' && motivo === 'bandeja' && puedeCerrar()) void terminar(true)
 }
 
@@ -353,6 +377,8 @@ export async function cargarEstado(): Promise<void> {
       soltarMirando()
       return
     }
+    // El lector avisa de la cajita acoplada una sola vez: si es la misma reunión, el aviso sigue.
+    if (nuevo.reunion !== null && nuevo.reunion === reunion.value.reunion) nuevo.cajitaAcoplada = reunion.value.cajitaAcoplada
     reunion.value = nuevo
     soltarMirandoSegunSnapshot()
   } catch {
@@ -366,11 +392,11 @@ export async function alReconectar(): Promise<void> {
   if (reunion.value.estado === 'escuchando' && reunion.value.lector === 'escuchando') void lector?.vaciar()
 }
 
-export async function escuchar(reposElegidos: string[], todos: boolean): Promise<void> {
+export async function escuchar(reposElegidos: string[], todos: boolean, tema = ''): Promise<void> {
   errorReunion.value = null
   let id: string
   try {
-    const d = obj(await pedir('POST', '/api/reunion/empezar', { device, repos: todos ? [] : reposElegidos, todos }))
+    const d = obj(await pedir('POST', '/api/reunion/empezar', { device, repos: todos ? [] : reposElegidos, todos, tema }))
     if (typeof d?.reunion !== 'string' || !d.reunion) throw new Error('respuesta')
     id = d.reunion
     reunion.value = aplicarEvento({ ...reunion.value, reunion: null, estado: 'inactiva' }, 'reunion-estado', {
@@ -447,6 +473,24 @@ export async function anotar(linea: string): Promise<void> {
     reunion.value = aplicarEvento(reunion.value, 'reunion-anotada', { reunion: id, linea, nota: d?.nota })
   } catch {
     errorReunion.value = 'No pude anotar la línea.'
+  }
+}
+
+/** Ids de las líneas que se están guardando en la memoria de trabajo. */
+export const guardandoMemoria = ref<string[]>([])
+
+export async function guardarEnMemoria(linea: string): Promise<void> {
+  const id = reunion.value.reunion
+  if (!id || guardandoMemoria.value.includes(linea)) return
+  errorReunion.value = null
+  guardandoMemoria.value = [...guardandoMemoria.value, linea]
+  try {
+    await pedir('POST', '/api/reunion/memoria', { reunion: id, linea })
+    reunion.value = aplicarEvento(reunion.value, 'reunion-memoria', { reunion: id, linea })
+  } catch {
+    errorReunion.value = 'No pude guardar en tu memoria de trabajo.'
+  } finally {
+    guardandoMemoria.value = guardandoMemoria.value.filter((x) => x !== linea)
   }
 }
 

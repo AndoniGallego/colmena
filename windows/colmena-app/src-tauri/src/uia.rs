@@ -113,6 +113,18 @@ impl HiloUia {
     }
 }
 
+/// La última ventana ajena al frente (hwnd y proceso), para saber sobre cuál se dibuja la marca.
+pub fn ventana_guardada() -> Option<colmena_nucleo::nudo::pc::Guardada> {
+    #[cfg(windows)]
+    {
+        win::guardada_actual()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 /// Rects físicos de pantalla de los menús o popups efímeros abiertos (vacío fuera de Windows).
 pub fn rects_efimeros() -> Vec<Rect> {
     #[cfg(windows)]

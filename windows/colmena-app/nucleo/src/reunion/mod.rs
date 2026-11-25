@@ -1,5 +1,6 @@
 //! Copiloto de reuniones: lógica pura (sin Windows) para leer los Subtítulos en vivo.
 
+pub mod cajita;
 pub mod dedup;
 pub mod subtitulos;
 pub mod tanda;

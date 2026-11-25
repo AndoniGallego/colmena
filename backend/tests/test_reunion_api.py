@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import ORIGIN, PIN, make_snapshot
+from orquestador import reunion as R
 from orquestador.app import create_app
 from orquestador.board import BoardHub
 from orquestador.digest import DigestService
@@ -43,7 +44,7 @@ class Runner:
 
 
 class Armado:
-    def __init__(self, tmp_path, cfg, handoffs, opts=True):
+    def __init__(self, tmp_path, cfg, handoffs, opts=True, guardar_memoria=None):
         self.home = Path(os.environ["HOME"])
         self.repo = self.home / "development" / "repo-a"
         self.repo.mkdir(parents=True)
@@ -57,7 +58,8 @@ class Armado:
         hub = BoardHub(self.enchufe, digests)
         hub.self_pane_id = "w2:p9"
         self.carpeta = tmp_path / "cop"
-        opciones = {"runner": self.runner, "programar": self._programar, "carpeta": self.carpeta} if opts else None
+        opciones = {"runner": self.runner, "programar": self._programar, "carpeta": self.carpeta,
+                    "guardar_memoria": guardar_memoria} if opts else None
         self.app = create_app(cfg, b"secret", StateStore(self.datos), hub=hub, digests=digests,
                               dist=tmp_path / "nodist", handoffs_dir=handoffs, uploads_dir=tmp_path / "uploads",
                               enchufe=self.enchufe, reunion_opts=opciones)
@@ -66,7 +68,8 @@ class Armado:
 
     def _programar(self, delay, fn):
         p = Prog(delay, fn)
-        self.progs.append(p)
+        if delay != R.SIN_TEXTO_S:
+            self.progs.append(p)
         return p
 
     def falsear_terminales(self):
@@ -136,12 +139,12 @@ class Eventos:
         return [d for e, d in self.todos if e == nombre]
 
 
-def _empezar(c, repos=None, todos=False):
+def _empezar(c, repos=None, todos=False, **extra):
     r = c.get("/api/reunion/repos")
     assert r.status_code == 200
     ruta = [x["ruta"] for x in r.json()["repos"] if x["nombre"] == "repo-a"][0]
     return c.post("/api/reunion/empezar", json={"device": DEV, "repos": repos if repos is not None else [ruta],
-                                                 "todos": todos})
+                                                 "todos": todos, **extra})
 
 
 def test_flujo_completo(rc, armado):
@@ -448,3 +451,57 @@ def test_anotar_linea_crea_la_nota_una_sola_vez(rc, armado):
     notas = [n for n in rc.app.state.notas.listar() if n["id"] == nota_id]
     assert len(notas) == 1 and notas[0]["tipo"] == "apunte" and notas[0]["texto"] == "¿Hay reembolsos parciales?"
     assert rc.get("/api/reunion/estado").json()["lineas"][0]["nota"] == nota_id
+
+
+def test_memoria_endpoint_guarda_una_vez_y_el_estado_lo_refleja(cfg, tmp_path, handoffs):
+    guardados = []
+    arm = Armado(tmp_path, cfg, handoffs, guardar_memoria=lambda t, c: guardados.append((t, c)))
+    arm.falsear_terminales()
+    with TestClient(arm.app, base_url="https://testserver", headers=ORIGIN, client=("127.0.0.1", 5000)) as rc:
+        assert rc.post("/api/login", json={"pin": PIN}).status_code == 200
+        ev = Eventos(rc)
+        rid = _con_linea_detectada(rc, arm, ev)
+        assert rc.post("/api/reunion/memoria", json={"reunion": rid, "linea": "l1"}).status_code == 409
+        rc.post("/api/reunion/anotar", json={"reunion": rid, "linea": "l1"})
+        r = rc.post("/api/reunion/memoria", json={"reunion": rid, "linea": "l1"})
+        assert r.status_code == 202 and r.json() == {"memoria": True}
+        rc.post("/api/reunion/memoria", json={"reunion": rid, "linea": "l1"})
+        assert len(guardados) == 1
+        assert ev.de("reunion-memoria") == [{"reunion": rid, "linea": "l1"}]
+        est = rc.get("/api/reunion/estado").json()
+        assert est["memoria_trabajo"] is True and est["lineas"][0]["memoria"] is True
+
+
+def test_memoria_endpoint_sin_configurar_es_503(rc, armado):
+    ev = Eventos(rc)
+    rid = _con_linea_detectada(rc, armado, ev)
+    rc.post("/api/reunion/anotar", json={"reunion": rid, "linea": "l1"})
+    assert rc.get("/api/reunion/estado").json()["memoria_trabajo"] is False
+    assert rc.post("/api/reunion/memoria", json={"reunion": rid, "linea": "l1"}).status_code == 503
+
+
+def test_guardador_memoria_trabajo_valida_la_config(cfg):
+    from orquestador.app import guardador_memoria_trabajo
+    cfg.docker_bin = "/usr/bin/docker"
+    cfg.guardian = {"memoria_contenedor": "engram", "memoria_trabajo": "trabajo"}
+    assert callable(guardador_memoria_trabajo(cfg))
+    for malo in ({"memoria_contenedor": "engram"}, {"memoria_contenedor": "engram", "memoria_trabajo": "Mal Nombre"},
+                 {"memoria_contenedor": "-x", "memoria_trabajo": "trabajo"}, {"memoria_trabajo": "trabajo"}):
+        cfg.guardian = malo
+        assert guardador_memoria_trabajo(cfg) is None
+
+
+def test_api_empezar_con_tema(rc, armado):
+    assert _empezar(rc, tema="Plux en ps9").status_code == 200
+    assert "La reunión trata de: Plux en ps9." in armado.abiertos[0][0]["mensaje"]
+
+
+def test_api_tema_largo_422(rc, armado):
+    assert _empezar(rc, tema="x" * 201).status_code == 422
+    assert armado.abiertos == []
+    assert _empezar(rc).status_code == 200
+
+
+def test_api_tema_solo_espacios(rc, armado):
+    assert _empezar(rc, tema="   \n ").status_code == 200
+    assert "trata de" not in armado.abiertos[0][0]["mensaje"]

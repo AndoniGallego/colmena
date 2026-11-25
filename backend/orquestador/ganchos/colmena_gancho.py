@@ -18,12 +18,13 @@ EVENTOS = frozenset({
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
     "PermissionRequest",
     "Notification",
     "Stop",
 })
 
-_HERRAMIENTAS = frozenset({"PreToolUse", "PostToolUse", "PermissionRequest"})
+_HERRAMIENTAS = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"})
 _SIN_ESPERA = frozenset({"AskUserQuestion"})
 _TOPE_NOTIFICACION = 512
 _CAMPOS_RECORTABLES = (
@@ -32,6 +33,7 @@ _CAMPOS_RECORTABLES = (
     "last_assistant_message",
     "message",
     "source",
+    "error",
 )
 _HERRAMIENTAS_SIEMPRE = frozenset({"Bash", "Edit", "Write"})
 _JSON_KW = {"ensure_ascii": False, "separators": (",", ":")}
@@ -181,6 +183,13 @@ def armar_mensaje(entrada: dict, environ: dict) -> dict | None:
             ti, rec = recortar_json(tool_input_original, limite)
             datos["tool_input"] = ti
             recortado = recortado or rec
+        if evento == "PostToolUseFailure":
+            if "error" in entrada:
+                err, rec = recortar_texto(str(entrada["error"]), _TOPE_NOTIFICACION)
+                datos["error"] = err
+                recortado = recortado or rec
+            if isinstance(entrada.get("is_interrupt"), bool):
+                datos["is_interrupt"] = entrada["is_interrupt"]
     elif evento == "SessionStart":
         if "source" in entrada:
             datos["source"] = entrada["source"]

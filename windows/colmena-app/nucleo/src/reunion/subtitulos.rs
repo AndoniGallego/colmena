@@ -31,6 +31,11 @@ pub fn rebusca_ms(abiertos_en_ms: Option<u64>, ahora_ms: u64) -> u64 {
     if en_gracia(abiertos_en_ms, ahora_ms) { REBUSCA_EN_GRACIA_MS } else { REBUSCA_MS }
 }
 
+/// ¿Hay que volver a buscar la cajita real? Solo si la que se lee es el respaldo ("texto mayor"), no la de id.
+pub fn rebuscar_cajita(por_id: bool, ahora_ms: u64, ultima_busqueda_ms: u64, abiertos_en_ms: Option<u64>) -> bool {
+    !por_id && ahora_ms.saturating_sub(ultima_busqueda_ms) >= rebusca_ms(abiertos_en_ms, ahora_ms)
+}
+
 /// Al terminar: cierra los Subtítulos solo si los abrió Colmena.
 pub fn al_terminar(abiertos_por_colmena: bool) -> bool {
     abiertos_por_colmena
@@ -39,6 +44,19 @@ pub fn al_terminar(abiertos_por_colmena: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn la_cajita_hallada_por_id_no_se_vuelve_a_buscar() {
+        assert!(!rebuscar_cajita(true, 60_000, 0, Some(0)));
+    }
+
+    #[test]
+    fn la_cajita_de_respaldo_se_rebusca_cada_5_s_y_cada_1_s_en_gracia() {
+        assert!(!rebuscar_cajita(false, 4_999, 0, None));
+        assert!(rebuscar_cajita(false, REBUSCA_MS, 0, None));
+        assert!(!rebuscar_cajita(false, 20_500, 20_000, Some(10_000)));
+        assert!(rebuscar_cajita(false, 10_000 + REBUSCA_EN_GRACIA_MS, 10_000, Some(9_500)));
+    }
 
     #[test]
     fn recien_abiertos_por_colmena_no_avisa_y_busca_seguido() {

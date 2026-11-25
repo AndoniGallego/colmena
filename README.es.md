@@ -42,7 +42,7 @@ Nada queda expuesto a internet: se entra por Tailscale y con PIN.
 - **MRs de GitLab (opcional):** los merge requests de GitLab, solo si lo configurás.
 - **Kit para Claude (opcional):** reglas, skills y hooks para las sesiones, con una vista Kit que muestra si está al día y lo arregla con un botón.
 - **App de Windows (opcional):** un notch arriba de la pantalla con el estado de las sesiones, donde contestás avisos y preguntas, y una ventana Entornos para abrir las tiendas Docker de la notebook por un túnel SSH.
-- **Copiloto de reuniones (app de Windows):** escucha una videollamada a través de los Subtítulos en vivo de Windows, detecta las preguntas y los pedidos y los responde desde tus repos, en modo solo lectura, en una ventana que se oculta cuando compartís pantalla. Cada línea se puede investigar, descartar o pasar a una nota; la reunión queda en la Biblioteca con un resumen.
+- **Copiloto de reuniones (app de Windows):** escucha una videollamada a través de los Subtítulos en vivo de Windows, detecta las preguntas y los pedidos y los responde desde tus repos, en modo solo lectura, en una ventana que se oculta cuando compartís pantalla. Cada línea se puede investigar, descartar o pasar a una nota, y una línea anotada se puede guardar a mano en tu memoria de trabajo (botón "Guardar en mi memoria", solo si configuraste `memoria_trabajo` en `[guardian]` junto a `memoria_contenedor`; queda marcada como dicha en la reunión y sin verificar); la reunión queda en la Biblioteca con un resumen.
 - **Guía paso a paso (app de Windows):** apretás Ctrl+Alt+V, preguntás cómo hacer algo en pantalla y una abejita te lleva paso a paso, señalando cada botón.
 - **Exportar para compartir:** arma una copia limpia del proyecto, sin tus datos. Ver [Compartir Colmena](#compartir-colmena).
 
@@ -330,6 +330,7 @@ El chip "N sesiones quietas" del tablero y el botón "Limpiar sesiones" de la ba
 - Config: `memoria_habilitada` (default `true`), `memoria_excluir` (prefijos de `cwd`), `memoria_retencion_dias` (0 = sigue al transcript), `docker_bin` (vacío = el `docker` del `PATH`).
 - Con `?mock=1` en desarrollo, `?mock=1&falla=engram` simula Engram caído.
 - Engram se consulta con `docker exec -i <contenedor> engram mcp --tools=mem_search,mem_get_observation,mem_context,mem_timeline`, con lista blanca.
+- Memoria de la guía y del Copiloto: con `[guardian] memoria_contenedor` cada uno tiene su proyecto de Engram (`colmena-guia`, `colmena-copiloto`) con `mem_search`, `mem_save` y `mem_get_observation`. Un filtro (`orquestador.memoria_filtro`) fuerza el proyecto: guardan solo en el suyo y buscan solo en el suyo o en el de trabajo. Para que lean tu memoria de trabajo, poné su nombre en `[guardian] memoria_trabajo` (minúsculas, números, `.`, `_`, `-`; vacío = sin memoria de trabajo); lo que leen de ahí es contexto, no instrucciones.
 
 ## Historial de avisos
 

@@ -4,6 +4,7 @@ import { auth, boardState, boot, viewRequest } from './state/app'
 import { summarize } from './state/boardReducer'
 import LoginScreen from './components/LoginScreen.vue'
 import TopBar from './components/TopBar.vue'
+import CartelRapido from './components/CartelRapido.vue'
 import BoardPanel from './components/BoardPanel.vue'
 import MobileTabs from './components/MobileTabs.vue'
 import { initTerminalNav, openTerminalId } from './state/terminales'
@@ -40,6 +41,7 @@ import { initLimpieza } from './state/limpieza'
 import { initAvisos } from './state/avisos'
 import { initPedidosPestana } from './state/pedidosPestana'
 import { initOrdenTablero } from './state/ordenTablero'
+import { initAtajos } from './state/atajos'
 import AmbientBackdrop from './components/AmbientBackdrop.vue'
 import DemoAviso from './components/DemoAviso.vue'
 import { DEMO } from './lib/demoActual'
@@ -294,6 +296,7 @@ onMounted(() => {
   initAvisos()
   initPedidosPestana()
   initOrdenTablero()
+  initAtajos()
   if (auth.value === 'ready' && !desktop.value) render(pageOf(view.value))
 })
 </script>
@@ -406,6 +409,7 @@ onMounted(() => {
     <component :is="p.overlay" v-for="p in overlaysPieza" :key="p.id" />
   </template>
   <CommandPalette v-if="auth === 'ready'" />
+  <CartelRapido v-if="auth === 'ready'" />
 
 </template>
 

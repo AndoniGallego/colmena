@@ -167,6 +167,11 @@ def pedido_desde_comando_bash(command: str) -> dict | None:
     except (ValueError, TypeError):
         log.info("colmena-pestana JSON inválido")
         return None
+    return pedido_desde_dict(data)
+
+
+def pedido_desde_dict(data) -> dict | None:
+    """Valida y normaliza un pedido ya parseado (marca o MCP): mismo resultado para la misma entrada."""
     if not isinstance(data, dict):
         return None
     if "accion" in data:

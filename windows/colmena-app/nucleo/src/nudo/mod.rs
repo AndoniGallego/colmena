@@ -5,6 +5,7 @@ pub mod guia;
 pub mod orden;
 pub mod pc;
 pub mod salida;
+pub mod visible;
 pub mod zonas;
 
 pub const ERR_APAGADO: &str = "apagado";

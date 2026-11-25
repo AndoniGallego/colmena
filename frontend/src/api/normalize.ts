@@ -1,5 +1,6 @@
 import type { CopiaCierre, Agent, AgentCtx, CtxCompact, CloseBlocker, ClosePane, ClosePreview, CloseResult, Guardado, GuardadoPane, GuardadoTarget, CloseSession, AgentStatus, CtxLevel, StatusLine, Board, ChatMessage, Digest, DigestTurn, Subagente, SubagenteEstado, TranscriptItem, TranscriptPage, Upload, VozEstado, VozResultado, LibItem, LibKind, LibListing, LibSession, Terminal, TerminalEstado, TerminalSalida, TerminalConfig, TerminalPreview, RepetirPrep, TerminalAuditoria, LimpiezaCandidatos, LimpiezaItem, LimpiezaPreviewItem, LimpiezaRazon, Aviso, AvisoKindBase, AvisosPage, MemoriaCita, MemoriaEstado, PasoMemoria, ReporteFila, PedidoPestana, PedidoPestanaEstado, PedidoPestanaTab, PedidoPestanaCierre, ObjetivoCierre, VistaCierrePedido } from './types'
 import { toEstado } from '../lib/estado'
+import { normalizeTraba } from '../lib/trabas'
 import { MAX_FILES, isUploadId } from '../lib/attachments'
 
 const STATUSES: AgentStatus[] = ['idle', 'working', 'blocked', 'done', 'unknown']
@@ -148,8 +149,17 @@ function normalizeAgent(a: any): Agent {
     unread: Boolean(a?.unread),
     last_activity: a?.last_activity ? String(a.last_activity) : null,
     fondo: normalizeFondo(a?.fondo),
+    traba: normalizeTraba(a?.traba),
     ctx: normalizeCtx(a?.ctx),
+    uso: normalizeUsoHoy(a?.uso),
   }
+}
+
+function normalizeUsoHoy(raw: any): Agent['uso'] {
+  const total = raw?.total
+  if (typeof total !== 'number' || !Number.isFinite(total) || total < 0) return null
+  const usd = raw?.usd
+  return { total, usd: typeof usd === 'number' && Number.isFinite(usd) && usd >= 0 ? usd : null }
 }
 
 const stringList20 = (raw: unknown) => (Array.isArray(raw) ? raw.filter((x: unknown) => typeof x === 'string').slice(0, 20) : [])
@@ -517,11 +527,11 @@ export function normalizeLibSessions(raw: any): LibSession[] {
     .map((s: any) => ({ session_id: s.session_id, titulo: str(s.titulo), proyecto: str(s.proyecto), n: Number(s.n) || 0, ultimo_ts: str(s.ultimo_ts) }))
 }
 
-const AVISO_KINDS: readonly string[] = ['asks', 'blocked', 'done', 'terminal', 'cierre', 'encadenar', 'vigia', 'mr', 'entorno', 'test', 'progreso', 'pestana'] satisfies AvisoKindBase[]
+const AVISO_KINDS: readonly string[] = ['asks', 'blocked', 'done', 'terminal', 'cierre', 'encadenar', 'vigia', 'mr', 'entorno', 'test', 'progreso', 'pestana', 'trabada'] satisfies AvisoKindBase[]
 export const AVISO_TAG_RE = /^[A-Za-z0-9_.:-]{1,120}$/
 export const PEDIDO_PESTANA_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const PEDIDO_ESTADOS: PedidoPestanaEstado[] = ['pendiente', 'abierto', 'rechazado', 'vencido']
+const PEDIDO_ESTADOS: PedidoPestanaEstado[] = ['pendiente', 'abierto', 'rechazado', 'vencido', 'descartado']
 
 /** `kindsExtra`: kinds de las piezas montadas, que también se aceptan. */
 export function normalizeAvisos(raw: any, incluirPrueba = false, kindsExtra: readonly string[] = []): AvisosPage {
@@ -600,6 +610,29 @@ export function normalizeVistaCierrePedido(raw: unknown): VistaCierrePedido | nu
   return { trabajando: o.trabajando, estados, huella: o.huella }
 }
 
+/** Acciones que pide una sesión por el MCP: sin sus datos no hay qué mostrar ni qué aprobar. */
+function pedidoMcp(out: PedidoPestana, p: any): PedidoPestana | null {
+  const { pestanas: _p, tarjeta: _t, ...base } = out
+  if (p.accion === 'mensaje') {
+    const pane = str(p.envio?.pane_id)
+    if (!pane) return null
+    return { ...base, accion: 'mensaje', envio: { pane_id: pane.slice(0, 64), nombre: str(p.envio.nombre).slice(0, 120) } }
+  }
+  if (p.accion === 'programada') {
+    const cuando = str(p.programada?.cuando)
+    const pane = str(p.programada?.pane_id)
+    if (!/^\d{1,2}:\d{2}$/.test(cuando) || !pane) return null
+    return {
+      ...base,
+      accion: 'programada',
+      programada: { cuando, pane_id: pane.slice(0, 64), nombre: str(p.programada.nombre).slice(0, 120) },
+    }
+  }
+  const ticket = str(p.tarea?.ticket)
+  if (!ticket) return null
+  return { ...base, accion: 'tarea', tarea: { ticket: ticket.slice(0, 20) } }
+}
+
 export function normalizePedidosPestana(raw: unknown): PedidoPestana[] {
   const list = Array.isArray(raw) ? raw : []
   return list
@@ -644,6 +677,11 @@ export function normalizePedidosPestana(raw: unknown): PedidoPestana[] {
         }
         if (tabs.length) out.pestanas = tabs
       }
+      const leyo = p.leyo_otra_sesion
+      if (leyo && typeof leyo === 'object' && str(leyo.nombre) && typeof leyo.ts === 'number' && Number.isFinite(leyo.ts)) {
+        out.leyo_otra_sesion = { nombre: str(leyo.nombre).slice(0, 120), ts: leyo.ts }
+      }
+      if (p.accion === 'mensaje' || p.accion === 'programada' || p.accion === 'tarea') return pedidoMcp(out, p)
       if (p.accion === 'cursor') return pedidoCursor(out, p)
       if (p.accion === 'cerrar' && p.cierre !== undefined) {
         const cierre = pedidoCierre(p.cierre)

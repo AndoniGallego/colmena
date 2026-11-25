@@ -65,9 +65,32 @@ fn estable(t: &str) -> &str {
     t.rfind(TERMINADORES).map_or("", |i| &t[..i + t[i..].chars().next().map_or(1, char::len_utf8)])
 }
 
+/// Largo (en caracteres) desde el que un renglón cortado se cierra con punto y no con raya.
+const RENGLON_LARGO: usize = 40;
+
+/// Subtítulos corta renglones a mitad de frase: cada salto pasa a ser punto, raya o espacio.
+pub fn unir_lineas(t: &str) -> String {
+    let mut out = String::new();
+    let mut previo: Option<&str> = None;
+    for renglon in t.split('\n').map(str::trim).filter(|r| !r.is_empty()) {
+        if let Some(p) = previo {
+            out.push_str(if p.ends_with(TERMINADORES) {
+                " "
+            } else if p.chars().count() >= RENGLON_LARGO {
+                ". "
+            } else {
+                " — "
+            });
+        }
+        out.push_str(renglon);
+        previo = Some(renglon);
+    }
+    out
+}
+
 impl Deduplicador {
     pub fn observar(&mut self, visible: &str, ahora_ms: u64) -> Option<String> {
-        let norm = normalizar(visible);
+        let norm = normalizar(&unir_lineas(visible));
         if norm.is_empty() || norm == self.visible {
             return None;
         }
@@ -151,6 +174,39 @@ pub fn contar_repetidas(textos: &[String]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn salto_tras_trozo_largo_es_punto() {
+        assert_eq!(
+            unir_lineas("hoy vamos a revisar los reembolsos de la semana\ny después vemos"),
+            "hoy vamos a revisar los reembolsos de la semana. y después vemos"
+        );
+    }
+    #[test]
+    fn salto_tras_trozo_corto_es_raya() {
+        assert_eq!(unir_lineas("bueno\nsigamos"), "bueno — sigamos");
+    }
+    #[test]
+    fn salto_tras_terminador_es_espacio() {
+        assert_eq!(unir_lineas("Listo.\nSigamos"), "Listo. Sigamos");
+    }
+    #[test]
+    fn crlf_y_saltos_dobles_cuentan_uno() {
+        assert_eq!(unir_lineas("bueno\r\n\nsigamos"), "bueno — sigamos");
+    }
+    #[test]
+    fn largo_se_mide_en_caracteres() {
+        // 39 caracteres con tildes (más de 40 bytes): sigue siendo corto.
+        let t = "ñññññññññññññññññññññññññññññññññññññññ";
+        assert_eq!(t.chars().count(), 39);
+        assert_eq!(unir_lineas(&format!("{t}\nsigue")), format!("{t} — sigue"));
+    }
+    #[test]
+    fn observar_usa_los_saltos() {
+        let mut d = Deduplicador::default();
+        let sale = d.observar("Primero lo de reembolsos y cuánto tarda cada uno\nDespués otra cosa.", 0);
+        assert!(sale.as_deref().unwrap_or("").contains("cada uno. Después otra cosa."), "{sale:?}");
+    }
 
     #[test]
     fn texto_que_crece_emite_solo_lo_nuevo() {

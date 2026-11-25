@@ -64,7 +64,8 @@ class AvisosOrigen:
         return next((a for a in agentes if pane and a.get("pane_id") == pane), None)
 
     def al_descarte(self, origen: dict, motivo: str) -> None:
-        if motivo not in TEXTOS:
+        if motivo not in TEXTOS or origen.get("via") == "mcp":
+            # Los pedidos del MCP ya reciben el motivo en la Task o en colmena_estado_pedido.
             return
         clave = (origen.get("session_id") or origen.get("pane_id") or "", motivo)
         if not clave[0] or clave in self._pendientes:

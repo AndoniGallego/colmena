@@ -25,6 +25,9 @@ from .guardian.lanzador import MODOS_INTERNOS, MODOS_POR_LANZAMIENTO, carpeta_de
 from .nueva_tarea import (Worktrees, borrar_copia, base_por_defecto, crear_worktree, es_raiz_repo, mensaje_ticket,
                           nombre_pestana, nombre_ticket, quitar_recien_creado, rama_existe, rama_para, ruta_libre,
                           slug_de, validar_rama, validar_ticket)
+from .preparar_copia import (ConfianzaPreparar, ENV_RUTA, HEX64, coincide_en_copia, comando_setup, copiar_ignorados,
+                             escribir_env, hay_compose, leer_setup, payload_confianza, sufijo_mensaje, sufijo_maximo,
+                             validar_origenes, verificar_ignorados)
 from .nueva_terminal import (NUEVA_LIMIT, agente_unico, enumerar_carpetas, grupos_desde_tablero, normalizar_nombre,
                              slug_agente, validar_carpeta)
 from .sesiones_viejas import SesionesViejas, validar_uuid
@@ -166,6 +169,12 @@ class NuevaTareaBody(_Body):
     rama: Optional[str] = Field(None, max_length=80)
     grupo: Optional[str] = Field(None, pattern=GRUPO_PATTERN)
     ticket: Optional[str] = Field(None, max_length=20)
+
+
+class ConfiarPrepararBody(_Body):
+    repo: str = Field(..., max_length=1024)
+    setup_sha256: str = Field(..., pattern=HEX64.pattern)
+    script_sha256: Optional[str] = Field(None, pattern=HEX64.pattern)
 
 
 class BorrarCopiaBody(_Body):
@@ -327,7 +336,9 @@ class TerminalActions:
                  plan_cwds: Callable[[], list] = lambda: [],
                  sesiones_viejas: Optional[SesionesViejas] = None, estados=None,
                  worktrees: Optional[Worktrees] = None, cierres=None,
-                 fijados: Callable[[], frozenset] = lambda: frozenset()):
+                 fijados: Callable[[], frozenset] = lambda: frozenset(),
+                 confianza: Optional[ConfianzaPreparar] = None, preparar: Callable[[], dict] = lambda: {},
+                 puertos_colmena: Callable[[], frozenset] = lambda: frozenset()):
         self.t = terminales
         self.fijados = fijados
         self.cierres = cierres
@@ -348,6 +359,9 @@ class TerminalActions:
         self.verify = verify
         self.pin = pin
         self.worktrees = worktrees
+        self.confianza = confianza
+        self.preparar = preparar
+        self.puertos_colmena = puertos_colmena
         self.plan_cwds = lambda: [*plan_cwds(), *(worktrees.rutas() if worktrees else [])]
         self.sesiones_viejas = sesiones_viejas
         self._retomar_cache: OrderedDict = OrderedDict()
@@ -594,7 +608,8 @@ class TerminalActions:
             self._nueva_cache.popitem(last=False)
         return out
 
-    async def nueva_tarea(self, ctx: Ctx, body: NuevaTareaBody, *, permiso: str | None = None) -> dict:
+    async def nueva_tarea(self, ctx: Ctx, body: NuevaTareaBody, *, permiso: str | None = None,
+                          nota_ajena: bool = False) -> dict:
         """Copia del repo (git worktree) con rama propia y una sesión de Claude adentro con la tarea."""
         clave = f"nt-{body.id}"
         cached = self._nueva_cache.get(clave)
@@ -606,7 +621,7 @@ class TerminalActions:
             raise TraspasoError(503, "Nueva tarea no está disponible")
         self._inflight.add(clave)
         try:
-            out = await self._nueva_tarea(ctx, body, permiso)
+            out = await self._nueva_tarea(ctx, body, permiso, nota_ajena)
         finally:
             self._inflight.discard(clave)
         self._nueva_cache[clave] = out
@@ -614,7 +629,36 @@ class TerminalActions:
             self._nueva_cache.popitem(last=False)
         return out
 
-    async def _nueva_tarea(self, ctx: Ctx, body: NuevaTareaBody, permiso: str | None = None) -> dict:
+    def _override_preparar(self, repo: str) -> Optional[dict]:
+        for clave, valor in (self.preparar() or {}).items():
+            if isinstance(valor, dict) and os.path.realpath(os.path.expanduser(str(clave))) == repo:
+                return valor
+        return None
+
+    @staticmethod
+    def _requiere_confianza(repo: str, base: str, setup) -> TraspasoError:
+        detalle = ("Este repo prepara la copia con un script: revisalo antes de confiar" if setup.script
+                   else "Este repo prepara la copia (copia archivos ignorados): revisalo antes de confiar")
+        return TraspasoError(409, detalle, {"codigo": "requiere_confianza",
+                                            "confianza": payload_confianza(repo, base, setup)})
+
+    def _preparar_copia(self, repo: str, ruta: str, rama: str, base: str, setup, existentes: list) -> Optional[int]:
+        """Pasos sincrónicos sobre la copia ya creada. Devuelve el puerto reservado (None si no se pidió)."""
+        if not coincide_en_copia(ruta, setup):
+            actual = leer_setup(repo, base, self._override_preparar(repo)) or setup
+            raise self._requiere_confianza(repo, base, actual)
+        verificar_ignorados(ruta, [ENV_RUTA, *existentes])
+        copiar_ignorados(repo, ruta, existentes)
+        compose = hay_compose(ruta)
+        pedir = setup.puertos is not None and not (compose and setup.docker != "puertos-variables")
+        puerto = self.worktrees.reservar({"ruta": ruta, "repo": repo, "rama": rama, "base": base,
+                                          "puertos": setup.puertos}, pedir,
+                                         frozenset(self.puertos_colmena()))
+        escribir_env(ruta, puerto, setup.puertos if puerto is not None else None, compose)
+        return puerto
+
+    async def _nueva_tarea(self, ctx: Ctx, body: NuevaTareaBody, permiso: str | None = None,
+                           nota_ajena: bool = False) -> dict:
         op = _Op(ctx, "nueva_tarea")
         tarea = body.tarea.strip()
         try:
@@ -624,28 +668,58 @@ class TerminalActions:
             repo = validar_carpeta(body.repo, [r for r in self.plan_cwds() if r not in self.worktrees.rutas()])
             if not es_raiz_repo(repo):
                 raise TraspasoError(400, "Esa carpeta no es la raíz de un repo de git")
+            base = await asyncio.to_thread(base_por_defecto, repo)
+            setup = existentes = omitidos = None
             if clave:
                 rama = f"feature/{clave}"
                 if body.rama and body.rama.strip() and body.rama.strip() != rama:
                     raise TraspasoError(400, f"Con ticket la rama es {rama}")
                 if await asyncio.to_thread(rama_existe, repo, rama):
                     raise TraspasoError(409, f"Ya hay una rama {rama}: retomá esa tarea o borrala antes")
-                nota, tarea, slug = tarea, mensaje_ticket(clave, rama, tarea), slug_de(clave)
+                if self.confianza is not None:
+                    setup = await asyncio.to_thread(leer_setup, repo, base, self._override_preparar(repo))
+                nota, slug = tarea, slug_de(clave)
+                tarea = mensaje_ticket(clave, rama, nota, sufijo_maximo(setup.script) if setup else "", ajena=nota_ajena)
                 nombre_base = nombre_ticket(clave, nota)
             else:
                 rama = validar_rama(body.rama.strip()) if body.rama and body.rama.strip() else \
                     rama_para(os.path.basename(repo), tarea)
                 slug, nombre_base = slug_de(tarea), nombre_pestana(tarea)
             nombre = normalizar_nombre(body.nombre.strip() if body.nombre else nombre_base, repo)
-            base = await asyncio.to_thread(base_por_defecto, repo)
+            if setup:
+                if not self.confianza.hay(repo, setup.toml_sha, setup.script_sha):
+                    raise self._requiere_confianza(repo, base, setup)
+                existentes, omitidos = await asyncio.to_thread(validar_origenes, repo, base, setup)
             ruta = ruta_libre(repo, slug)
             await asyncio.to_thread(crear_worktree, repo, rama, ruta, base)
             try:
-                self.worktrees.agregar({"ruta": ruta, "repo": repo, "rama": rama, "base": base})
-                item = {"carpeta": ruta, "nombre": nombre, "mensaje": tarea}
+                preparar = None
+                if setup:
+                    puerto = await asyncio.to_thread(self._preparar_copia, repo, ruta, rama, base, setup, existentes)
+                    compose = hay_compose(ruta)
+                    fijos = compose and setup.docker != "puertos-variables"
+                    tarea = mensaje_ticket(clave, rama, nota, sufijo_mensaje(setup.script, puerto, setup.puertos, fijos),
+                                           ajena=nota_ajena)
+                    preparar = {"puerto": puerto, "puertos": setup.puertos if puerto is not None else None,
+                                "copiados": existentes, "omitidos": omitidos, "setup_pane_id": None,
+                                "puertos_fijos": fijos}
+                else:
+                    self.worktrees.agregar({"ruta": ruta, "repo": repo, "rama": rama, "base": base})
+                if setup and setup.script:
+                    comando = comando_setup(setup.script)
+                    item = {"pestanas": [{"tipo": "claude", "nombre": nombre, "carpeta": ruta, "mensaje": tarea},
+                                         {"tipo": "terminal", "nombre": "setup", "carpeta": ruta, "comando": comando}]}
+                else:
+                    item = {"carpeta": ruta, "nombre": nombre, "mensaje": tarea}
                 creado = await self.abrir_desde_pedido_pestana(ctx, item, idempotencia=body.id, grupo=body.grupo,
-                                                               permiso=permiso)
-            except BaseException:
+                                                               permiso=permiso,
+                                                               **({"ejecutar_comandos": True} if setup and setup.script else {}))
+            except BaseException as exc:
+                abiertos = exc.extra.get("abiertos") if isinstance(exc, TraspasoError) else None
+                if abiertos:
+                    # Claude ya está adentro de la copia: borrarla sería peor que dejarla sin la terminal de setup.
+                    raise TraspasoError(503, f"Abrí Claude pero no la terminal de setup: corré `{comando}` a mano en la copia"
+                                        if setup and setup.script else exc.detail, exc.extra) from exc
                 self.worktrees.quitar(ruta)
                 await asyncio.to_thread(quitar_recien_creado, repo, rama, ruta, base)
                 raise
@@ -653,7 +727,34 @@ class TerminalActions:
             self._record(op, False, exc.detail, "rechazo")
             raise
         self._record(op, True, accion="nueva_tarea")
-        return {**creado, "ruta": ruta, "rama": rama, "base": base, "tarea": tarea}
+        out = {**creado, "ruta": ruta, "rama": rama, "base": base, "tarea": tarea}
+        if preparar is not None:
+            if setup.script and len(creado.get("pane_ids") or []) > 1:
+                preparar["setup_pane_id"] = creado["pane_ids"][1]
+            out["preparar"] = preparar
+        return out
+
+    async def confiar_preparar(self, ctx: Ctx, body: ConfiarPrepararBody) -> dict:
+        """Guarda la confianza en el setup (toml + script) del repo, atada a los hashes que Ando vio."""
+        op = _Op(ctx, "confiar_preparar")
+        try:
+            if self.worktrees is None or self.confianza is None:
+                raise TraspasoError(503, "Nueva tarea no está disponible")
+            repo = validar_carpeta(body.repo, [r for r in self.plan_cwds() if r not in self.worktrees.rutas()])
+            if not es_raiz_repo(repo):
+                raise TraspasoError(400, "Esa carpeta no es la raíz de un repo de git")
+            base = await asyncio.to_thread(base_por_defecto, repo)
+            setup = await asyncio.to_thread(leer_setup, repo, base, self._override_preparar(repo))
+            if setup is None:
+                raise TraspasoError(400, "Este repo no tiene nada que preparar")
+            if body.setup_sha256 != setup.toml_sha or body.script_sha256 != setup.script_sha:
+                raise self._requiere_confianza(repo, base, setup)
+            self.confianza.guardar(repo, setup.toml_sha, setup.script_sha)
+        except TraspasoError as exc:
+            self._record(op, False, exc.detail, "rechazo")
+            raise
+        self._record(op, True, accion="confiar_preparar")
+        return {"ok": True}
 
     async def borrar_copia(self, ctx: Ctx, body: BorrarCopiaBody) -> dict:
         """Quita la copia que creó Colmena si no se pierde trabajo (sin cambios y rama integrada)."""
@@ -778,8 +879,11 @@ class TerminalActions:
         al_crear: Callable[[], None] | None = None,
         permiso: str | None = None,
         dirs_extra: list[str] | None = None,
+        ejecutar_comandos: bool = False,
     ) -> dict:
-        """`permiso` (`default`/`plan`, o `copiloto`/`guia` solo en su carpeta fija) endurece el modo de cada Claude; None usa el global.
+        """`ejecutar_comandos` (solo por keyword, nunca desde un pedido externo) manda Enter al `comando` de las pestañas terminal.
+
+        `permiso` (`default`/`plan`, o `copiloto`/`guia` solo en su carpeta fija) endurece el modo de cada Claude; None usa el global.
 
         `dirs_extra` (solo con `copiloto`) son los repos que el guardián agrega con --add-dir."""
         if permiso is not None and permiso not in MODOS_POR_LANZAMIENTO | MODOS_INTERNOS:
@@ -888,7 +992,7 @@ class TerminalActions:
                                 "Abrí la terminal pero Claude no arrancó: podés arrancarlo desde ahí",
                             ) from exc
                     if tipo == "terminal" and pest.get("comando"):
-                        await g.escribir(pane, pest["comando"])
+                        await (g.ejecutar if ejecutar_comandos else g.escribir)(pane, pest["comando"])
                     entry = {
                         "pane_id": pane,
                         "tipo": tipo,
@@ -905,12 +1009,14 @@ class TerminalActions:
                 except TraspasoError:
                     if abiertos:
                         panes = ", ".join(a["pane_id"] for a in abiertos)
-                        raise TraspasoError(503, f"Quedó abierto {panes}; no pude seguir con «{nombre_tab}»")
+                        raise TraspasoError(503, f"Quedó abierto {panes}; no pude seguir con «{nombre_tab}»",
+                                            {"abiertos": [a["pane_id"] for a in abiertos]})
                     raise
                 except (NoDisponible, TerminalesError) as exc:
                     if abiertos:
                         panes = ", ".join(a["pane_id"] for a in abiertos)
-                        raise TraspasoError(503, f"Quedó abierto {panes}; no pude seguir con «{nombre_tab}»") from exc
+                        raise TraspasoError(503, f"Quedó abierto {panes}; no pude seguir con «{nombre_tab}»",
+                                            {"abiertos": [a["pane_id"] for a in abiertos]}) from exc
                     raise TraspasoError(503, "Las terminales propias no responden: no abrí nada") from exc
 
             async def _esperar_claude(pane_id: str, indice: int) -> tuple[int, bool]:

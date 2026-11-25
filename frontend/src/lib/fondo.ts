@@ -23,8 +23,8 @@ export function masFondo(cantidad: number): string {
   return cantidad > 1 ? `+${cantidad - 1}` : ''
 }
 
-export interface MetaCtx { unread: boolean; pide: boolean; pill: boolean; doing: boolean; mr: boolean; otroKind: boolean; fondo: boolean }
+export interface MetaCtx { unread: boolean; pide: boolean; pill: boolean; doing: boolean; mr: boolean; otroKind: boolean; fondo: boolean; traba?: boolean }
 
 export function mostrarMeta(c: MetaCtx): boolean {
-  return c.unread || c.pide || c.pill || c.doing || c.mr || c.otroKind || c.fondo
+  return c.unread || c.pide || c.pill || c.doing || c.mr || c.otroKind || c.fondo || !!c.traba
 }

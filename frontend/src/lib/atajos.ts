@@ -1,4 +1,6 @@
 export interface Atajo {
+  /** Si se puede cambiar: el id con el que se guarda (ver lib/teclas.ts). */
+  id?: string
   teclas: string[]
   /** Otra forma de hacer lo mismo. */
   tambien?: string[]
@@ -19,7 +21,7 @@ const WINDOWS = 'En la app de Windows'
 const DIAGRAMA = 'En un diagrama'
 
 export const ATAJOS: Atajo[] = [
-  { grupo: TODA, teclas: ['Ctrl', 'K'], mod: true, que: 'Abrir el buscador', donde: 'En toda la app' },
+  { grupo: TODA, id: 'buscador', teclas: ['Ctrl', 'K'], mod: true, que: 'Abrir el buscador', donde: 'En toda la app' },
   { grupo: TODA, teclas: ['Esc'], que: 'Cerrar paneles y hojas', donde: 'En toda la app' },
   { grupo: TODA, teclas: ['↑'], tambien: ['↓'], que: 'Moverte entre los resultados', donde: 'Con el buscador abierto' },
   { grupo: TODA, teclas: ['Enter'], que: 'Abrir el resultado elegido', donde: 'Con el buscador abierto' },
@@ -27,21 +29,21 @@ export const ATAJOS: Atajo[] = [
 
   { grupo: ESCRIBIR, teclas: ['Enter'], que: 'Mandar el mensaje', donde: 'Al escribirle a una sesión, con teclado' },
   { grupo: ESCRIBIR, teclas: ['Shift', 'Enter'], que: 'Salto de línea', donde: 'Al escribirle a una sesión' },
-  { grupo: ESCRIBIR, teclas: ['Ctrl', 'Shift', 'Espacio'], que: 'Dictar por voz (y terminar el dictado)', donde: 'Al escribirle a una sesión' },
+  { grupo: ESCRIBIR, id: 'dictar', teclas: ['Ctrl', 'Shift', 'Espacio'], mod: true, que: 'Dictar por voz (y terminar el dictado)', donde: 'Al escribirle a una sesión' },
   { grupo: ESCRIBIR, teclas: ['Esc'], que: 'Cancelar el dictado', donde: 'Mientras dictás' },
 
   { grupo: PREGUNTA, teclas: ['Enter'], que: 'Confirmar la respuesta', donde: 'En Te pregunta' },
   { grupo: PREGUNTA, teclas: ['←'], tambien: ['Retroceso'], que: 'Volver a la pregunta anterior', donde: 'En Te pregunta' },
   { grupo: PREGUNTA, teclas: ['→'], que: 'Pasar a la pregunta siguiente', donde: 'En Te pregunta' },
   { grupo: PREGUNTA, teclas: ['1', '–', '6'], que: 'Elegir esa opción', donde: 'En Te pregunta' },
-  { grupo: PREGUNTA, teclas: ['M'], que: 'Minimizar las preguntas', donde: 'En Te pregunta' },
+  { grupo: PREGUNTA, id: 'minimizar-preguntas', teclas: ['M'], que: 'Minimizar las preguntas', donde: 'En Te pregunta' },
   { grupo: PREGUNTA, teclas: ['Esc'], que: 'Cerrar las preguntas', donde: 'En Te pregunta' },
 
   { grupo: CAMBIOS, teclas: ['J'], tambien: ['↓'], que: 'Pasar al cambio siguiente', donde: 'En Cambios' },
   { grupo: CAMBIOS, teclas: ['K'], tambien: ['↑'], que: 'Pasar al cambio anterior', donde: 'En Cambios' },
-  { grupo: CAMBIOS, teclas: ['Ctrl', 'Enter'], mod: true, que: 'Agregar el comentario', donde: 'Al comentar un cambio' },
+  { grupo: CAMBIOS, id: 'comentar', teclas: ['Ctrl', 'Enter'], mod: true, que: 'Agregar el comentario', donde: 'Al comentar un cambio' },
 
-  { grupo: TERMINAL, teclas: ['Ctrl', 'Enter'], mod: true, que: 'Crear la terminal', donde: 'En Nueva terminal' },
+  { grupo: TERMINAL, id: 'crear-terminal', teclas: ['Ctrl', 'Enter'], mod: true, que: 'Crear la terminal', donde: 'En Nueva terminal' },
 
   { grupo: BIBLIOTECA, teclas: ['/'], que: 'Buscar', donde: 'En la Biblioteca' },
   { grupo: BIBLIOTECA, teclas: ['J'], tambien: ['↓'], que: 'Mover la selección hacia abajo (K o ↑, hacia arriba; H L o ← →, a los costados)', donde: 'En la Biblioteca' },
@@ -62,7 +64,7 @@ export const ATAJOS: Atajo[] = [
   { grupo: DIAGRAMA, teclas: ['+'], tambien: ['-'], que: 'Acercar / alejar (0 lo encaja)', donde: 'En un diagrama a pantalla completa' },
   { grupo: DIAGRAMA, teclas: ['←'], tambien: ['→'], que: 'Pasar al elemento anterior / siguiente', donde: 'En un diagrama' },
 
-  { grupo: WINDOWS, teclas: ['Ctrl', 'Alt', 'N'], que: 'Anotar desde Windows', donde: 'En la app de Windows (se cambia desde el ícono junto al reloj)' },
+  { grupo: WINDOWS, teclas: [], que: 'Los atajos de la app de Windows se cambian desde el ícono de Colmena junto al reloj → Atajos → Cambiar atajos…', donde: 'En la app de Windows' },
 ]
 
 export function gruposDeAtajos(lista: Atajo[] = ATAJOS): { grupo: string; items: Atajo[] }[] {

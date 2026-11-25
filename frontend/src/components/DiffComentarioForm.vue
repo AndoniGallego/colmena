@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { MAX_TEXTO } from '../lib/diffComentarios'
+import { coincideCtrlOCmd } from '../lib/teclas'
+import { capturandoAtajo, comboDe } from '../state/atajosEstado'
 
 const props = defineProps<{ etiqueta: string; fragmento: string; modelValue: string; editando?: boolean; autoenfocar?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [v: string]; agregar: []; cancelar: [] }>()
@@ -13,7 +15,7 @@ function onKey(e: KeyboardEvent) {
     e.preventDefault()
     e.stopPropagation()
     emit('cancelar')
-  } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && valido()) {
+  } else if (!capturandoAtajo.value && coincideCtrlOCmd(e, comboDe('comentar')) && valido()) {
     e.preventDefault()
     emit('agregar')
   }

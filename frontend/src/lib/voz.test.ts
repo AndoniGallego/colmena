@@ -107,3 +107,11 @@ describe('isVozShortcut', () => {
     expect(isVozShortcut(e({ altKey: true }))).toBe(false)
   })
 })
+
+describe('isVozShortcut con la combinación cambiada', () => {
+  it('responde a la nueva y no a la original', () => {
+    const k = { key: 'd', code: 'KeyD', ctrlKey: true, shiftKey: false, altKey: true, metaKey: false }
+    expect(isVozShortcut(k, 'mod+alt+d')).toBe(true)
+    expect(isVozShortcut({ ...k, code: 'Space', key: ' ', altKey: false, shiftKey: true }, 'mod+alt+d')).toBe(false)
+  })
+})

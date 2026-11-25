@@ -68,6 +68,7 @@ class Prefs(BaseModel):
     entornos: bool = True
     progreso: bool = True
     pestana: bool = True
+    trabada: bool = True
 
     @model_validator(mode="after")
     def _extras_validos(self):
@@ -675,6 +676,26 @@ class PushService:
         targets = [] if en_app else [s for s in list(self.store.subs) if s.get("prefs", {}).get("entornos", True)]
         results = await asyncio.gather(*(one(s) for s in targets))
         self._record("entorno", title, body, generic, sum(results), motivo=EN_APP if en_app else "", tag=tag)
+        return sum(results)
+
+    async def dispatch_traba(self, nombre: str, detalle: str, session_id: str = "", pane_id: str = "") -> int:
+        """Sesión trabada o en loop: un push por episodio; `texto` apagado deja título y cuerpo genéricos."""
+        sid = session_id if SESSION_RE.match(session_id or "") else ""
+        pane = pane_id if valido(PANE_RE, pane_id or "") else ""
+        tag = f"trabada-{sid}" if sid else "trabada"
+        title = f"{nombre} parece trabada"
+
+        async def one(sub: dict) -> bool:
+            con_texto = sub.get("prefs", {}).get("texto", True)
+            return await self._deliver(sub, {"title": title if con_texto else "Una sesión parece trabada",
+                                             "body": detalle if con_texto else GENERICO, "session_id": sid,
+                                             "kind": "trabada", "tag": tag})
+
+        en_app = self._en_la_app()
+        targets = [] if en_app else [s for s in list(self.store.subs) if s.get("prefs", {}).get("trabada", True)]
+        results = await asyncio.gather(*(one(s) for s in targets))
+        self._record("trabada", title, detalle, GENERICO, sum(results), motivo=EN_APP if en_app else "",
+                     session_id=sid, pane_id=pane, tag=tag)
         return sum(results)
 
     async def send_test(self, endpoint: Optional[str]) -> int:

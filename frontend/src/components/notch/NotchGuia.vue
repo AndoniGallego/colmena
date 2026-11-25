@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { guia, pedir, puedeSiguiente, seguirViva, siguiente, terminar, textoCajita } from '../../state/guia'
+import { guia, pedir, preguntaGuia, puedeSiguiente, seguirViva, siguiente, terminar, textoCajita } from '../../state/guia'
 
 /** `saliendo`: la guía se cerró y la cajita sigue montada solo para animar su salida. */
 withDefaults(defineProps<{ saliendo?: boolean }>(), { saliendo: false })
@@ -64,6 +64,7 @@ onBeforeUnmount(() => window.removeEventListener('focus', enfocarCampo))
         spellcheck="false"
         @keydown="onKey"
       />
+      <p v-if="preguntaGuia" class="pregunta"><span class="vh">Preguntaste: </span>{{ preguntaGuia }}</p>
       <p class="estado" :class="{ error: hayError, loop: ocupada }" role="status">{{ texto }}</p>
       <div v-if="verSiguiente || verListo || verSalir" class="acciones">
         <button v-if="verSiguiente" type="button" class="primaria" @click="siguiente()">Hecho, siguiente</button>
@@ -161,6 +162,26 @@ input::placeholder {
 }
 input:disabled {
   color: var(--text-3);
+}
+.pregunta {
+  margin: 2px 2px 0;
+  padding-left: 8px;
+  box-shadow: inset 2px 0 0 var(--accent-line);
+  font: 500 var(--t-sm)/1.3 var(--font-ui);
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .estado {
   margin: 4px 2px 0;

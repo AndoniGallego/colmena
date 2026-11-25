@@ -41,3 +41,9 @@ def test_sse_gzip_default_true_y_se_conserva_apagado(tmp_path):
     assert cfg.sse_gzip is False
     save_config(cfg, tmp_path)
     assert load_config(tmp_path).sse_gzip is False
+
+
+def test_preparar_por_repo_sobrevive_a_guardar_y_cargar(tmp_path):
+    cfg = Config(preparar={"/home/x/tienda": {"copiar": [".env"], "puertos": 5}})
+    save_config(cfg, tmp_path)
+    assert load_config(tmp_path).preparar == {"/home/x/tienda": {"copiar": [".env"], "puertos": 5}}

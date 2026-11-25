@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import stat
+import time
 from pathlib import Path
 
 import pytest
@@ -40,15 +41,19 @@ class Detector:
         self.respuestas = []
         self.llamadas = []
         self.resumenes = []
+        self.temas = []
+        self.temas_resumen = []
         self.resumen = {"titulo": "Plan de reembolsos", "resumen": ["a"], "pendientes": ["b"]}
         self.falla_resumen = False
 
-    async def detectar(self, tramo, previas):
+    async def detectar(self, tramo, previas, tema=""):
         self.llamadas.append((tramo, list(previas)))
+        self.temas.append(tema)
         return self.respuestas.pop(0) if self.respuestas else []
 
-    async def resumir(self, charla, tocadas):
+    async def resumir(self, charla, tocadas, tema=""):
         self.resumenes.append((charla, tocadas))
+        self.temas_resumen.append(tema)
         if self.falla_resumen:
             raise RuntimeError("sin modelo")
         return self.resumen
@@ -66,9 +71,11 @@ class Puente:
         self.borrados = []
         self.alg_en_guardar = None
         self.bloque = {"texto": "Sí, en el módulo X", "archivos": ["a.php"]}
+        self.temas = []
 
-    async def abrir(self, rid, repos, todos):
+    async def abrir(self, rid, repos, todos, tema=""):
         self.abiertos.append((rid, repos, todos))
+        self.temas.append(tema)
         return self.pane
 
     async def preguntar(self, pane_id, msg_id, texto):
@@ -127,9 +134,21 @@ class Notas:
         return dict(nota)
 
 
+class Memoria:
+    def __init__(self):
+        self.guardados = []
+        self.falla = None
+
+    def __call__(self, titulo, contenido):
+        if self.falla:
+            raise self.falla
+        self.guardados.append((titulo, contenido))
+
+
 class H:
     def __init__(self, tmp_path, ajustes=AJ):
-        self.eventos, self.progs, self.pend = [], [], []
+        self.memoria = Memoria()
+        self.eventos, self.progs, self.pend, self.vigias = [], [], [], []
         self.reloj, self.detector, self.puente, self.bib = Reloj(), Detector(), Puente(), Biblioteca()
         self.dir = tmp_path / "reuniones"
         self.fotos = []
@@ -138,11 +157,12 @@ class H:
             emitir=lambda e, d: self.eventos.append((e, d)), programar=self._programar,
             lanzar=self.pend.append, clock=self.reloj, detector=self.detector, puente=self.puente,
             biblioteca=self.bib, journal_dir=self.dir, ajustes=ajustes,
-            registrar_foto=lambda *a: self.fotos.append(a), notas=self.notas)
+            registrar_foto=lambda *a: self.fotos.append(a), notas=self.notas,
+            guardar_memoria=self.memoria)
 
     def _programar(self, delay, fn):
         p = Prog(delay, fn)
-        self.progs.append(p)
+        (self.vigias if delay == R.SIN_TEXTO_S else self.progs).append(p)
         return p
 
     def drenar(self):
@@ -162,8 +182,9 @@ class H:
     def evs(self, nombre):
         return [d for e, d in self.eventos if e == nombre]
 
-    def empezar(self, device="pc1", repos=("repo-a",), todos=False):
-        r = asyncio.run(self.store.empezar(device, list(repos), todos))
+    def empezar(self, device="pc1", repos=("repo-a",), todos=False, tema=None):
+        extra = {} if tema is None else {"tema": tema}
+        r = asyncio.run(self.store.empezar(device, list(repos), todos, **extra))
         self.drenar()
         return r["reunion"]
 
@@ -973,6 +994,78 @@ def test_anotar_requerimiento_crea_recordatorio(h):
     assert h.notas.creadas[0]["tipo"] == "recordatorio"
 
 
+def _con_clave(h):
+    rid, l1 = _con_linea(h)
+    h.detector.respuestas = [[{"tipo": "clave", "texto": "McDonald's tiene más de 36.000 locales"}]]
+    h.store.texto(rid, "pc1", "más")
+    h.disparar(h.activos()[0])
+    return rid, h.evs("reunion-linea")[-1]
+
+
+def test_detecta_linea_clave(h):
+    rid, lin = _con_clave(h)
+    assert lin["tipo"] == "clave" and lin["texto"] == "McDonald's tiene más de 36.000 locales"
+
+
+def _detectar_items(h, items):
+    rid = h.empezar()
+    h.detector.respuestas = [items]
+    h.store.texto(rid, "pc1", "x" * 2000)
+    h.disparar(h.activos()[0])
+    return [(x["tipo"], x["texto"]) for x in h.evs("reunion-linea")]
+
+
+def test_como_mucho_dos_clave_por_llamada(h):
+    got = _detectar_items(h, [{"tipo": "clave", "texto": t} for t in ("uno alfa", "dos beta", "tres gamma")])
+    assert got == [("clave", "uno alfa"), ("clave", "dos beta")]
+
+
+def test_las_preguntas_van_antes_que_los_clave(h):
+    got = _detectar_items(h, [{"tipo": "clave", "texto": "dato uno"}, {"tipo": "clave", "texto": "dato dos"},
+                              {"tipo": "pregunta", "texto": "¿Dónde se calcula el precio?"}])
+    assert got[0] == ("pregunta", "¿Dónde se calcula el precio?") and len(got) == 3
+
+
+def test_clave_no_usa_las_ultimas_plazas_del_minuto(h):
+    rid = h.empezar()
+    h.store._r.recientes.extend([h.store._clock()] * (R.LINEAS_POR_MIN - R.PLAZAS_RESERVADAS))
+    h.detector.respuestas = [[{"tipo": "clave", "texto": "dato"}, {"tipo": "pregunta", "texto": "¿Y el stock?"}]]
+    h.store.texto(rid, "pc1", "x" * 2000)
+    h.disparar(h.activos()[0])
+    assert [x["tipo"] for x in h.evs("reunion-linea")] == ["pregunta"]
+
+
+def test_clave_tiene_tope_por_reunion(h):
+    rid = h.empezar()
+    for i in range(R.CLAVE_MAX):
+        h.store._crear_linea(h.store._r, f"dato número {i} distinto", "clave")
+    h.detector.respuestas = [[{"tipo": "clave", "texto": "otro dato nuevo"}, {"tipo": "pregunta", "texto": "¿Y el stock?"}]]
+    h.store.texto(rid, "pc1", "x" * 2000)
+    h.disparar(h.activos()[0])
+    assert h.evs("reunion-linea")[-1]["tipo"] == "pregunta"
+    assert sum(1 for x in h.store._r.lineas if x.tipo == "clave") == R.CLAVE_MAX
+
+
+def test_tocar_linea_clave_es_409_y_no_pregunta(h):
+    rid, lin = _con_clave(h)
+    with pytest.raises(ReunionError) as e:
+        go(h.store.tocar(rid, lin["id"]))
+    assert e.value.status == 409 and e.value.mensaje == "Un punto clave no se le pregunta al Copiloto."
+    assert h.puente.preguntas == []
+
+
+def test_anotar_clave_crea_apunte(h):
+    rid, lin = _con_clave(h)
+    go(h.store.anotar(rid, lin["id"]))
+    assert h.notas.creadas[0]["tipo"] == "apunte"
+
+
+def test_clave_se_recupera_del_diario(h):
+    rid, lin = _con_clave(h)
+    r = h.store._leer_diario(h.jfile(rid))
+    assert next(x for x in r.lineas if x.id == lin["id"]).tipo == "clave"
+
+
 def test_anotar_dos_veces_no_duplica(h):
     rid, l1 = _con_linea(h)
     go(h.store.anotar(rid, l1))
@@ -1011,3 +1104,232 @@ def test_anotar_con_notas_caidas_es_503(h):
         go(h.store.anotar(rid, l1))
     assert e.value.status == 503
     assert h.store.snapshot()["lineas"][0].get("nota") is None
+
+
+# ---- guardar en la memoria de trabajo
+
+def _anotada(h):
+    rid, l1 = _con_linea(h)
+    go(h.store.anotar(rid, l1))
+    return rid, l1
+
+
+def test_memoria_guarda_la_linea_anotada_como_dicha_sin_verificar(h):
+    rid, l1 = _anotada(h)
+    assert go(h.store.guardar_en_memoria(rid, l1)) == {"memoria": True}
+    titulo, contenido = h.memoria.guardados[0]
+    assert titulo.startswith("Reunión ") and "¿Hay reembolsos parciales?" in titulo
+    assert contenido.startswith("Dicho en la reunión de las ")
+    assert "(sin verificar): ¿Hay reembolsos parciales?" in contenido
+    assert h.evs("reunion-memoria") == [{"reunion": rid, "linea": l1}]
+    assert h.store.snapshot()["lineas"][0]["memoria"] is True
+
+
+def test_memoria_incluye_la_respuesta_del_copiloto_marcada(h):
+    rid, l1 = _con_linea(h)
+    go(h.store.tocar(rid, l1))
+    h.store.al_stop("w1:p1", '```copiloto\n{"linea": "%s", "texto": "Sí, hay parciales", "archivos": []}\n```' % l1)
+    go(h.store.anotar(rid, l1))
+    go(h.store.guardar_en_memoria(rid, l1))
+    assert "\nRespuesta del Copiloto (sin verificar): " in h.memoria.guardados[0][1]
+
+
+def test_memoria_dos_veces_guarda_una_sola(h):
+    rid, l1 = _anotada(h)
+    go(h.store.guardar_en_memoria(rid, l1))
+    assert go(h.store.guardar_en_memoria(rid, l1)) == {"memoria": True}
+    assert len(h.memoria.guardados) == 1 and len(h.evs("reunion-memoria")) == 1
+
+
+def test_memoria_sin_nota_es_409(h):
+    rid, l1 = _con_linea(h)
+    with pytest.raises(ReunionError) as e:
+        go(h.store.guardar_en_memoria(rid, l1))
+    assert e.value.status == 409 and h.memoria.guardados == []
+
+
+def test_memoria_descartada_es_409(h):
+    rid, l1 = _anotada(h)
+    go(h.store.descartar(rid, l1))
+    with pytest.raises(ReunionError) as e:
+        go(h.store.guardar_en_memoria(rid, l1))
+    assert e.value.status == 409
+
+
+def test_memoria_si_engram_falla_es_502_y_no_marca(h):
+    rid, l1 = _anotada(h)
+    h.memoria.falla = RuntimeError("boom")
+    with pytest.raises(ReunionError) as e:
+        go(h.store.guardar_en_memoria(rid, l1))
+    assert e.value.status == 502 and "boom" not in e.value.mensaje
+    assert h.store.snapshot()["lineas"][0]["memoria"] is False and h.evs("reunion-memoria") == []
+    h.memoria.falla = None
+    go(h.store.guardar_en_memoria(rid, l1))
+    assert len(h.memoria.guardados) == 1
+
+
+def test_memoria_desactivada_es_503_y_el_snapshot_lo_dice(h):
+    rid, l1 = _anotada(h)
+    h.store._guardar_memoria = None
+    assert h.store.snapshot()["memoria_trabajo"] is False
+    with pytest.raises(ReunionError) as e:
+        go(h.store.guardar_en_memoria(rid, l1))
+    assert e.value.status == 503
+
+
+def test_memoria_se_recupera_del_diario(h):
+    rid, l1 = _anotada(h)
+    go(h.store.guardar_en_memoria(rid, l1))
+    r = h.store._leer_diario(h.jfile(rid))
+    assert r.lineas[0].memoria is True
+
+
+def test_memoria_usa_la_hora_en_que_se_dijo_la_linea(h):
+    rid, l1 = _anotada(h)
+    r = h.store._r
+    r.inicio = time.mktime((2026, 11, 24, 10, 0, 0, 0, 0, -1))
+    r.lineas[0].ts = time.mktime((2026, 11, 24, 11, 42, 0, 0, 0, -1))
+    go(h.store.guardar_en_memoria(rid, l1))
+    titulo, contenido = h.memoria.guardados[0]
+    assert contenido.startswith("Dicho en la reunión de las 11:42 ")
+    assert titulo.startswith("Reunión 11:42: ")
+
+
+def _vigia(h):
+    return h.vigias
+
+
+def test_sin_texto_a_los_2_minutos_avisa_y_el_primer_texto_lo_baja(h):
+    rid = h.empezar()
+    assert h.store.snapshot()["sin_texto"] is False
+    assert len(_vigia(h)) == 1
+    h.disparar(_vigia(h)[0])
+    assert h.evs("reunion-estado")[-1]["sin_texto"] is True
+    assert h.store.snapshot()["sin_texto"] is True
+    h.store.texto(rid, "pc1", "hola a todos")
+    assert h.evs("reunion-estado")[-1]["sin_texto"] is False
+
+
+def test_sin_texto_no_avisa_si_ya_llego_texto(h):
+    rid = h.empezar()
+    h.store.texto(rid, "pc1", "hola a todos")
+    h.disparar(_vigia(h)[0])
+    assert h.store.snapshot()["sin_texto"] is False
+
+
+def test_sin_texto_no_avisa_si_la_reunion_ya_no_esta_escuchando(h):
+    h.empezar()
+    h.store._r.estado = "pausada"
+    h.disparar(_vigia(h)[0])
+    assert h.store.snapshot()["sin_texto"] is False
+
+
+def test_terminar_cancela_la_vigia_de_sin_texto(h):
+    rid = h.empezar()
+    v = _vigia(h)[0]
+    go(h.store.terminar(rid))
+    assert v.cancelado
+
+
+def test_limpiar_tema():
+    assert R.limpiar_tema("  Plux\n en\tps9 \x07 ") == "Plux en ps9"
+    assert R.limpiar_tema(" \n\x01 ") == ""
+
+
+def _hasta_resumen(h, rid):
+    h.store.texto(rid, "pc1", "hablamos del gateway")
+    h.disparar(h.activos()[0])
+    go(h.store.terminar(rid))
+    h.drenar()
+
+
+def test_empezar_guarda_tema_y_lo_pasa(h):
+    rid = h.empezar(tema="  Plux\n en ps9 ")
+    assert h.puente.temas == ["Plux en ps9"]
+    _hasta_resumen(h, rid)
+    assert h.detector.temas == ["Plux en ps9"] and h.detector.temas_resumen == ["Plux en ps9"]
+    assert h.bib.guardados[0][0]["tema"] == "Plux en ps9"
+
+
+def test_empezar_sin_tema(h):
+    rid = h.empezar()
+    assert h.puente.temas == [""]
+    _hasta_resumen(h, rid)
+    assert h.bib.guardados[0][0]["tema"] == ""
+
+
+def test_tema_largo_se_recorta_en_el_store(h):
+    h.empezar(tema="x" * 300)
+    assert h.puente.temas == ["x" * R.TEMA_MAX]
+
+
+def test_recupera_tema_del_diario(h):
+    rid = h.empezar(tema="Plux")
+    h.store.texto(rid, "pc1", "una tanda")
+    h2 = H(h.dir.parent)
+    h2.dir = h.dir
+    h2.store.recuperar()
+    h2.drenar()
+    assert h2.bib.guardados[0][0]["tema"] == "Plux"
+
+
+def test_recupera_diario_viejo_sin_tema(h):
+    rid = h.empezar()
+    ruta = h.jfile(rid)
+    lineas = ruta.read_text().splitlines()
+    ini = json.loads(lineas[0])
+    ini.pop("tema", None)
+    ruta.write_text("\n".join([json.dumps(ini)] + lineas[1:]) + "\n")
+    h2 = H(h.dir.parent)
+    h2.dir = h.dir
+    h2.store.recuperar()
+    h2.drenar()
+    assert h2.bib.guardados[0][0]["tema"] == ""
+
+
+def test_cortar_en_oracion():
+    assert R.cortar_en_oracion("Hola. Hoy vemos reembolsos. Y despu") == 27
+    assert R.cortar_en_oracion("sin puntos acá") == 14
+    assert R.cortar_en_oracion("A. " + "x" * 50) == 53
+
+
+def test_tramo_se_corta_en_la_ultima_oracion(h):
+    rid = h.empezar()
+    h.store.texto(rid, "pc1", "Primero esto. Después aque")
+    h.disparar(h.activos()[0])
+    assert h.detector.llamadas[-1][0].endswith("esto.")
+    assert h.store._r.ultimo_chars == len("Primero esto.")
+    assert h.store._r.hay_nuevo is True
+
+
+def test_el_resto_sin_punto_sale_en_la_vuelta_siguiente(h):
+    rid = h.empezar()
+    h.store.texto(rid, "pc1", "Primero esto. Después aque")
+    h.disparar(h.activos()[0])
+    h.disparar(h.activos()[0])
+    assert h.detector.llamadas[-1][0].endswith("Después aque")
+    assert h.store._r.hay_nuevo is False
+
+
+def test_clave_parecida_a_otra_clave_se_descarta(h):
+    got = _detectar_items(h, [{"tipo": "clave", "texto": "El precio subió 20 por ciento en marzo"},
+                              {"tipo": "clave", "texto": "En marzo el precio aumentó un 20 por ciento"}])
+    assert got == [("clave", "El precio subió 20 por ciento en marzo")]
+
+
+def test_claves_con_otra_decision_no_se_descartan(h):
+    got = _detectar_items(h, [{"tipo": "clave", "texto": "Se decidió usar Redis para la cache"},
+                              {"tipo": "clave", "texto": "Se decidió usar Postgres para la base"}])
+    assert len(got) == 2
+
+
+def test_clave_con_otro_numero_no_se_descarta(h):
+    got = _detectar_items(h, [{"tipo": "clave", "texto": "La entrega es el 5 de marzo"},
+                              {"tipo": "clave", "texto": "La entrega es el 12 de marzo"}])
+    assert len(got) == 2
+
+
+def test_pregunta_parecida_a_una_clave_no_se_descarta(h):
+    got = _detectar_items(h, [{"tipo": "clave", "texto": "El precio subió 20 por ciento en marzo"},
+                              {"tipo": "pregunta", "texto": "¿Por qué subió el precio en marzo?"}])
+    assert len(got) == 2

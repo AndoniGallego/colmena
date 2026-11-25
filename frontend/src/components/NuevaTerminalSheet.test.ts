@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { createApp, h, nextTick, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/types'
 
 const api = vi.hoisted(() => ({
   getTerminalesCarpetas: vi.fn(),
   postTerminalesNueva: vi.fn(),
   postTerminalesNuevaTarea: vi.fn(),
+  postTerminalesNuevaTareaConfiar: vi.fn(),
 }))
 vi.mock('../state/app', () => api)
 vi.mock('../motion', () => ({ gsap: { fromTo: (_e: unknown, _a: unknown, v: { onComplete?: () => void }) => v.onComplete?.(), to: (_e: unknown, v: { onComplete?: () => void }) => v.onComplete?.(), set: () => {} }, haptic: vi.fn(), isSoft: () => true, useGsap: () => ({ run: (fn: () => void) => fn() }) }))
@@ -195,5 +197,76 @@ describe('NuevaTerminalSheet: sumar pestaña a un grupo', () => {
     grupoInicial.value = 'g9'
     await montar()
     expect(q<HTMLSelectElement>('select.sel')!.value).toBe('')
+  })
+})
+
+describe('NuevaTerminalSheet: confiar en el setup del repo', () => {
+  const CONFIANZA = {
+    repo: '~/Proyectos/orq',
+    base: 'main',
+    origen: 'repo',
+    setup_toml: 'script = "scripts/setup.sh"',
+    setup_sha256: 'a'.repeat(64),
+    script: 'scripts/setup.sh',
+    script_contenido: '#!/bin/sh\necho <b>hola</b>',
+    script_sha256: 'b'.repeat(64),
+    copiar: ['secreto'],
+    puertos: 5,
+    docker: false,
+  }
+  const pide = () => new ApiError(409, 'Este repo prepara la copia con un script: revisalo antes de confiar', null, [], false, 'requiere_confianza', CONFIANZA)
+  const boton = (txt: string) => [...document.body.querySelectorAll<HTMLButtonElement>('.conf button')].find((b) => b.textContent?.includes(txt))!
+
+  async function abrirConTicket() {
+    localStorage.setItem('orq.nuevaModo', 'tarea')
+    await montar()
+    const el = q<HTMLInputElement>('input.ticket')!
+    el.value = 'ABC-123'
+    el.dispatchEvent(new Event('input'))
+    await tick()
+    botonAbrir().click()
+    await tick()
+  }
+
+  it('un 409 requiere_confianza muestra el toml y el script como texto, sin interpretar el HTML', async () => {
+    api.postTerminalesNuevaTarea.mockRejectedValueOnce(pide())
+    await abrirConTicket()
+    const conf = q('.conf')!
+    expect(conf).not.toBeNull()
+    expect(conf.textContent).toContain('scripts/setup.sh')
+    expect(conf.textContent).toContain('echo <b>hola</b>')
+    expect(conf.querySelector('b')).toBeNull()
+    expect(q('.problem')).toBeNull()
+    expect(fuente).not.toContain('v-html')
+  })
+
+  it('Confiar y abrir guarda la confianza y reintenta con el mismo id', async () => {
+    api.postTerminalesNuevaTarea.mockRejectedValueOnce(pide())
+    api.postTerminalesNuevaTareaConfiar.mockResolvedValue({ ok: true })
+    await abrirConTicket()
+    const primero = api.postTerminalesNuevaTarea.mock.calls[0][0]
+    boton('Confiar y abrir').click()
+    await tick()
+    expect(api.postTerminalesNuevaTareaConfiar).toHaveBeenCalledWith({ repo: '~/Proyectos/orq', setup_sha256: 'a'.repeat(64), script_sha256: 'b'.repeat(64) })
+    expect(api.postTerminalesNuevaTarea).toHaveBeenCalledTimes(2)
+    expect(api.postTerminalesNuevaTarea.mock.calls[1][0].id).toBe(primero.id)
+    expect(q('.conf')).toBeNull()
+  })
+
+  it('Cancelar no confía ni reintenta ni crea nada', async () => {
+    api.postTerminalesNuevaTarea.mockRejectedValueOnce(pide())
+    await abrirConTicket()
+    boton('Cancelar').click()
+    await tick()
+    expect(api.postTerminalesNuevaTareaConfiar).not.toHaveBeenCalled()
+    expect(api.postTerminalesNuevaTarea).toHaveBeenCalledTimes(1)
+    expect(q('.conf')).toBeNull()
+  })
+
+  it('avisa que los puertos son fijos cuando la copia los trae así', async () => {
+    api.postTerminalesNuevaTarea.mockResolvedValueOnce({ ok: true, pane_id: 'g1:p1', ruta: '/r', rama: 'feature/x', preparar: { puerto: 41000, puertos: 5, copiados: ['secreto'], omitidos: [], setup_pane_id: 'g1:p2', puertos_fijos: true } })
+    await abrirConTicket()
+    expect(document.body.textContent).toContain('los puertos son fijos')
+    expect(document.body.textContent).toContain('41000')
   })
 })

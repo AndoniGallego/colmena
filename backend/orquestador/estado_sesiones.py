@@ -202,7 +202,7 @@ class EstadoSesiones:
             tid = msg.tool_use_id
             if tid:
                 self._pre_pendientes.setdefault(pane_id, set()).add(tid)
-        elif evento == "PostToolUse":
+        elif evento in ("PostToolUse", "PostToolUseFailure"):
             tid = msg.tool_use_id
             pend = self._pre_pendientes.get(pane_id)
             if pend and tid:

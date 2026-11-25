@@ -8,6 +8,7 @@ export interface PrefsBase {
   entornos: boolean
   progreso: boolean
   pestana: boolean
+  trabada: boolean
 }
 
 /** Las del núcleo más las que suman las piezas montadas. */
@@ -23,6 +24,7 @@ export const DEFAULT_PREFS: PrefsBase = {
   entornos: true,
   progreso: true,
   pestana: true,
+  trabada: true,
 }
 export const PREF_KEYS = Object.keys(DEFAULT_PREFS) as (keyof PrefsBase)[]
 

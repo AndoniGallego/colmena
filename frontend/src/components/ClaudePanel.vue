@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { claudeUso, claudeUsoError, refreshClaudeUso } from '../state/app'
 import { fmtTokens } from '../lib/tokens'
-import { AGRUPAR, AGRUPAR_LABEL, RANGOS, RANGO_LABEL, itemsDesglose, reinicioLabel, type UsoAgrupar, type UsoRango } from '../lib/usoClaude'
+import { AGRUPAR, AGRUPAR_LABEL, RANGOS, RANGO_LABEL, fmtUsd, itemsDesglose, reinicioLabel, type UsoAgrupar, type UsoRango } from '../lib/usoClaude'
 import { gsap, isSoft, useGsap } from '../motion'
 import SegControl from './SegControl.vue'
 import DesgloseBar from './DesgloseBar.vue'
@@ -73,9 +73,11 @@ onMounted(() => {
             <span class="t-lbl">{{ RANGO_LABEL[r] }}</span>
             <b class="t-num mono">{{ fmtTokens(nums[r]) }}</b>
             <span class="t-sub">{{ data.totales[r].mensajes }} {{ data.totales[r].mensajes === 1 ? 'mensaje' : 'mensajes' }}</span>
+            <span class="t-sub t-usd" :title="data.totales[r].usdParcial ? 'Falta el precio de algún modelo' : undefined">≈ {{ fmtUsd(data.totales[r].usd) }}{{ data.totales[r].usdParcial ? '+' : '' }}</span>
           </button>
         </div>
         <DesgloseBar :tokens="data.totales[rango]" :label="`Tipos de token ${RANGO_SUFIJO[rango]}`" />
+        <p class="hint">Los dólares son el equivalente a precio de API: sirven para comparar, no es lo que pagás con tu plan.</p>
       </article>
 
       <article class="card hist">
@@ -126,7 +128,7 @@ onMounted(() => {
 .t-lbl { font-size: var(--t-sm); font-weight: 560; color: var(--text-3); }
 .tile.on .t-lbl { color: var(--accent); }
 .t-num { font-family: var(--font-display); font-size: clamp(19px, 5.6vw, 26px); font-weight: 650; letter-spacing: -0.025em; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.t-sub { font-size: 11px; color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-sub { font-size: 11px; color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 
 .ag { margin-bottom: 16px; }
 

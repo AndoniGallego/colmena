@@ -4,12 +4,13 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -45,6 +46,8 @@ from .cambios import CambiosService
 from .mrs_api import Redactor, build_router as mrs_router
 from .entornos import build_router as entornos_router, docker_bin as entornos_docker_bin
 from .entornos_vigia import VigiaEntornos
+from .trabas import Umbrales as UmbralesTrabas
+from .trabas_vigia import VigiaTrabas
 from .kit_vista import build_router as kit_router
 from . import piezas as piezas_mod
 from .replies import ReplyTracker
@@ -60,12 +63,17 @@ from .avisos import (
 )
 from .colmena_pestana import pedido_desde_comando_bash
 from .nueva_tarea import Worktrees
+from .preparar_copia import ConfianzaPreparar
 from .nueva_terminal import es_repo_colmena, validar_carpeta
 from .pedidos_pestana import PedidosPestanaStore
+from .mcp_canal import ServidorMcp
+from .mcp_ops import OpsAcciones, OpsLectura, buscador_memoria_trabajo
+from .pedidos_sesion import PedidosSesion
 from .avisos_origen import AvisosOrigen
-from .pedido_cierre import motivo_fin_lote, resolver_objetivo, resumen_cierre, vista_cierre
+from .pedido_cierre import motivo_fin_lote, vista_cierre
 from .presencia import DEVICE_RE
 from .push import NOTCH_PRUEBA_KINDS, EndpointBody, PushService, SubscribeBody, TestBody, _agents, endpoint_allowed
+from .atajos import AtajosBody
 from .orden_tablero import OrdenPestanasBody, OrdenTableroBody, PlegadasBody, SilencioBody
 from .state import StateStore
 from .sombra import Sombra
@@ -79,12 +87,14 @@ from .tareas import vigilar
 from .transcript import DEFAULT_LIMIT, MAX_LIMIT, TranscriptService
 from .enchufe import NoDisponible, NoExiste, TerminalesError, crear_terminales, sesion_propia
 from . import terminal_vivo
-from .guardian.lanzador import CARPETA_COPILOTO, CARPETA_GUIA, ConfigInvalida, ajustes_de, rutas_protegidas
+from .engram import ESCRITURA, EngramCliente, argv_docker_guardar
+from .guardian.lanzador import CARPETA_COPILOTO, CARPETA_GUIA, _CONTENEDOR_RE, ConfigInvalida, ajustes_de, rutas_protegidas
 from .copiloto import PuenteCopiloto, relacionada
 from . import mostrar as mostrar_mod
 from . import guia as guia_mod
 from .guia import GuiaError, GuiaStore
 from .guia_puente import PuenteGuia
+from .reunion import TEMA_MAX as REUNION_TEMA_MAX
 from .reunion import TEXTO_POST_MAX, ReunionError, ReunionStore, ajustes_reunion
 from .reunion_detector import Detector
 from .enchufe.ids import ID_RE, valido
@@ -92,7 +102,7 @@ from .traspaso import TraspasoBody, TraspasoError, TraspasoService
 from .guardado import GuardadoService, Lote
 from .mudanza import MudanzaBody, MudanzaService, MudanzaStore, MudarTodasBody, RetomarBody, pid_vivo_proc, remapear_en
 from .uso import UsoStore
-from .uso_claude import ClaudeUso, nombres_herdr, project_key
+from .uso_claude import RESCAN_THROTTLE, ClaudeUso, nombres_herdr, project_key
 from .statusline import ctx_dir
 from .variante import proponer
 from . import silencio
@@ -249,6 +259,7 @@ class EmpezarReunionBody(BaseModel):
     device: str = Field(..., max_length=64)
     repos: list[str] = Field(default_factory=list, max_length=60)
     todos: StrictBool = False
+    tema: str = Field("", max_length=REUNION_TEMA_MAX)
 
 
 class TextoReunionBody(BaseModel):
@@ -256,6 +267,27 @@ class TextoReunionBody(BaseModel):
     reunion: str = Field(..., max_length=64)
     device: str = Field(..., max_length=64)
     texto: str = Field(..., min_length=1, max_length=TEXTO_POST_MAX)
+
+
+_MEMORIA_TRABAJO_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def guardador_memoria_trabajo(cfg) -> Optional[Callable[[str, str], None]]:
+    raw = cfg.guardian if isinstance(cfg.guardian, dict) else {}
+    contenedor, proyecto = raw.get("memoria_contenedor"), raw.get("memoria_trabajo")
+    docker = cfg.docker_bin or shutil.which("docker") or ""
+    if not (isinstance(contenedor, str) and isinstance(proyecto, str) and docker
+            and _CONTENEDOR_RE.fullmatch(contenedor) and _MEMORIA_TRABAJO_RE.fullmatch(proyecto)):
+        return None
+
+    def guardar(titulo: str, contenido: str) -> None:
+        cliente = EngramCliente(argv_docker_guardar(docker, contenedor, proyecto), permitidas=ESCRITURA)
+        try:
+            cliente.llamar("mem_save", {"title": titulo, "type": "discovery", "content": contenido, "project": proyecto})
+        finally:
+            cliente.cerrar()
+
+    return guardar
 
 
 class TocarReunionBody(BaseModel):
@@ -451,6 +483,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                entrada_interna: bool = True, enchufe=None,
                ganchos_socket: Optional[Path] = None,
                recarga_socket: Optional[Path] = None, nudo_socket: Optional[Path] = None, entornos_runner=None,
+               mcp_socket: Optional[Path] = None,
                kit_opts: Optional[dict] = None, piezas: Optional[list] = None,
                piezas_opts: Optional[dict] = None, piezas_paquete: str = "orquestador.piezas",
                reunion_opts: Optional[dict] = None) -> FastAPI:
@@ -490,6 +523,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                                             lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                                             lambda: hub.refresh(force=True))
     worktrees_nt = Worktrees(data_directory)
+    confianza_preparar = ConfianzaPreparar(data_directory)
     cierres = CierreService(enchufe, state, locks, lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                             cfg.protected_workspaces, lambda: hub.refresh(force=True), fondo=fondo,
                             worktrees=worktrees_nt)
@@ -720,6 +754,8 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     app.state.sombra = sombra
     app.state.estados = estados
     app.state.uso_claude = uso_claude
+    # El tablero no escanea transcripts: lee lo último y el loop de abajo los escanea.
+    hub.uso_hoy = lambda: uso_claude.por_sesion_hoy(escanear=False)
     app.state.recarga = recarga_svc
     app.state.nudo = nudo
     app.state.permisos = permisos
@@ -818,6 +854,15 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             state.clear_orden_pestanas()
             if had:
                 emit_all("orden_pestanas", {"grupo": "", "orden": []})
+        return {"ok": True}
+
+    @api.get("/atajos")
+    async def atajos_get():
+        return {"atajos": state.atajos()}
+
+    @api.put("/atajos")
+    async def atajos_put(body: AtajosBody):
+        state.set_atajos(body.atajos)
         return {"ok": True}
 
     @api.put("/tablero/orden-pestanas")
@@ -1379,7 +1424,9 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                                      plan_cwds=lambda: cfg.plan_cwds,
                                      sesiones_viejas=viejas, estados=estados,
                                      worktrees=worktrees_nt, cierres=cierres,
-                                     fijados=lambda: hub.pinned)
+                                     fijados=lambda: hub.pinned,
+                                     confianza=confianza_preparar, preparar=lambda: cfg.preparar,
+                                     puertos_colmena=lambda: frozenset({cfg.port, cfg.viewer_port}))
     app.state.tacciones = tacciones
     comando_sesion = ComandoSesionService(lambda: hub.refresh(force=True), digests, enchufe, locks, tacciones.audit,
                                           tacciones.limit, escritura, tnotify,
@@ -1392,7 +1439,8 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
 
     def tfail(exc: TraspasoError) -> JSONResponse:
         headers = {"Retry-After": str(exc.extra["retry_after"])} if "retry_after" in exc.extra else None
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status, headers=headers)
+        cuerpo = {"detail": exc.detail, **{k: exc.extra[k] for k in ("codigo", "confianza") if k in exc.extra}}
+        return JSONResponse(cuerpo, status_code=exc.status, headers=headers)
 
     async def tbody(request: Request, model):
         # Sin el detalle de pydantic: devolvería el cuerpo recibido.
@@ -1443,7 +1491,18 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         out = {"ok": True, "pane_id": creado["pane_id"], "ruta": creado["ruta"], "rama": creado["rama"]}
         if sin_pegar:
             out["pegado"] = False
+        if "preparar" in creado:
+            out["preparar"] = creado["preparar"]
         return JSONResponse(out, headers={"Cache-Control": "no-store"})
+
+    @api.post("/terminales/nueva-tarea/confiar")
+    async def terminales_confiar_preparar(request: Request):
+        body = await tbody(request, tacc.ConfiarPrepararBody)
+        try:
+            return JSONResponse(await tacciones.confiar_preparar(tctx(request), body),
+                                headers={"Cache-Control": "no-store"})
+        except TraspasoError as exc:
+            return tfail(exc)
 
     @api.post("/terminales/nueva-tarea/borrar-copia")
     async def terminales_borrar_copia(request: Request):
@@ -1543,7 +1602,8 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         programar=reunion_opts.get("programar") or (lambda d, fn: asyncio.get_running_loop().call_later(d, fn)),
         lanzar=lanzar_reunion, clock=time.time, detector=detector_reu, puente=puente_reu,
         biblioteca=SimpleNamespace(guardar=library.agregar_reunion), journal_dir=data_directory / "reuniones",
-        ajustes=ajustes_reu, registrar_foto=nudo.registrar_foto, notas=notas)
+        ajustes=ajustes_reu, registrar_foto=nudo.registrar_foto, notas=notas,
+        guardar_memoria=reunion_opts.get("guardar_memoria") or guardador_memoria_trabajo(cfg))
     estados.al_stop.append(reunion.al_stop)
     app.state.reunion = reunion
     app.state.reunion_tareas = reunion_tareas
@@ -1642,7 +1702,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             raise HTTPException(status_code=422, detail="Ese repo no está en la lista.")
         ctx_reunion[0] = tctx(request)
         try:
-            resultado = await reunion.empezar(body.device, list(dict.fromkeys(body.repos)), body.todos)
+            resultado = await reunion.empezar(body.device, list(dict.fromkeys(body.repos)), body.todos, body.tema)
         except ReunionError as exc:
             raise error_reunion(exc) from None
         lanzar_reunion(guia.por_reunion())
@@ -1677,6 +1737,14 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         misma_reunion(body.reunion)
         try:
             return await reunion.anotar(body.reunion, body.linea)
+        except ReunionError as exc:
+            raise error_reunion(exc) from None
+
+    @api.post("/reunion/memoria", status_code=202)
+    async def reunion_memoria(body: TocarReunionBody):
+        misma_reunion(body.reunion)
+        try:
+            return await reunion.guardar_en_memoria(body.reunion, body.linea)
         except ReunionError as exc:
             raise error_reunion(exc) from None
 
@@ -1948,8 +2016,126 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             if final != "pendiente":
                 push.avisos.marcar_donde(pedido=pedido_id)
 
+    def _codigo_fallo_mcp(resp: JSONResponse) -> dict:
+        try:
+            cuerpo = json.loads(resp.body or b"{}")
+        except ValueError:
+            cuerpo = {}
+        if resp.status_code == 429:
+            extra = {}
+            try:
+                extra["retry_after"] = int(resp.headers.get("retry-after") or 0) or None
+            except ValueError:
+                pass
+            return {"codigo": "tope_alcanzado", **{k: v for k, v in extra.items() if v}}
+        if isinstance(cuerpo, dict) and cuerpo.get("codigo") == "requiere_confianza":
+            return {"codigo": "requiere_confianza"}
+        return {"codigo": "error_al_ejecutar"}
+
+    def _espera_cerrar_igual(resp: JSONResponse) -> bool:
+        """409 "Está trabajando": el pedido sigue pendiente para que Ando lo fuerce; no es una falla."""
+        if resp.status_code != 409:
+            return False
+        try:
+            cuerpo = json.loads(resp.body or b"{}")
+        except ValueError:
+            return False
+        return isinstance(cuerpo, dict) and "bloqueantes" in cuerpo
+
     @api.post("/pedidos-pestana/{pedido_id}/abrir")
     async def pedidos_pestana_abrir(pedido_id: str, request: Request):
+        resp = await _pedidos_pestana_abrir(pedido_id, request)
+        item = pedidos_pestana.get(pedido_id) if AVISO_PEDIDO_RE.match(pedido_id or "") else None
+        if not item or item.get("via") != "mcp" or not isinstance(resp, JSONResponse):
+            return resp
+        # Para la sesión que pidió por MCP: el resultado (o por qué falló) queda en el pedido.
+        if resp.status_code < 400:
+            try:
+                cuerpo = json.loads(resp.body or b"{}")
+            except ValueError:
+                cuerpo = {}
+            if "resultado" not in item:
+                pedidos_pestana.poner_resultado(pedido_id, {k: cuerpo[k] for k in ("pane_id", "pane_ids", "trabajador")
+                                                            if k in cuerpo})
+        elif item["estado"] in ("pendiente", "lanzando") and not _espera_cerrar_igual(resp):
+            fallo = _codigo_fallo_mcp(resp)
+            pedidos_pestana.fallar(pedido_id, fallo.pop("codigo"), **fallo)
+            push.avisos.marcar_donde(pedido=pedido_id)
+        return resp
+
+    async def _aprobar_mensaje(pedido_id: str, item: dict):
+        envio = item["envio"]
+        if not pedidos_pestana.tomar_para_lanzar(pedido_id):
+            raise HTTPException(status_code=409, detail="el pedido ya no está pendiente")
+        final = "pendiente"
+        try:
+            await mensajes.execute(MensajeBody(
+                id=f"ppx-{pedido_id.replace('-', '')[:52]}", pane_id=envio["pane_id"], texto=envio["texto"][:MAX_TEXT],
+                origen="pedido-pestana", destino=envio.get("nombre") or envio["pane_id"]))
+            final = "abierto"
+        except TraspasoError as exc:
+            return tfail(exc)
+        finally:
+            pedidos_pestana.soltar_lanzamiento(pedido_id, final)
+            if final != "pendiente":
+                push.avisos.marcar_donde(pedido=pedido_id)
+        pedidos_pestana.poner_resultado(pedido_id, {"pane_id": envio["pane_id"]})
+        return JSONResponse({"ok": True, "pane_id": envio["pane_id"]}, headers={"Cache-Control": "no-store"})
+
+    def agendar_programada_unica(item: dict) -> float:
+        """Mensaje único a la sesión destino a la próxima HH:MM. Vive en memoria: si el backend se reinicia, se pierde."""
+        from .agenda import seconds_until_next
+        from .colmena_pestana import PREFIJO_PEDIDO
+
+        prog = item["programada"]
+        espera = seconds_until_next(parse_hora(prog["cuando"]), list(range(7)), datetime.now())
+        cuerpo = MensajeBody(id=f"ppp-{item['id'].replace('-', '')[:52]}", pane_id=prog["pane_id"],
+                             texto=(PREFIJO_PEDIDO + item["mensaje"])[:MAX_TEXT], origen="pedido-pestana",
+                             destino=prog.get("nombre") or prog["pane_id"])
+
+        async def mandar():
+            await asyncio.sleep(espera)
+            try:
+                await mensajes.execute(cuerpo)
+            except TraspasoError:
+                log.warning("programada %s: no pude mandar el mensaje a %s", item["id"], prog["pane_id"])
+
+        spawn(mandar())
+        return espera
+
+    app.state.agendar_programada_unica = agendar_programada_unica
+
+    async def _aprobar_programada(pedido_id: str, item: dict, request: Request):
+        espera = request.app.state.agendar_programada_unica(item)
+        pedidos_pestana.marcar(pedido_id, "abierto")
+        push.avisos.marcar_donde(pedido=pedido_id)
+        resultado = {"cuando": item["programada"]["cuando"], "en_segundos": int(espera)}
+        pedidos_pestana.poner_resultado(pedido_id, resultado)
+        return JSONResponse({"ok": True, **resultado}, headers={"Cache-Control": "no-store"})
+
+    async def _aprobar_tarea(pedido_id: str, item: dict, request: Request):
+        ticket = item["tarea"]["ticket"]
+        nota = item.get("mensaje") or ""
+        body = tacc.NuevaTareaBody(id=f"ppt-{pedido_id.replace('-', '')[:52]}", repo=item["carpeta"],
+                                   tarea=nota, nombre=ticket, ticket=ticket)
+        if not pedidos_pestana.tomar_para_lanzar(pedido_id):
+            raise HTTPException(status_code=409, detail="el pedido ya no está pendiente")
+        final = "pendiente"
+        try:
+            creado = await tacciones.nueva_tarea(tctx(request), body, permiso="default", nota_ajena=True)
+            final = "abierto"
+        except TraspasoError as exc:
+            return tfail(exc)
+        finally:
+            pedidos_pestana.soltar_lanzamiento(pedido_id, final)
+            if final != "pendiente":
+                push.avisos.marcar_donde(pedido=pedido_id)
+        if not creado.get("repetido"):
+            await pegar_mensajes_nuevos(creado, f"ntm-{body.id[:40]}", ticket)
+        pedidos_pestana.poner_resultado(pedido_id, {"pane_id": creado["pane_id"]})
+        return JSONResponse({"ok": True, "pane_id": creado["pane_id"]}, headers={"Cache-Control": "no-store"})
+
+    async def _pedidos_pestana_abrir(pedido_id: str, request: Request):
         if not AVISO_PEDIDO_RE.match(pedido_id or ""):
             raise HTTPException(status_code=404, detail="pedido no encontrado")
         item = pedidos_pestana.get(pedido_id)
@@ -1974,6 +2160,12 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             return JSONResponse({"detail": "Colmena no abre pedidos en su propio repo"}, status_code=400)
         if item.get("accion") == "cursor":
             return await _aprobar_trabajador_cursor(pedido_id, item, request)
+        if item.get("accion") == "mensaje":
+            return await _aprobar_mensaje(pedido_id, item)
+        if item.get("accion") == "programada":
+            return await _aprobar_programada(pedido_id, item, request)
+        if item.get("accion") == "tarea":
+            return await _aprobar_tarea(pedido_id, item, request)
         grupo = await tacciones.grupo_de_sesion(item["origen"].get("pane_id") or "")
         idem = pedidos_pestana.idempotencia_nueva(pedido_id)
         marcado = False
@@ -2163,7 +2355,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
 
     for _path in ("/terminales/ventana", "/terminales/ventana/cerrar", "/terminales/comando",
                   "/terminales/ctrl-c", "/terminales/repetir/preparar", "/terminales/repetir/confirmar",
-                  "/terminales/preview", "/terminales/nueva", "/terminales/renombrar", "/terminales/nueva-tarea", "/terminales/nueva-tarea/borrar-copia"):
+                  "/terminales/preview", "/terminales/nueva", "/terminales/renombrar", "/terminales/nueva-tarea", "/terminales/nueva-tarea/confiar", "/terminales/nueva-tarea/borrar-copia"):
         api.add_api_route(_path, lambda: JSONResponse({"detail": "método no permitido"}, status_code=405,
                                                      headers={"Allow": "POST"}), methods=["GET"])
 
@@ -2456,6 +2648,46 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
 
     vigia_entornos = VigiaEntornos(entornos_docker_bin(cfg) or None, push.dispatch_entorno)
 
+    def _sesiones_para_trabas() -> list:
+        out = []
+        for agent in board_agents(hub.board or {}):
+            sid = agent.get("session_id")
+            if not sid:
+                continue
+            reg = estados.estado_de(agent.get("pane_id") or "")
+            trabajando = agent.get("status") == "working" or (reg is not None and reg.estado == "working")
+            out.append({"session_id": sid, "pane_id": agent.get("pane_id") or "",
+                        "title": agent.get("doing") or agent.get("title") or "La sesión",
+                        "status": "working" if trabajando else (agent.get("status") or "unknown")})
+        return out
+
+    def _subagentes_activos(sid: str) -> bool:
+        return any(i.get("estado") == "trabajando" for i in (subagentes.listar(sid) or []))
+
+    async def _avisar_traba(sesion: dict, traba) -> None:
+        await push.dispatch_traba(sesion["title"], traba.detalle, sesion["session_id"], sesion["pane_id"])
+
+    vigia_trabas = VigiaTrabas(
+        sesiones=_sesiones_para_trabas,
+        ruta=digests.find,
+        fondo=fondo.for_session,
+        subagentes_activos=_subagentes_activos,
+        avisar=_avisar_traba,
+        silenciada=lambda sid: sid in state.silenciadas(),
+        al_cambiar=lambda: hub.reaplicar(),
+        umbrales=UmbralesTrabas.de_dict(cfg.trabas),
+    )
+    hub.trabas = vigia_trabas.traba_de
+    app.state.vigia_trabas = vigia_trabas
+
+    async def escanear_uso_periodicamente() -> None:
+        while True:
+            try:
+                await asyncio.to_thread(uso_claude.scan)
+            except Exception:
+                log.exception("no pude escanear el uso de Claude")
+            await asyncio.sleep(RESCAN_THROTTLE)
+
     inicio_piezas: list = []
     cierre_piezas: list = []
 
@@ -2472,6 +2704,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             spawn(cierre_aviso.run())
         if not os.environ.get("ORQ_NO_AUTOINDEX"):
             spawn(vigia_entornos.run())
+            spawn(vigia_trabas.run())
         loop_ref[:] = [asyncio.get_running_loop()]
         try:
             reunion.recuperar()
@@ -2493,7 +2726,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         if not os.environ.get("ORQ_NO_AUTOINDEX"):
             spawn(asyncio.to_thread(library.index_all))
             spawn(asyncio.to_thread(library.run_capturas_backfill))
-            spawn(asyncio.to_thread(uso_claude.scan))
+            spawn(escanear_uso_periodicamente())
             memoria.fondo()
             spawn(devolver_periodicamente())
             if mrs.habilitado and mrs.disponible():
@@ -2521,83 +2754,8 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
 
     app.router.on_shutdown.append(state_shutdown)
 
-    def _terminal_comun(sel: str) -> dict | None:
-        """Busca en el tablero una terminal común por pane_id o, sin distinguir mayúsculas, por su título o
-        el nombre de su pestaña. Las sesiones de Claude no están en esa lista; si hay más de una, no elige."""
-        clave = sel.strip().casefold()
-        halladas: dict = {}
-        for ws in (hub.board or {}).get("workspaces") or []:
-            for tab in ws.get("tabs") or []:
-                for t in tab.get("terminales") or []:
-                    if t.get("protegida") or not t.get("pane_id"):
-                        continue
-                    nombres = {(t.get("titulo") or "").strip().casefold(), (tab.get("label") or "").strip().casefold()}
-                    if t["pane_id"] == sel.strip() or clave in nombres - {""}:
-                        donde = " / ".join(x for x in (ws.get("label"), tab.get("label")) if x)
-                        halladas[t["pane_id"]] = {
-                            "pane_id": t["pane_id"],
-                            # Para comparar al aprobar: si el pane pasó a ser otra terminal o se movió, no se cierra.
-                            "terminal_id": t.get("terminal_id") or "",
-                            "workspace_id": ws.get("id") or "",
-                            "tab_id": tab.get("id") or "",
-                            "titulo": t.get("titulo") or "",
-                            "cwd": t.get("cwd") or "",
-                            "proceso": t.get("proceso") or "",
-                            "estado": t.get("estado") or "",
-                            "donde": donde,
-                        }
-        return next(iter(halladas.values())) if len(halladas) == 1 else None
-
-    def _pedido_cerrar_terminal(sel: str, pane: str, sid: str, nombre: str) -> None:
-        origen = {"pane_id": pane, "nombre": nombre, "session_id": sid}
-        term = _terminal_comun(sel)
-        if term is None:
-            log.info("colmena-pestana: terminal a cerrar no encontrada (%s)", pane)
-            pedidos_pestana.descartar(origen, "terminal_no_encontrada")
-            return
-        item, _motivo = pedidos_pestana.crear("", "", None, origen, accion="cerrar", terminal=term)
-        if item is None:
-            return
-        label = term["titulo"] or term["cwd"] or term["pane_id"]
-        spawn(push.dispatch_pestana(item["id"], "Pedido para cerrar una terminal",
-                                    f"{nombre} quiere cerrar la terminal {label}", session_id=sid, pane_id=pane))
-
-    async def _crear_pedido_cierre(hallado: dict, origen: dict, nombre: str) -> None:
-        objetivo = hallado["objetivo"]
-        try:
-            preview = await cierres.preview(PreviewBody(tipo=hallado["tipo"], target_id=hallado["target_id"]))
-        except TraspasoError as exc:
-            motivo = {400: "cierre_protegido", 403: "cierre_protegido", 404: "cierre_no_encontrado"}.get(
-                exc.status, "cierre_no_posible")
-            log.info("colmena-pestana: pedido de cierre rechazado (%s)", motivo)
-            pedidos_pestana.descartar(origen, motivo)
-            return
-        except Exception:
-            log.exception("colmena-pestana: falló el preview del pedido de cierre")
-            pedidos_pestana.descartar(origen, "cierre_no_posible")
-            return
-        if preview.get("protegido"):
-            pedidos_pestana.descartar(origen, "cierre_protegido")
-            return
-        resumen = resumen_cierre(objetivo, preview)
-        item, _motivo = pedidos_pestana.crear("", "", None, origen, accion="cerrar", cierre=resumen, cooldown=False)
-        if item is None:
-            return
-        titulos = {"sesion": "Pedido para cerrar una sesión", "pestana": "Pedido para cerrar una pestaña",
-                   "tarjeta": "Pedido para cerrar una tarjeta"}
-        await push.dispatch_pestana(item["id"], titulos[objetivo], f"{nombre} quiere cerrar «{resumen['label']}»",
-                                    session_id=origen["session_id"], pane_id=origen["pane_id"])
-
-    def _pedido_cerrar_objetivo(payload: dict, pane: str, sid: str, nombre: str) -> None:
-        origen = {"pane_id": pane, "nombre": nombre, "session_id": sid}
-        if not pedidos_pestana.permitir(origen):
-            return
-        hallado, motivo = resolver_objetivo(hub.board, payload["objetivo"], payload["sel"])
-        if motivo:
-            log.info("colmena-pestana: pedido de cierre descartado (%s)", motivo)
-            pedidos_pestana.descartar(origen, motivo)
-            return
-        spawn(_crear_pedido_cierre(hallado, origen, nombre))
+    pedidos_sesion = PedidosSesion(pedidos_pestana, lambda: hub.board, cfg, push, spawn, cierres)
+    app.state.pedidos_sesion = pedidos_sesion
 
     def _pestana_desde_bash(msg, pane: str | None) -> None:
         if not pane:
@@ -2614,99 +2772,22 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             return
         sid = msg.ids.claude or ""
         nombre, donde = _nombre_sesion_permiso(pane, sid)
-        if payload.get("accion") == "cerrar":
-            if payload.get("objetivo"):
-                _pedido_cerrar_objetivo(payload, pane, sid, nombre)
-            else:
-                _pedido_cerrar_terminal(payload["terminal"], pane, sid, nombre)
-            return
-        if payload.get("accion") == "cursor":
-            _pedido_trabajador_cursor(payload, pane, sid, nombre)
-            return
-        try:
-            carpeta = validar_carpeta(payload["carpeta"], cfg.plan_cwds)
-        except TraspasoError:
-            log.info("colmena-pestana carpeta no permitida: %s", pane)
-            return
-        pestanas = payload.get("pestanas")
-        carpetas = [carpeta]
-        if pestanas:
-            for p in pestanas:
-                try:
-                    carpetas.append(validar_carpeta(p["carpeta"], cfg.plan_cwds))
-                except TraspasoError:
-                    log.info("colmena-pestana carpeta no permitida (pestaña): %s", pane)
-                    return
-
-        origen_pedido = {"pane_id": pane, "nombre": nombre, "session_id": sid}
-        if any(es_repo_colmena(c) for c in carpetas):
-            log.info("colmena-pestana carpeta de Colmena: %s", pane)
-            pedidos_pestana.descartar(origen_pedido, "carpeta_colmena")
-            return
-        nombre_tab = payload.get("nombre") or ""
-        item, _motivo = pedidos_pestana.crear(
-            carpeta,
-            payload.get("mensaje") or "",
-            nombre_tab or None,
-            {
-                "pane_id": pane,
-                "nombre": nombre,
-                "session_id": sid,
-            },
-            tarjeta=payload.get("tarjeta"),
-            pestanas=pestanas,
-        )
-        if item is None:
-            return
-        titulo = "Pedido de pestañas" if pestanas and len(pestanas) > 1 else "Pedido de pestaña"
-        tarjeta_nom = (payload.get("tarjeta") or "").strip()
-        if pestanas:
-            cuerpo = f"{nombre} quiere abrir {len(pestanas)} pestañas"
-            if tarjeta_nom:
-                cuerpo += f" en la tarjeta «{tarjeta_nom}»"
-            else:
-                cuerpo += f" en {carpeta}"
-        else:
-            cuerpo = f"{nombre} quiere abrir una pestaña en {carpeta}"
-        cuerpo += _resumen_mensajes(pestanas or [{"tipo": "claude", "mensaje": payload.get("mensaje") or ""}])
-        spawn(push.dispatch_pestana(item["id"], titulo, cuerpo, session_id=sid, pane_id=pane))
-
-    def _pedido_trabajador_cursor(payload: dict, pane: str, sid: str, nombre: str) -> None:
-
-        try:
-            carpeta = validar_carpeta(payload["carpeta"], cfg.plan_cwds)
-        except TraspasoError:
-            log.info("colmena-pestana cursor carpeta no permitida: %s", pane)
-            return
-        origen_pedido = {"pane_id": pane, "nombre": nombre, "session_id": sid}
-        if es_repo_colmena(carpeta):
-            log.info("colmena-pestana cursor carpeta de Colmena: %s", pane)
-            pedidos_pestana.descartar(origen_pedido, "carpeta_colmena")
-            return
-        item, _motivo = pedidos_pestana.crear(carpeta, payload["pedido"], payload["nombre"], origen_pedido,
-                                              accion="cursor", cursor={"modelo": payload.get("modelo") or ""})
-        if item is None:
-            return
-        spawn(push.dispatch_pestana(item["id"], "Pedido de trabajador Cursor",
-                                    f"{nombre} quiere que Cursor haga: {payload['nombre']}",
-                                    session_id=sid, pane_id=pane))
-
-    def _resumen_mensajes(pestanas: list) -> str:
-        """` · {k} con mensaje para Claude: «…»`: el push dice que el pedido le va a escribir a Claude."""
-        from .envio_sesion import linea_unica
-
-        mensajes_claude = [p["mensaje"] for p in pestanas if p.get("tipo") == "claude" and p.get("mensaje")]
-        if not mensajes_claude:
-            return ""
-        primero = linea_unica(mensajes_claude[0], MAX_TEXT)
-        muestra = primero[:80] + ("…" if len(primero) > 80 else "")
-        return f" · {len(mensajes_claude)} con mensaje para Claude: «{muestra}»"
+        pedidos_sesion.desde_marca(payload, pane, sid, nombre)
 
     def _post_tool_use(msg, pane: str | None) -> None:
         _pestana_desde_bash(msg, pane)
 
     app.state.pestana_desde_bash = _pestana_desde_bash
-    enrutador = Enrutador(estados, permisos, hub, post_tool_use=_post_tool_use)
+    def _al_evento_trabas(msg, pane: str | None) -> None:
+        sid = msg.ids.claude
+        if not sid:
+            return
+        if msg.evento == "UserPromptSubmit":
+            vigia_trabas.rearmar(sid)
+        else:
+            spawn(vigia_trabas.revisar(sid))
+
+    enrutador = Enrutador(estados, permisos, hub, post_tool_use=_post_tool_use, al_evento=_al_evento_trabas)
 
     if ganchos_socket is not None:
         from .ganchos.canal import ServidorGanchos
@@ -2744,6 +2825,43 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             await permisos.cerrar_todo()
 
         app.router.on_shutdown.append(permisos_shutdown)
+
+    async def _tablero_mcp() -> list[dict]:
+        """Sesiones de Claude para el MCP. Solo las del guardián traen `pid_claude`: las de herdr no se
+        identifican por el canal y siguen pidiendo por la marca."""
+        tab = await enchufe.tablero()
+        espacios = {e.id: e.nombre for e in tab.espacios}
+        filas = []
+        for s in tab.sesiones:
+            if s.programa != "claude":
+                continue
+            nombre, _ = _nombre_sesion_permiso(s.id, s.claude_session_id or "")
+            filas.append({"id": s.id, "nombre": nombre, "estado": s.estado, "claude_session_id": s.claude_session_id,
+                          "pid_claude": s.pid_claude, "modo": s.modo, "cwd": s.cwd,
+                          "tarjeta": espacios.get(s.espacio_id, "")})
+        return filas
+
+    ops_lectura = OpsLectura(_tablero_mcp, digests.find, pedidos_pestana, buscador_memoria_trabajo(cfg),
+                             es_interna=hub.interna)
+    ops_acciones = OpsAcciones(pedidos_sesion, pedidos_pestana, _tablero_mcp)
+    app.state.mcp_ops = {**ops_lectura.handlers(), **ops_acciones.handlers()}
+    if mcp_socket is not None:
+        mcp_srv = ServidorMcp(_tablero_mcp, app.state.mcp_ops)
+        app.state.mcp = mcp_srv
+
+        async def mcp_startup():
+            try:
+                await mcp_srv.abrir(mcp_socket)
+            except (PermissionError, OSError) as exc:
+                log.error("no se pudo abrir el canal del MCP: %s", exc)
+
+        async def mcp_shutdown():
+            await mcp_srv.cerrar()
+
+        app.router.on_startup.append(mcp_startup)
+        app.router.on_shutdown.append(mcp_shutdown)
+    else:
+        app.state.mcp = None
 
     if recarga_socket is not None:
         recarga_srv = ServidorRecarga(recarga_svc.pedir)

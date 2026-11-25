@@ -82,6 +82,24 @@ def main(argv: list[str] | None = None) -> None:
     sys.exit(0)
 
 
+async def _preparar_mcp(directorio: Path, ajustes):
+    """Config del MCP de Colmena y versión de Claude (una vez). Sin XDG_RUNTIME_DIR o sin versión: sin MCP."""
+    from orquestador.guardian.lanzador import (VERSION_MINIMA_MCP, detectar_version_claude,
+                                               escribir_mcp_config)
+    from orquestador.mcp_canal import ruta_socket
+
+    entorno = dict(os.environ)
+    entorno["PATH"] = ajustes.path or entorno.get("PATH", "")
+    version = await asyncio.to_thread(detectar_version_claude, ajustes.claude_bin, entorno)
+    sock = ruta_socket(os.environ)
+    if sock is None:
+        log.warning("sin XDG_RUNTIME_DIR: las sesiones arrancan sin el MCP de Colmena")
+        return None, version
+    if version is None or version < VERSION_MINIMA_MCP:
+        log.info("Claude %s: las sesiones arrancan sin el MCP de Colmena (pide >= %s)", version, VERSION_MINIMA_MCP)
+    return escribir_mcp_config(directorio, sock), version
+
+
 async def _correr(
     socket_path: Path,
     registro_path: Path,
@@ -92,6 +110,7 @@ async def _correr(
     from importlib.metadata import version
 
     settings = escribir_hooks(socket_path.parent, espera)
+    mcp_config, claude_version = await _preparar_mcp(socket_path.parent, ajustes)
     registro = Registro(registro_path)
     guardian = Guardian(
         registro,
@@ -99,6 +118,8 @@ async def _correr(
         settings,
         entorno=os.environ,
         cwd_confiable=cwd_confiable,
+        mcp_config=mcp_config,
+        claude_version=claude_version,
     )
     await guardian.retomar()
 

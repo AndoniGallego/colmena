@@ -130,3 +130,18 @@ def test_agregar_reunion_sin_id_lanza_value_error(env):
     del d["reunion"]
     with pytest.raises(ValueError):
         env.lib.agregar_reunion(d, "x")
+
+
+def test_biblioteca_reunion_tema(env):
+    lib = env.lib
+    lib.agregar_reunion({**datos(), "tema": "Plux " + "x" * 300}, "charla")
+    raw = json.loads(lib.listing(tipo="reunion")["items"][0]["reunion_raw"])
+    assert raw["tema"].startswith("Plux") and len(raw["tema"]) <= 200
+
+
+def test_biblioteca_reunion_sin_tema(env):
+    lib = env.lib
+    d = datos()
+    d.pop("tema", None)
+    lib.agregar_reunion(d, "charla")
+    assert json.loads(lib.listing(tipo="reunion")["items"][0]["reunion_raw"])["tema"] == ""

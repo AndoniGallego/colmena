@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { desglose, fmtTokens } from '../lib/tokens'
-import { detalleTokens, pctLabel, type DesgloseItem } from '../lib/usoClaude'
+import { detalleTokens, fmtUsd, pctLabel, type DesgloseItem } from '../lib/usoClaude'
 import type { DiosTokens } from '../api/types'
 
 const props = defineProps<{ tokens?: DiosTokens; items?: DesgloseItem[]; label?: string }>()
@@ -51,7 +51,10 @@ onMounted(() => requestAnimationFrame(() => requestAnimationFrame(() => (ready.v
             <span class="nm">{{ t.label }}</span>
             <small v-if="t.sub" class="sub">{{ t.sub }}</small>
           </span>
-          <b class="mono">{{ fmtTokens(t.n) }}</b>
+          <span class="nums">
+            <b class="mono">{{ fmtTokens(t.n) }}</b>
+            <small v-if="rich" class="usd mono" :title="t.usdParcial ? 'Falta el precio de algún modelo' : 'Equivalente en la API, no lo que pagás con el plan'">≈ {{ fmtUsd(t.usd) }}{{ t.usdParcial ? '+' : '' }}</small>
+          </span>
           <span class="p mono">{{ pctLabel(t.pct, t.n) }}%</span>
         </component>
         <template v-if="rich">
@@ -94,6 +97,8 @@ li.lit .dot { scale: 1.25; }
 li[data-tipo='otras'] .nm { color: var(--text-3); }
 .sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-sm); color: var(--text-4); }
 b { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.nums { display: grid; justify-items: end; gap: 1px; }
+.usd { font-size: 11px; line-height: 1.2; color: var(--text-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .p { text-align: right; font-size: var(--t-sm); color: var(--text-4); }
 .more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.35s var(--ease-out); }
 .more p { overflow: hidden; margin: 0; padding: 0 4px 0 23px; font-size: var(--t-sm); line-height: 1.5; color: var(--text-3); }

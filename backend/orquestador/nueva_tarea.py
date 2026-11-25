@@ -9,11 +9,15 @@ from pathlib import Path
 from typing import Optional
 
 from . import kit_trabajo
+from .entornos import PUERTOS_BLOQUEADOS
 from .config import private_write
 from .envio_sesion import linea_unica
 from .mensaje import MAX_TEXT
 from .traspaso import TraspasoError
 
+PUERTO_INICIO = 41000
+PUERTO_BLOQUE = 10
+PUERTO_BLOQUES = 100
 MAX_SLUG = 40
 PALABRAS_NOMBRE = 6
 REPOS_KIT = frozenset({"orquestador"})
@@ -55,12 +59,19 @@ def validar_ticket(raw: str) -> str:
     return clave
 
 
-def mensaje_ticket(clave: str, rama: str, nota: str) -> str:
+def mensaje_ticket(clave: str, rama: str, nota: str, sufijo: str = "", *, ajena: bool = False) -> str:
+    """`ajena`: la nota la escribió otra sesión (pedido del MCP), no Ando: va como dato con `PREFIJO_PEDIDO`."""
     texto = (f"Arrancá el ticket {clave}. Primero leelo con el agente {kit_trabajo.valor('agente_tickets')} (nunca la API de Jira directo) y "
              f"después seguí {kit_trabajo.valor('comando_flujo')} desde el principio, con sus aprobaciones. Estás en una copia del repo "
              f"solo para esta tarea, en la rama {rama}.")
     nota = linea_unica(nota, MAX_TEXT)
-    armado = f"{texto} Nota de Ando: {nota}" if nota else texto
+    if nota and ajena:
+        from .colmena_pestana import PREFIJO_PEDIDO
+
+        nota = PREFIJO_PEDIDO + nota
+    armado = (f"{texto} {nota}" if ajena else f"{texto} Nota de Ando: {nota}") if nota else texto
+    if sufijo:
+        armado = f"{armado} {sufijo}"
     if len(armado) > MAX_TEXT:
         maximo = MAX_TEXT - (len(armado) - len(nota))
         raise TraspasoError(400, f"La nota es muy larga para un ticket: máximo {maximo} caracteres")
@@ -148,6 +159,19 @@ def quitar_recien_creado(repo: str, rama: str, ruta: str, base: str) -> None:
         _git(repo, "branch", "-D", rama, ok=(0, 1))
 
 
+_CLAVES_INT = ("puerto", "puertos")
+
+
+def _es_int(valor) -> bool:
+    return isinstance(valor, int) and not isinstance(valor, bool)
+
+
+def _normalizada(entrada: dict) -> dict:
+    out = {k: entrada[k] for k in ("ruta", "repo", "rama", "base")}
+    out.update({k: entrada[k] for k in _CLAVES_INT if _es_int(entrada.get(k))})
+    return out
+
+
 class Worktrees:
     """Registro de las copias que creó Colmena (json privado en el directorio de datos)."""
 
@@ -164,7 +188,8 @@ class Worktrees:
             return []
         items = data.get("copias") if isinstance(data, dict) else None
         claves = ("ruta", "repo", "rama", "base")
-        return [e for e in items or [] if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in claves)]
+        validas = [e for e in items or [] if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in claves)]
+        return [{k: v for k, v in e.items() if k not in _CLAVES_INT or _es_int(v)} for e in validas]
 
     def _guardar(self, items: list) -> None:
         private_write(self.path, json.dumps({"v": 1, "copias": items}, ensure_ascii=False))
@@ -178,7 +203,25 @@ class Worktrees:
     def agregar(self, entrada: dict) -> None:
         with self._lock:
             items = [e for e in self.todas() if e["ruta"] != entrada["ruta"]]
-            self._guardar([*items, {k: entrada[k] for k in ("ruta", "repo", "rama", "base")}])
+            self._guardar([*items, _normalizada(entrada)])
+
+    def reservar(self, entrada: dict, pedir_puerto: bool, bloqueados=frozenset()) -> Optional[int]:
+        """Registra la copia y, si se pide, le reserva el bloque de puertos libre más bajo (todo bajo el lock)."""
+        with self._lock:
+            items = [e for e in self.todas() if e["ruta"] != entrada["ruta"]]
+            nueva = _normalizada({k: v for k, v in entrada.items() if k != "puerto"})
+            puerto = None
+            if pedir_puerto:
+                usados = {e["puerto"] for e in items if "puerto" in e}
+                vedados = PUERTOS_BLOQUEADOS | set(bloqueados)
+                puerto = next((ini for ini in range(PUERTO_INICIO, PUERTO_INICIO + PUERTO_BLOQUE * PUERTO_BLOQUES,
+                                                    PUERTO_BLOQUE)
+                               if ini not in usados and not vedados & set(range(ini, ini + PUERTO_BLOQUE))), None)
+                if puerto is None:
+                    raise TraspasoError(409, "No quedan puertos libres: borrá copias viejas")
+                nueva["puerto"] = puerto
+            self._guardar([*items, nueva])
+            return puerto
 
     def quitar(self, ruta: str) -> None:
         with self._lock:

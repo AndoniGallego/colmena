@@ -586,3 +586,10 @@ def test_directorio_de_respaldos_queda_privado(tmp_path):
     finally:
         os.umask(prev)
     assert stat.S_IMODE(resp.stat().st_mode) == 0o700
+
+
+def test_post_tool_use_failure_se_instala_con_matcher():
+    defs = d.definiciones_hooks(SCRIPT, espera=120)
+    (bloque,) = defs["PostToolUseFailure"]
+    assert bloque["matcher"] == "*"
+    assert bloque["hooks"][0]["async"] is True

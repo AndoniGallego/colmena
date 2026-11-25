@@ -17,6 +17,26 @@ def test_agent_lleva_fondo_vacio_sin_tareas(projects):
     assert agent["fondo"] == []
 
 
+def test_la_tarjeta_trae_uso_de_hoy(projects):
+    llamadas = []
+
+    def uso_hoy():
+        llamadas.append(1)
+        return {SID: {"total": 312_000, "usd": 4.1}}
+
+    board = build_board(make_snapshot("idle"), DigestService(projects), uso_hoy=uso_hoy)
+    agent = board["workspaces"][0]["tabs"][0]["agents"][0]
+    assert agent["uso"] == {"total": 312_000, "usd": 4.1}
+    assert len(llamadas) == 1
+
+
+def test_la_tarjeta_sin_uso_trae_none(projects):
+    agent = build_board(make_snapshot("idle"), DigestService(projects))["workspaces"][0]["tabs"][0]["agents"][0]
+    assert agent["uso"] is None
+    agent = build_board(make_snapshot("idle"), DigestService(projects), uso_hoy=lambda: {})["workspaces"][0]["tabs"][0]["agents"][0]
+    assert agent["uso"] is None
+
+
 def test_build_board(projects):
     board = build_board(make_snapshot("working"), DigestService(projects), self_pane_id="w2:p9")
     assert board["focused_tab_id"] == "w1:t1"
@@ -303,3 +323,21 @@ def test_el_tablero_oculta_la_pestana_interna_de_un_espacio_mixto(projects, tmp_
     assert "w1:t2" not in tabs and "w1:t1" in tabs
     assert all(t["terminales"] == [] for w in board["workspaces"] for t in w["tabs"] if t["id"] == "w1:t1")
     assert "w1:p5" not in str(board)
+
+
+def test_board_marca_la_traba_en_la_tarjeta_y_la_saca_sola(projects):
+    hub = BoardHub(FakeTerminales.desde_snapshot(make_snapshot("working")), DigestService(projects))
+    actual = {"tipo": "repetida", "desde": 1.0, "detalle": "Grep repetido"}
+    hub.trabas = lambda sid: actual if sid == SID else None
+    agent = asyncio.run(hub.refresh())["workspaces"][0]["tabs"][0]["agents"][0]
+    assert agent["traba"] == actual
+    actual = None
+    hub.reaplicar()
+    agent = asyncio.run(hub.refresh())["workspaces"][0]["tabs"][0]["agents"][0]
+    assert "traba" not in agent
+
+
+def test_board_sin_detector_no_trae_traba(projects):
+    hub = BoardHub(FakeTerminales.desde_snapshot(make_snapshot("working")), DigestService(projects))
+    agent = asyncio.run(hub.refresh())["workspaces"][0]["tabs"][0]["agents"][0]
+    assert "traba" not in agent

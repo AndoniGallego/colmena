@@ -24,6 +24,9 @@ export function inicialGuia(): EstadoGuiaFront {
 
 export const guia = ref<EstadoGuiaFront>(inicialGuia())
 
+/** Lo que se le pidió a la guía en curso: la cajita lo sigue mostrando después de mandarlo. */
+export const preguntaGuia = ref('')
+
 let device = ''
 
 export function fijarDevice(d: string): void {
@@ -155,6 +158,7 @@ export async function pedir(pregunta: string): Promise<void> {
   const limpia = pregunta.trim()
   if (!limpia || ocupada(guia.value)) return
   pendiente = null
+  preguntaGuia.value = limpia
   const invoke = invocar()
   if (!invoke) return fallo('fallo')
   guia.value = { ...guia.value, estado: 'mirando', paso: 0, total: 0, texto: '' }
@@ -198,4 +202,7 @@ export async function terminar(): Promise<void> {
     // no había dibujo
   }
   guia.value = { ...inicialGuia(), estado: 'terminado' }
+  preguntaGuia.value = ''
+  // Al terminar, la cajita se cierra y vuelve el notch; otro panel abierto (Listo desde el globo) no se toca.
+  if (modo.value === 'guia') modo.value = 'cerrado'
 }

@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .config import private_write
+from .precios import Precios
 from .statusline import SESSION_ID, model_name
 from .uso import CAMPOS, RETENCION_DIAS, total_of
 
 log = logging.getLogger("orquestador.uso_claude")
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 TAIL_IDS = 64
 TOP_FILAS = 14
 RESCAN_THROTTLE = 10.0
@@ -34,24 +35,56 @@ def _count(value) -> int:
 
 
 def _usage(raw) -> Optional[list]:
+    """[input, cache_write, cache_read, output, cache_write_1h]; la escritura de 1 h es parte de cache_write."""
     if not isinstance(raw, dict):
         return None
     out = [_count(raw.get(_KEYS[name])) for name in CAMPOS]
-    return out if any(out) else None
+    creation = raw.get("cache_creation")
+    cw_1h = _count(creation.get("ephemeral_1h_input_tokens")) if isinstance(creation, dict) else 0
+    out.append(min(cw_1h, out[1]))
+    return out if any(out[:4]) else None
+
+
+_INTERNOS = ("_usd", "_con", "_sin")
 
 
 def _empty() -> dict:
-    return {**{name: 0 for name in CAMPOS}, "mensajes": 0}
+    return {**{name: 0 for name in CAMPOS}, "mensajes": 0, "_usd": 0.0, "_con": False, "_sin": False}
 
 
-def _add(bucket: dict, vals, mensajes: int = 0) -> None:
+def _add(bucket: dict, vals, mensajes: int = 0, usd: Optional[float] = 0.0) -> None:
+    """Suma tokens y su costo; usd=None marca tokens de un modelo sin precio."""
     for i, name in enumerate(CAMPOS):
         bucket[name] += vals[i]
     bucket["mensajes"] += mensajes
+    if not any(vals[:4]):
+        return
+    if usd is None:
+        bucket["_sin"] = True
+    else:
+        bucket["_usd"] += usd
+        bucket["_con"] = True
+
+
+def _fusionar(dst: dict, src: dict) -> None:
+    for name in CAMPOS:
+        dst[name] += src[name]
+    dst["mensajes"] += src["mensajes"]
+    if "_usd" in src:
+        dst["_usd"] += src["_usd"]
+        dst["_con"] = dst["_con"] or src["_con"]
+        dst["_sin"] = dst["_sin"] or src["_sin"]
+    else:  # fila ya cerrada
+        dst["_usd"] += src.get("usd") or 0.0
+        dst["_con"] = dst["_con"] or src.get("usd") is not None
+        dst["_sin"] = dst["_sin"] or src.get("usd") is None or bool(src.get("usd_parcial"))
 
 
 def _close(bucket: dict) -> dict:
-    return {**bucket, "total": total_of(bucket)}
+    base = {k: v for k, v in bucket.items() if k not in _INTERNOS}
+    sin, con = bucket["_sin"], bucket["_con"]
+    usd = None if sin and not con else round(bucket["_usd"], 6)
+    return {**base, "total": total_of(bucket), "usd": usd, "usd_parcial": bool(sin and con)}
 
 
 def _ts_seconds(value) -> Optional[float]:
@@ -131,17 +164,21 @@ class ClaudeUso:
 
     def __init__(self, projects_dir: Path, directory: Path,
                  excluir: tuple = (), limits_dir: Optional[Path] = None,
+                 precios: Optional[Precios] = None,
                  now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
                  clock: Callable[[], float] = time.monotonic):
         self.projects_dir = projects_dir
         self.path = directory / "uso-claude.json"
         self.excluir = frozenset(excluir)
         self.limits_dir = limits_dir
+        self.precios = precios or Precios()
         self._now = now
         self._clock = clock
         self._lock = threading.Lock()
         self._last_scan: Optional[float] = None
         self.files: dict = {}
+        self._repos: dict = {}
+        self._ultimo_hoy: dict = {}
         if self.path.exists():
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
@@ -273,10 +310,11 @@ class ClaudeUso:
                     tail.pop(next(iter(tail)))
         if not any(delta) and not mensajes:
             return
-        row = state["days"].setdefault(day, {}).setdefault(model, [0, 0, 0, 0, 0])
-        for i, v in enumerate(delta):
+        row = state["days"].setdefault(day, {}).setdefault(model, [0, 0, 0, 0, 0, 0])
+        for i, v in enumerate(delta[:4]):
             row[i] += v
         row[4] += mensajes
+        row[5] += delta[4]
 
     # --- resumen ---
     def tokens_de_hoy(self, session_id: str) -> int:
@@ -292,6 +330,32 @@ class ClaudeUso:
                 for row in state.get("days", {}).get(hoy, {}).values():
                     total += sum(row[:4])
         return total
+
+    def por_sesion_hoy(self, escanear: bool = True) -> dict:
+        """{session_id: {total, usd}} de hoy en una sola pasada sobre lo ya leído; usd es None si ningún modelo tiene precio.
+
+        Con escanear=False (el tablero) no lee transcripts ni espera a un escaneo en curso: devuelve lo último."""
+        if escanear:
+            self.scan()
+        if not self._lock.acquire(blocking=escanear):
+            return self._ultimo_hoy
+        hoy = self._now().astimezone().date().isoformat()
+        buckets: dict = {}
+        try:
+            for state in self.files.values():
+                sid = state.get("session")
+                if not sid:
+                    continue
+                for model, row in state.get("days", {}).get(hoy, {}).items():
+                    _add(buckets.setdefault(sid, _empty()), row[:4], row[4], self.precios.usd(model, row))
+        finally:
+            self._lock.release()
+        out = {}
+        for sid, b in buckets.items():
+            c = _close(b)
+            out[sid] = {"total": c["total"], "usd": c["usd"]}
+        self._ultimo_hoy = out
+        return out
 
     def summary(self, nombres: Optional[dict] = None) -> dict:
         self.scan()
@@ -317,22 +381,24 @@ class ClaudeUso:
                 if day not in por_dia:
                     continue
                 for model, row in models.items():
-                    _add(por_dia[day], row[:4], row[4])
+                    usd = self.precios.usd(model, row)
+                    _add(por_dia[day], row[:4], row[4], usd)
                     for name, dset in rangos.items():
                         if day in dset:
                             g = grupos[name]
-                            _add(g["sesiones"].setdefault(sid, _empty()), row[:4], row[4])
-                            _add(g["modelos"].setdefault(model, _empty()), row[:4], row[4])
+                            _add(g["sesiones"].setdefault(sid, _empty()), row[:4], row[4], usd)
+                            _add(g["modelos"].setdefault(model, _empty()), row[:4], row[4], usd)
 
         def proyecto(sid: str) -> str:
             cwd = meta.get(sid, {}).get("cwd") or ""
+            cwd = self._repo_de(cwd)
             return cwd.rstrip("/").rsplit("/", 1)[-1] or cwd or "Sin proyecto"
 
         desglose = {}
         for name, g in grupos.items():
             proyectos: dict = {}
             for sid, bucket in g["sesiones"].items():
-                _add(proyectos.setdefault(proyecto(sid), _empty()), [bucket[n] for n in CAMPOS], bucket["mensajes"])
+                _fusionar(proyectos.setdefault(proyecto(sid), _empty()), bucket)
             sesiones = [self._fila(sid, b, self._nombre_sesion(sid, meta, nombres), proyecto(sid)) for sid, b in g["sesiones"].items()]
             filas_proy = [self._fila(p, b, p, "") for p, b in proyectos.items()]
             filas_mod = [self._fila(m, b, model_name(m) if m != "?" else "Sin modelo", m if m != "?" else "") for m, b in g["modelos"].items()]
@@ -342,6 +408,14 @@ class ClaudeUso:
         totales = {name: _close(_sum(por_dia[f] for f in fechas[-n:])) for name, n in RANGOS.items()}
         return {"generado": self._now().isoformat(), "totales": totales, "historial": historial,
                 "desglose": desglose, "limites": read_limits(self.limits_dir, self._now().timestamp())}
+
+    def _repo_de(self, cwd: str) -> str:
+        """Raíz del repo principal si el cwd es un worktree (su `.git` es un archivo `gitdir:` con commondir); si no, el mismo cwd."""
+        if not cwd:
+            return cwd
+        if cwd not in self._repos:
+            self._repos[cwd] = _repo_principal(cwd)
+        return self._repos[cwd]
 
     @staticmethod
     def _nombre_sesion(sid: str, meta: dict, nombres: dict) -> str:
@@ -358,10 +432,28 @@ class ClaudeUso:
         return {"id": fid, "nombre": nombre, "detalle": detalle, "tipo": tipo, **_close(bucket)}
 
 
+def _repo_principal(cwd: str) -> str:
+    try:
+        marca = Path(cwd) / ".git"
+        if not marca.is_file():
+            return cwd
+        linea = marca.read_text(encoding="utf-8").strip()
+        if not linea.startswith("gitdir:"):
+            return cwd
+        gitdir = Path(linea[len("gitdir:"):].strip())
+        if not gitdir.is_absolute():
+            gitdir = Path(cwd) / gitdir
+        common = gitdir / (gitdir / "commondir").read_text(encoding="utf-8").strip()
+        raiz = common.resolve()
+        return str(raiz.parent) if raiz.name == ".git" else cwd
+    except (OSError, ValueError):
+        return cwd
+
+
 def _sum(buckets) -> dict:
     out = _empty()
     for b in buckets:
-        _add(out, [b[n] for n in CAMPOS], b["mensajes"])
+        _fusionar(out, b)
     return out
 
 

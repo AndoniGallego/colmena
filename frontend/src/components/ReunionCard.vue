@@ -50,6 +50,7 @@ async function verCharla() {
       <span class="ico" aria-hidden="true">🎙️</span>
       <h3 class="tit">{{ data.titulo }}</h3>
     </header>
+    <p v-if="data.tema" class="tema">{{ data.tema }}</p>
     <dl class="datos">
       <div><dt>Duración</dt><dd class="mono">{{ duracionLabel(data.duracion_s) }}</dd></div>
       <div><dt>Inicio</dt><dd class="mono">{{ data.inicio }}</dd></div>
@@ -114,6 +115,14 @@ async function verCharla() {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+}
+.tema {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 .tit {
   margin: 0;

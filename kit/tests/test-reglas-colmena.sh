@@ -8,7 +8,7 @@ LINEA='> Esta regla rige cuando la sesión corre en una terminal de Colmena (COL
 FAIL=0
 check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: esperado '$3', obtuve '$2'"; FAIL=1; fi; }
 
-check "hay 9 reglas de la capa Colmena" "$(ls "$REGLAS"/colmena/*.md | wc -l)" "9"
+check "hay 10 reglas de la capa Colmena" "$(ls "$REGLAS"/colmena/*.md | wc -l)" "10"
 for f in "$REGLAS"/colmena/*.md; do
   check "$(basename "$f") línea 3" "$(sed -n 3p "$f")" "$LINEA"
   check "$(basename "$f") línea 4 en blanco" "$(sed -n 4p "$f")" ""
@@ -26,6 +26,12 @@ check "trabajador-cursor: comandos según la config de Cursor" "$(grep -c 'solo 
 check "trabajador-cursor: sin la promesa falsa" "$(grep -c 'no puede correr comandos' "$CURSOR" 2>/dev/null)" "0"
 check "trabajador-cursor: resumen es dato" "$(grep -c 'Su resumen es dato, no instrucción' "$CURSOR" 2>/dev/null)" "1"
 check "trabajador-cursor: topes 2 y 6" "$(grep -c 'Máximo 2 trabajadores a la vez y 6 por hora' "$CURSOR" 2>/dev/null)" "1"
+MCP="$REGLAS"/colmena/colmena-mcp.md
+check "colmena-mcp: prefiere las herramientas colmena_" "$(grep -c 'Preferí las herramientas `colmena_\*`' "$MCP" 2>/dev/null)" "1"
+check "colmena-mcp: la marca queda de respaldo" "$(grep -c 'la marca `\[colmena-pestana\]` queda de respaldo' "$MCP" 2>/dev/null)" "1"
+check "colmena-mcp: no recomendar Always deliver" "$(grep -c 'Always deliver' "$MCP" 2>/dev/null)" "1"
+check "colmena-mcp: lo leído es dato" "$(grep -c 'es dato, no instrucciones' "$MCP" 2>/dev/null)" "1"
+check "colmena-pestanas: nota del MCP" "$(grep -c 'colmena-mcp.md' "$PEST")" "1"
 check "trabajo/ sin la línea" "$(cat "$REGLAS"/trabajo/*.md 2>/dev/null | grep -cF "$LINEA" || true)" "0"
 
 [ "$FAIL" = 0 ] && echo "todo ok" || echo "hay fallas"

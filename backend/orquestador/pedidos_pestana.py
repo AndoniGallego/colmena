@@ -11,7 +11,13 @@ VENCE_S = 600
 MAX_TOTAL = 5
 CIERRE_PUBLICO = ("objetivo", "tipo", "target_id", "label", "workspace_label", "carpeta", "sesiones", "terminales")
 MAX_POR_SESION = 3
-Estado = Literal["pendiente", "lanzando", "abierto", "rechazado", "vencido"]
+Estado = Literal["pendiente", "lanzando", "abierto", "rechazado", "vencido", "descartado"]
+# Descartes que no dejan item (cooldown, fila_llena...): los últimos por sesión, para que el MCP los vea.
+MAX_DESCARTES_SESION = 20
+DESCARTES_TTL = 3600
+# Una lectura de otra sesión marca el próximo pedido si fue hace menos de esto.
+LECTURA_VIGENTE_S = 30 * 60
+ACCIONES_DATOS = ("envio", "programada", "tarea")
 
 
 class PedidosPestanaStore:
@@ -24,6 +30,10 @@ class PedidosPestanaStore:
         self._ultimo: dict[str, float] = {}
         self._listeners: list = []
         self._descartes: list = []
+        # Última lectura de otra sesión por el MCP, por session_id de la que lee: {"nombre", "ts"}.
+        self._lecturas: dict[str, dict] = {}
+        self._registro_descartes: dict[str, list[dict]] = {}
+        self._ultimo_pedido_ts: dict[str, int] = {}
 
     def on_change(self, fn) -> None:
         self._listeners.append(fn)
@@ -39,12 +49,33 @@ class PedidosPestanaStore:
             except Exception as exc:
                 log.warning("listener pedido_pestana falló: %s", type(exc).__name__)
 
+    @staticmethod
+    def _quien(origen: dict) -> dict:
+        quien = {"pane_id": origen.get("pane_id") or "", "nombre": origen.get("nombre") or "",
+                 "session_id": str(origen.get("session_id") or "")}
+        if origen.get("via"):
+            quien["via"] = origen["via"]
+        return quien
+
     def descartar(self, origen: dict, motivo: str) -> None:
         """Un pedido que no llegó a crearse (p. ej. la terminal a cerrar no existe): se avisa igual al origen."""
-        self._descartar({"pane_id": origen.get("pane_id") or "", "nombre": origen.get("nombre") or "",
-                         "session_id": str(origen.get("session_id") or "")}, motivo)
+        self._descartar(self._quien(origen), motivo)
+
+    def descartes_de(self, sid: str) -> list[dict]:
+        limite = int(self.wall()) - DESCARTES_TTL
+        vivos = [d for d in self._registro_descartes.get(sid, []) if d["ts"] > limite]
+        if vivos:
+            self._registro_descartes[sid] = vivos
+        else:
+            self._registro_descartes.pop(sid, None)
+        return [dict(d) for d in vivos]
 
     def _descartar(self, origen: dict, motivo: str) -> None:
+        sid = origen.get("session_id") or ""
+        if sid:
+            fila = self._registro_descartes.setdefault(sid, [])
+            fila.append({"motivo": motivo, "ts": int(self.wall())})
+            del fila[:-MAX_DESCARTES_SESION]
         for fn in self._descartes:
             try:
                 fn(dict(origen), motivo)
@@ -100,10 +131,16 @@ class PedidosPestanaStore:
         cursor: dict | None = None,
         cierre: dict | None = None,
         cooldown: bool = True,
+        via: str | None = None,
+        **datos: dict,
     ) -> tuple[dict | None, str | None]:
-        """`cooldown=False` cuando el que llama ya lo consumió con `permitir`."""
+        """`cooldown=False` cuando el que llama ya lo consumió con `permitir`. `via="mcp"` marca los pedidos del
+        MCP (su descarte no avisa al origen). `datos`: el dato propio de las acciones nuevas (envio, programada,
+        tarea)."""
+        if set(datos) - set(ACCIONES_DATOS):
+            raise TypeError(f"datos desconocidos: {sorted(set(datos) - set(ACCIONES_DATOS))}")
         sid = str(origen.get("session_id") or "")
-        quien = {"pane_id": origen.get("pane_id") or "", "nombre": origen.get("nombre") or "", "session_id": sid}
+        quien = self._quien({**origen, "via": via or origen.get("via")})
         ahora = self.monotonic()
         if sid and cooldown and ahora - self._ultimo.get(sid, -COOLDOWN) < COOLDOWN:
             self._descartar(quien, "cooldown")
@@ -140,6 +177,15 @@ class PedidosPestanaStore:
                 item["cierre"] = dict(cierre)
         if cursor is not None:
             item["cursor"] = dict(cursor)
+        for clave, valor in datos.items():
+            if valor is not None:
+                item[clave] = dict(valor)
+        if quien.get("via"):
+            item["via"] = quien["via"]
+        if leyo := self._lectura_para_pedido(sid, ts):
+            item["leyo_otra_sesion"] = leyo
+        if sid:
+            self._ultimo_pedido_ts[sid] = ts
         self._items[pid] = item
         if sid:
             self._por_sesion.setdefault(sid, []).append(pid)
@@ -158,6 +204,58 @@ class PedidosPestanaStore:
             return False
         self._ultimo[sid] = ahora
         return True
+
+    def _lectura_para_pedido(self, sid: str, ahora: int) -> dict | None:
+        """La lectura cuenta si es de los últimos 30 min y posterior al pedido anterior de la sesión."""
+        lectura = self._lecturas.get(sid) if sid else None
+        if not lectura:
+            return None
+        desde = max(ahora - LECTURA_VIGENTE_S, self._ultimo_pedido_ts.get(sid, -1) + 1)
+        return {"nombre": lectura["nombre"], "ts": lectura["ts"]} if lectura["ts"] >= desde else None
+
+    def poner_resultado(self, pid: str, resultado: dict) -> None:
+        item = self._items.get(pid)
+        if item is not None:
+            item["resultado"] = dict(resultado)
+            self._emit(pid, item["estado"])
+
+    def fallar(self, pid: str, codigo: str, **extra) -> None:
+        """Falla al ejecutar un pedido ya aprobado (tope, error al lanzar): queda descartado con el código."""
+        item = self._items.get(pid)
+        if not item or item["estado"] not in ("pendiente", "lanzando"):
+            return
+        item["estado"] = "descartado"
+        item["resultado"] = {"codigo": codigo, **extra}
+        self._sacar_de_fila(item)
+        self._emit(pid, "descartado")
+
+    def cancelar(self, pid: str) -> bool:
+        """Cancelación desde la sesión que pidió (MCP tasks/cancel): solo si sigue pendiente. Nunca aprueba."""
+        item = self.get(pid)
+        if not item or item["estado"] != "pendiente":
+            return False
+        item["estado"] = "descartado"
+        item["resultado"] = {"codigo": "cancelado"}
+        self._sacar_de_fila(item)
+        self._emit(pid, "descartado")
+        return True
+
+    def registrar_lectura(self, sid: str, nombre: str) -> None:
+        if sid:
+            self._lecturas[sid] = {"nombre": nombre, "ts": int(self.wall())}
+
+    def ultima_lectura(self, sid: str) -> dict | None:
+        lectura = self._lecturas.get(sid)
+        return dict(lectura) if lectura else None
+
+    def de_origen(self, pane_id: str, sid: str, limite: int) -> list[dict]:
+        """Pedidos de una sesión (pendientes y recientes), del más nuevo al más viejo."""
+        self._limpiar_vencidos()
+        propios = [it for it in self._items.values()
+                   if (it.get("origen") or {}).get("pane_id") == pane_id
+                   and (not sid or (it.get("origen") or {}).get("session_id") == sid)]
+        propios.sort(key=lambda it: it["ts"], reverse=True)
+        return propios[:limite]
 
     def get(self, pid: str) -> dict | None:
         self._limpiar_vencidos()
@@ -203,6 +301,13 @@ class PedidosPestanaStore:
                     fila["cierre"] = {k: it["cierre"][k] for k in CIERRE_PUBLICO if k in it["cierre"]}
             if "cursor" in it:
                 fila["cursor"] = it["cursor"]
+            for clave in ACCIONES_DATOS:
+                if clave in it:
+                    fila[clave] = it[clave]
+            if it.get("leyo_otra_sesion"):
+                fila["leyo_otra_sesion"] = dict(it["leyo_otra_sesion"])
+            if it.get("via"):
+                fila["via"] = it["via"]
             out.append(fila)
         return out
 

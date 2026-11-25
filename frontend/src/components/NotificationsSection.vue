@@ -75,6 +75,7 @@ const rows = computed(() => {
     { key: 'mrs', label: 'Merge requests', hint: 'Falla un pipeline, te aprueban, te comentan o te piden revisión' },
     { key: 'entornos', label: 'Entornos', hint: 'Si un contenedor se cae solo o queda con problemas' },
     { key: 'pestana', label: 'Pedidos de pestaña', hint: 'Cuando una sesión quiere abrir una pestaña nueva en otra carpeta' },
+    { key: 'trabada', label: 'Sesión trabada', hint: 'Si una sesión se queda en loop, repite el mismo error o no responde hace rato' },
   ]
   return all
 })

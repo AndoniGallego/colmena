@@ -241,3 +241,12 @@ describe('minimizar', () => {
     expect(r).toMatchObject({ dismissed: true, minimizado: false })
   })
 })
+
+describe('stepperKey con el atajo de minimizar cambiado', () => {
+  it('usa la combinación efectiva y deja de responder a M', () => {
+    expect(stepperKey({ key: 'n' }, false, 'n')).toEqual({ type: 'minimize' })
+    expect(stepperKey({ key: 'm' }, false, 'n')).toBeNull()
+    expect(stepperKey({ key: 'j', ctrlKey: true }, false, 'mod+j')).toEqual({ type: 'minimize' })
+    expect(stepperKey({ key: 'j', ctrlKey: true }, true, 'mod+j')).toBeNull()
+  })
+})

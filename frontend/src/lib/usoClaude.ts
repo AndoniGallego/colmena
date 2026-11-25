@@ -5,7 +5,21 @@ export type UsoRango = 'hoy' | '7d' | '30d'
 export type UsoAgrupar = 'sesiones' | 'proyectos' | 'modelos'
 export type FilaTipo = '' | 'otras'
 
-export interface UsoFila extends DiosTokens {
+/** Costo equivalente en la API: null si ningún modelo del grupo tiene precio; parcial si falta el de alguno. */
+export interface UsoCosto {
+  usd: number | null
+  usdParcial: boolean
+}
+
+export type UsoTotal = DiosTokens & UsoCosto
+export type UsoDia = DiosDia & UsoCosto
+
+export interface UsoHoy {
+  total: number
+  usd: number | null
+}
+
+export interface UsoFila extends DiosTokens, UsoCosto {
   id: string
   nombre: string
   detalle: string
@@ -26,8 +40,8 @@ export interface UsoLimites {
 
 export interface ClaudeUso {
   generado: string
-  totales: Record<UsoRango, DiosTokens>
-  historial: DiosDia[]
+  totales: Record<UsoRango, UsoTotal>
+  historial: UsoDia[]
   desglose: Record<UsoRango, Record<UsoAgrupar, UsoFila[]>>
   limites: UsoLimites | null
 }
@@ -44,10 +58,16 @@ function tokens(raw: any): DiosTokens {
   return { input: n(raw?.input), cache_write: n(raw?.cache_write), cache_read: n(raw?.cache_read), output: n(raw?.output), mensajes: n(raw?.mensajes), total: n(raw?.total) }
 }
 
+const usdOf = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+
+function costo(raw: any): UsoCosto {
+  return { usd: usdOf(raw?.usd), usdParcial: raw?.usd_parcial === true }
+}
+
 function fila(raw: any): UsoFila | null {
   if (!raw || typeof raw.id !== 'string' || !raw.id) return null
   const tipo: FilaTipo = raw.tipo ? 'otras' : ''
-  return { id: raw.id, nombre: s(raw.nombre) || raw.id, detalle: s(raw.detalle), tipo, ...tokens(raw) }
+  return { id: raw.id, nombre: s(raw.nombre) || raw.id, detalle: s(raw.detalle), tipo, ...tokens(raw), ...costo(raw) }
 }
 
 function limite(raw: any): UsoLimite | null {
@@ -57,10 +77,10 @@ function limite(raw: any): UsoLimite | null {
 }
 
 export function normalizeClaudeUso(raw: any): ClaudeUso {
-  const totales = {} as Record<UsoRango, DiosTokens>
+  const totales = {} as Record<UsoRango, UsoTotal>
   const desglose = {} as Record<UsoRango, Record<UsoAgrupar, UsoFila[]>>
   for (const r of RANGOS) {
-    totales[r] = tokens(raw?.totales?.[r])
+    totales[r] = { ...tokens(raw?.totales?.[r]), ...costo(raw?.totales?.[r]) }
     desglose[r] = {} as Record<UsoAgrupar, UsoFila[]>
     for (const a of AGRUPAR) {
       const list = raw?.desglose?.[r]?.[a]
@@ -69,7 +89,7 @@ export function normalizeClaudeUso(raw: any): ClaudeUso {
   }
   const historial = (Array.isArray(raw?.historial) ? raw.historial : [])
     .filter((d: any) => typeof d?.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha))
-    .map((d: any) => ({ fecha: d.fecha as string, ...tokens(d) }))
+    .map((d: any) => ({ fecha: d.fecha as string, ...tokens(d), ...costo(d) }))
   const l = raw?.limites
   const fiveHour = limite(l?.five_hour)
   const sevenDay = limite(l?.seven_day)
@@ -88,6 +108,8 @@ export interface DesgloseItem {
   color: string
   tipo: FilaTipo
   tokens: DiosTokens
+  usd?: number | null
+  usdParcial?: boolean
 }
 
 /** Filas del desglose listas para la barra: porcentaje sobre el total y un color estable por posición. */
@@ -96,8 +118,8 @@ export function itemsDesglose(filas: UsoFila[]): DesgloseItem[] {
   let i = 0
   return filas.map((f) => {
     const color = f.tipo === 'otras' ? 'var(--text-4)' : PALETA[i++ % PALETA.length]
-    const { id, nombre, detalle, tipo, ...tk } = f
-    return { key: id, label: nombre, sub: detalle, n: f.total, pct: total ? (f.total * 100) / total : 0, color, tipo, tokens: tk }
+    const { id, nombre, detalle, tipo, usd, usdParcial, ...tk } = f
+    return { key: id, label: nombre, sub: detalle, n: f.total, pct: total ? (f.total * 100) / total : 0, color, tipo, tokens: tk, usd, usdParcial }
   })
 }
 
@@ -132,4 +154,17 @@ export const limiteEstado = (pct: number): LimiteEstado => (pct >= 95 ? 'tope' :
 export function detalleTokens(t: DiosTokens): string {
   const cache = t.cache_read + t.cache_write
   return `${fmtTokens(t.input)} entrada · ${fmtTokens(cache)} caché · ${fmtTokens(t.output)} salida · ${t.mensajes} ${t.mensajes === 1 ? 'mensaje' : 'mensajes'}`
+}
+
+const USD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD' })
+
+/** Dólares equivalentes en la API; «—» si el modelo no tiene precio (nunca $0). */
+export function fmtUsd(usd: number | null | undefined): string {
+  return usd === null || usd === undefined ? '—' : USD.format(usd)
+}
+
+/** «312 k tok · ≈ US$ 4,10 hoy» para la tarjeta de la sesión; vacío si hoy no usó nada. */
+export function usoHoyLine(uso: UsoHoy | null | undefined): string {
+  if (!uso || uso.total <= 0) return ''
+  return `${fmtTokens(uso.total)} tok · ≈ ${fmtUsd(uso.usd)} hoy`
 }

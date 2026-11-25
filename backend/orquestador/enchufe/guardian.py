@@ -119,6 +119,11 @@ def _programa(raw: str) -> str:
     return "otro"
 
 
+def _pid_o_none(valor: object) -> int | None:
+    """Campo opcional y nuevo: un guardián viejo no lo manda."""
+    return valor if isinstance(valor, int) and not isinstance(valor, bool) and valor > 1 else None
+
+
 def _tablero_de_res(res: dict, estados: EstadoSesiones | None) -> Tablero:
     espacios: list[Espacio] = []
     for e in res.get("espacios") or []:
@@ -182,6 +187,8 @@ def _tablero_de_res(res: dict, estados: EstadoSesiones | None) -> Tablero:
                 claude_session_tipo="id" if claude_id else None,
                 titulo_crudo=titulo_crudo,
                 listo=s.get("listo") if isinstance(s.get("listo"), bool) else None,
+                pid_claude=_pid_o_none(s.get("pid_claude")),
+                modo=s.get("modo") if isinstance(s.get("modo"), str) else None,
             )
         )
     return Tablero(tuple(espacios), tuple(lineas), tuple(sesiones), 0)

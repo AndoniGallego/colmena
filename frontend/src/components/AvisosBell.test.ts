@@ -147,4 +147,12 @@ describe('AvisosBell', () => {
     expect(html).toMatch(/k-demo[^"]*acento/)
     expect(html).not.toMatch(/k-done[^"]*acento/)
   })
+
+  it('la campana no lleva title y sí la descripción accesible', async () => {
+    const { default: AvisosBell } = await import('./AvisosBell.vue')
+    const tag = (await renderToString(createSSRApp({ render: () => h(AvisosBell) }))).match(/<button[^>]*class="bell[^>]*>/)?.[0] ?? ''
+    expect(tag).not.toBe('')
+    expect(tag).not.toContain('title=')
+    expect(tag).toContain('aria-description="Lo que pidieron o terminaron las sesiones"')
+  })
 })

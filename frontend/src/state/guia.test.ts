@@ -37,6 +37,7 @@ beforeEach(() => {
   h.reunion.value = { reunion: null, estado: 'inactiva' }
   h.modo.value = 'cerrado'
   g.guia.value = g.inicialGuia()
+  g.preguntaGuia.value = ''
   g.fijarDevice('pc-1')
   ;(window as { __TAURI__?: Tauri }).__TAURI__ = { core: { invoke } }
 })
@@ -224,6 +225,42 @@ describe('terminar', () => {
     expect(h.salirGuia).toHaveBeenCalledWith(expect.objectContaining({ device: 'pc-1' }))
     expect(invoke).toHaveBeenCalledWith('nudo_limpiar')
     expect(g.guia.value.estado).toBe('terminado')
+  })
+
+  it('cierra la cajita y vuelve a ser el notch', async () => {
+    h.modo.value = 'guia'
+    g.guia.value = con({ estado: 'fin', guia: 3, paso: 1, total: 1, texto: 'x' })
+    await g.terminar()
+    expect(h.modo.value).toBe('cerrado')
+  })
+
+  it('no cierra otro panel que esté abierto (Listo desde el globo)', async () => {
+    h.modo.value = 'panel'
+    g.guia.value = con({ estado: 'fin', guia: 3, paso: 1, total: 1, texto: 'x' })
+    await g.terminar()
+    expect(h.modo.value).toBe('panel')
+  })
+
+  it('olvida la pregunta', async () => {
+    h.pedirGuia.mockResolvedValue({ ok: true, guia: 7, estado: 'preparando' })
+    await g.pedir('Quiero guardar')
+    await g.terminar()
+    expect(g.preguntaGuia.value).toBe('')
+  })
+})
+
+describe('preguntaGuia', () => {
+  it('pedir recuerda lo que se mandó, recortado', async () => {
+    h.pedirGuia.mockResolvedValue({ ok: true, guia: 7, estado: 'preparando' })
+    await g.pedir('  Quiero guardar  ')
+    expect(g.preguntaGuia.value).toBe('Quiero guardar')
+  })
+
+  it('mientras mira, otro pedido no la pisa', async () => {
+    g.preguntaGuia.value = 'primera'
+    g.guia.value = con({ estado: 'mirando', guia: 1 })
+    await g.pedir('segunda')
+    expect(g.preguntaGuia.value).toBe('primera')
   })
 })
 

@@ -48,8 +48,15 @@ const botonAria = computed(() => ariaAceptarPedidoPestana(props.pedido, trabajan
 const noAria = computed(() => ariaRechazarPedidoPestana(props.pedido))
 const donde = computed(() => (cierre.value ? dondeCierre(cierre.value) : ''))
 const esCursor = computed(() => props.pedido.accion === 'cursor')
-const esMulti = computed(() => !cualquierCierre.value && !esCursor.value && (props.pedido.pestanas?.length ?? 0) > 0)
-const esAbrir1 = computed(() => !cualquierCierre.value && !esCursor.value && !esMulti.value)
+const esMensaje = computed(() => props.pedido.accion === 'mensaje')
+const esProgramada = computed(() => props.pedido.accion === 'programada')
+const esTarea = computed(() => props.pedido.accion === 'tarea')
+const esMcp = computed(() => esMensaje.value || esProgramada.value || esTarea.value)
+const esMulti = computed(
+  () => !cualquierCierre.value && !esCursor.value && !esMcp.value && (props.pedido.pestanas?.length ?? 0) > 0,
+)
+const esAbrir1 = computed(() => !cualquierCierre.value && !esCursor.value && !esMcp.value && !esMulti.value)
+const leyo = computed(() => props.pedido.leyo_otra_sesion?.nombre?.trim() ?? '')
 const modeloCursor = computed(() => props.pedido.cursor?.modelo?.trim() ?? '')
 const cursorLargo = computed(() => mensajeLargo(props.pedido.mensaje, 6, 360))
 const cursorAbierto = ref(false)
@@ -74,7 +81,9 @@ const msgCorto = computed(() => {
   return `${t.slice(0, 120)}…`
 })
 
-const avisoSeguro = computed(() => !cualquierCierre.value && !esCursor.value && hayMensajeParaClaude(props.pedido))
+const avisoSeguro = computed(
+  () => !cualquierCierre.value && !esCursor.value && !esMensaje.value && !esProgramada.value && hayMensajeParaClaude(props.pedido),
+)
 const abiertos = ref<number[]>([])
 function tabAbierta(i: number) {
   return abiertos.value.includes(i)
@@ -109,7 +118,7 @@ function onRechazar() {
 <template>
   <article class="ppc" :class="{ compact, notch, multi: esMulti }">
     <header v-if="!notch" class="top">
-      <span class="kicker"><Icon :name="cualquierCierre ? 'close' : esCursor ? 'sparkle' : 'terminal'" :size="13" /> {{ esCierre ? tituloPedidoPestana(pedido) : esCerrar ? 'Cerrar terminal' : esCursor ? 'Trabajador Cursor' : 'Pedido de pestaña' }}</span>
+      <span class="kicker"><Icon :name="cualquierCierre ? 'close' : esCursor ? 'sparkle' : 'terminal'" :size="13" /> {{ esCierre || esMcp ? tituloPedidoPestana(pedido) : esCerrar ? 'Cerrar terminal' : esCursor ? 'Trabajador Cursor' : 'Pedido de pestaña' }}</span>
       <span class="vence mono">{{ vence }}</span>
     </header>
     <p class="sesion">
@@ -117,10 +126,16 @@ function onRechazar() {
       <template v-if="esCierre"> pide cerrar una {{ objetivoTxt }}</template>
       <template v-else-if="esCerrar"> pide cerrar una terminal</template>
       <template v-else-if="esCursor"> pide un trabajador Cursor</template>
+      <template v-else-if="esMensaje"> pide mandarle un mensaje a «{{ pedido.envio?.nombre || pedido.envio?.pane_id }}»</template>
+      <template v-else-if="esProgramada">
+        pide programar un mensaje para las {{ pedido.programada?.cuando }} a «{{ pedido.programada?.nombre || pedido.programada?.pane_id }}»
+      </template>
+      <template v-else-if="esTarea"> pide una tarea para {{ pedido.tarea?.ticket }}</template>
       <template v-else-if="esMulti"> pide {{ pedido.pestanas!.length }} pestañas</template>
       <template v-else> pide abrir una pestaña</template>
       <span v-if="notch" class="vence mono sesion-vence">{{ vence }}</span>
     </p>
+    <p v-if="leyo" class="leyo">Antes de pedir esto, leyó la sesión «{{ leyo }}»</p>
     <p v-if="esMulti && resumen" class="tarjeta-nom">{{ resumen }}</p>
     <div v-if="cierre" class="term">
       <p v-if="donde" class="term-donde mono">{{ donde }}</p>
@@ -140,7 +155,7 @@ function onRechazar() {
       <p v-if="term.cwd" class="term-cwd mono" :title="term.cwd">{{ recortarCarpeta(term.cwd, compact ? 36 : 56) }}</p>
       <span class="term-chip mono" :class="term.estado"><i class="dot" />{{ term.estado === 'prompt' ? 'en el prompt' : term.proceso || 'corriendo' }}</span>
     </div>
-    <p v-if="esAbrir1 || esCursor" class="carpeta mono" :title="pedido.carpeta">{{ carpetas }}</p>
+    <p v-if="esAbrir1 || esCursor || esTarea" class="carpeta mono" :title="pedido.carpeta">{{ carpetas }}</p>
     <div v-if="esCursor" class="cursor-ped">
       <p v-if="pedido.nombre?.trim()" class="cursor-nom">{{ pedido.nombre }}</p>
       <blockquote class="tab-quote cursor-quote">
@@ -170,6 +185,13 @@ function onRechazar() {
         </blockquote>
       </li>
     </ul>
+    <blockquote v-if="esMcp && pedido.mensaje.trim()" class="tab-quote cursor-quote">
+      <span class="tab-quote-et">{{ esTarea ? 'Nota para la tarea' : 'Mensaje' }} (lo escribió otra sesión)</span>
+      <span class="cursor-msg" :class="{ recortado: cursorLargo && !cursorAbierto }">{{ pedido.mensaje }}</span>
+      <button v-if="cursorLargo" type="button" class="ver hit" @click="cursorAbierto = !cursorAbierto">
+        {{ cursorAbierto ? 'Ver menos' : 'Ver todo' }}
+      </button>
+    </blockquote>
     <div v-if="esAbrir1" class="msg-wrap" :class="{ compact: compact && !expandido }">
       <pre class="msg">{{ compact ? msgCorto : pedido.mensaje }}</pre>
     </div>
@@ -449,6 +471,13 @@ function onRechazar() {
 }
 .aviso-trabajo-enter-from {
   opacity: 0;
+}
+.leyo {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
 }
 .seguro {
   margin: 0;

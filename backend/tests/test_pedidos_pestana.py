@@ -1521,3 +1521,132 @@ def test_excepcion_inesperada_en_el_preview_al_crear_avisa(apagada_app, monkeypa
     app.state.pestana_desde_bash(_msg_bash(SID, _json_cmd(accion="cerrar", pestana="vacío")), "w1:p1")
     assert motivos == ["cierre_no_posible"]
     assert c.get("/api/pedidos-pestana").json() == []
+
+
+# --- MCP: via, resultado, descartes, cancelación y "leyó otra sesión" (CA14, CA19) ---
+
+_OR_MCP = {"pane_id": "w1:p1", "nombre": "Uno", "session_id": "s-uno", "via": "mcp"}
+
+
+class _Reloj:
+    def __init__(self, t: float = 1000.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+
+def test_via_queda_en_el_item_y_en_el_origen():
+    store = PedidosPestanaStore()
+    it, _ = store.crear("/tmp", "hola", None, _OR_MCP, via="mcp")
+    assert it["via"] == "mcp" and it["origen"]["via"] == "mcp"
+    marca, _ = store.crear("/tmp", "hola", None, {"pane_id": "w2:p1", "nombre": "Dos", "session_id": "s-dos"})
+    assert "via" not in marca and "via" not in marca["origen"]
+
+
+def test_descarte_de_un_pedido_mcp_lleva_via_al_listener():
+    store = PedidosPestanaStore()
+    vistos = []
+    store.on_descarte(lambda origen, motivo: vistos.append((origen, motivo)))
+    store.crear("/tmp", "a", None, _OR_MCP, via="mcp")
+    store.crear("/tmp", "b", None, _OR_MCP, via="mcp")
+    assert vistos == [({**_OR_MCP}, "cooldown")]
+
+
+def test_descartes_quedan_registrados_por_sesion_y_vencen_a_la_hora():
+    mono = _Reloj(0.0)
+    wall = _Reloj(1000.0)
+    store = PedidosPestanaStore(wall=wall, monotonic=mono)
+    for _ in range(25):
+        store.descartar(_OR_MCP, "carpeta_colmena")
+    assert len(store.descartes_de("s-uno")) == 20
+    assert store.descartes_de("s-uno")[0] == {"motivo": "carpeta_colmena", "ts": 1000}
+    wall.t += 3601
+    assert store.descartes_de("s-uno") == []
+
+
+def test_resultado_y_fallo_quedan_en_el_item():
+    store = PedidosPestanaStore()
+    ok, _ = store.crear("/tmp", "a", None, _OR_MCP, via="mcp")
+    store.marcar(ok["id"], "abierto")
+    store.poner_resultado(ok["id"], {"pane_id": "w9:p1"})
+    assert store.get(ok["id"])["resultado"] == {"pane_id": "w9:p1"}
+    otro, _ = store.crear("/tmp", "b", None, {**_OR_MCP, "session_id": "s-otro"}, via="mcp")
+    store.fallar(otro["id"], "tope_alcanzado", retry_after=120)
+    it = store.get(otro["id"])
+    assert it["estado"] == "descartado"
+    assert it["resultado"] == {"codigo": "tope_alcanzado", "retry_after": 120}
+    assert otro["id"] not in store.pendientes_de("s-otro")
+
+
+def test_cancelar_solo_si_sigue_pendiente():
+    store = PedidosPestanaStore()
+    it, _ = store.crear("/tmp", "a", None, _OR_MCP, via="mcp")
+    assert store.cancelar(it["id"]) is True
+    assert store.get(it["id"])["estado"] == "descartado"
+    assert store.get(it["id"])["resultado"] == {"codigo": "cancelado"}
+    assert store.cancelar(it["id"]) is False
+    otro, _ = store.crear("/tmp", "b", None, {**_OR_MCP, "session_id": "s-otro"})
+    store.marcar(otro["id"], "abierto")
+    assert store.cancelar(otro["id"]) is False
+    assert store.get(otro["id"])["estado"] == "abierto"
+
+
+def test_acciones_nuevas_se_listan_con_sus_datos():
+    store = PedidosPestanaStore()
+    envio = {"pane_id": "w3:p1", "nombre": "Tres", "texto": "x"}
+    it, _ = store.crear("", "hola", None, _OR_MCP, accion="mensaje", envio=envio, via="mcp")
+    fila = next(f for f in store.listar_pendientes() if f["id"] == it["id"])
+    assert fila["accion"] == "mensaje" and fila["envio"] == envio
+    it2, _ = store.crear("", "texto", None, {**_OR_MCP, "session_id": "s2"}, accion="programada",
+                         programada={"cuando": "09:30", "pane_id": "w1:p1", "nombre": "Uno"}, via="mcp")
+    fila2 = next(f for f in store.listar_pendientes() if f["id"] == it2["id"])
+    assert fila2["programada"]["cuando"] == "09:30"
+    it3, _ = store.crear("/tmp/r", "nota", None, {**_OR_MCP, "session_id": "s3"}, accion="tarea",
+                         tarea={"ticket": "SITE-1"}, via="mcp")
+    fila3 = next(f for f in store.listar_pendientes() if f["id"] == it3["id"])
+    assert fila3["tarea"] == {"ticket": "SITE-1"}
+
+
+def test_pedido_despues_de_una_lectura_trae_leyo_otra_sesion():
+    wall = _Reloj(10_000.0)
+    store = PedidosPestanaStore(wall=wall)
+    store.registrar_lectura("s-uno", "Otra")
+    wall.t += 60
+    it, _ = store.crear("/tmp", "a", None, _OR_MCP, via="mcp")
+    fila = next(f for f in store.listar_pendientes() if f["id"] == it["id"])
+    assert fila["leyo_otra_sesion"] == {"nombre": "Otra", "ts": 10_000}
+
+
+def test_sin_lectura_o_lectura_vieja_no_trae_la_marca():
+    wall = _Reloj(10_000.0)
+    mono = _Reloj(0.0)
+    store = PedidosPestanaStore(wall=wall, monotonic=mono)
+    it, _ = store.crear("/tmp", "a", None, {"pane_id": "w5:p1", "nombre": "N", "session_id": "s-nada"})
+    assert "leyo_otra_sesion" not in next(f for f in store.listar_pendientes() if f["id"] == it["id"])
+    store.registrar_lectura("s-uno", "Otra")
+    wall.t += 31 * 60
+    it2, _ = store.crear("/tmp", "a", None, _OR_MCP, via="mcp")
+    assert "leyo_otra_sesion" not in next(f for f in store.listar_pendientes() if f["id"] == it2["id"])
+
+
+def test_la_lectura_cuenta_para_un_solo_pedido():
+    wall = _Reloj(10_000.0)
+    mono = _Reloj(0.0)
+    store = PedidosPestanaStore(wall=wall, monotonic=mono)
+    store.registrar_lectura("s-uno", "Otra")
+    wall.t += 10
+    primero, _ = store.crear("/tmp", "a", None, _OR_MCP, via="mcp")
+    wall.t += 10
+    mono.t += 100
+    segundo, _ = store.crear("/tmp", "b", None, _OR_MCP, via="mcp")
+    filas = {f["id"]: f for f in store.listar_pendientes()}
+    assert "leyo_otra_sesion" in filas[primero["id"]]
+    assert "leyo_otra_sesion" not in filas[segundo["id"]]
+
+
+def test_la_marca_tambien_trae_leyo_otra_sesion():
+    store = PedidosPestanaStore()
+    store.registrar_lectura("s-uno", "Otra")
+    it, _ = store.crear("/tmp", "a", None, {"pane_id": "w1:p1", "nombre": "Uno", "session_id": "s-uno"})
+    assert next(f for f in store.listar_pendientes() if f["id"] == it["id"])["leyo_otra_sesion"]["nombre"] == "Otra"

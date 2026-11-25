@@ -321,3 +321,59 @@ describe('PedidoPestanaCard: cierre de sesión, pestaña o tarjeta', () => {
     expect(t).toContain('1 sesión de Claude · 2 terminales')
   })
 })
+
+describe('PedidoPestanaCard: leyó otra sesión antes de pedir (CA20)', () => {
+  const leido: PedidoPestana = { ...base, leyo_otra_sesion: { nombre: 'Pagos', ts: 1_800_000_000 } }
+  const cursor: PedidoPestana = { ...leido, accion: 'cursor', nombre: 'N', cursor: {} }
+
+  it('muestra la línea en modo normal, compacto y notch, en cualquier tipo de pedido', async () => {
+    for (const p of [leido, cursor]) {
+      for (const extra of [{}, { compact: true }, { notch: true, compact: true }]) {
+        const html = await renderCardProps(p, extra)
+        expect(html).toContain('Antes de pedir esto, leyó la sesión «Pagos»')
+      }
+    }
+  })
+
+  it('sin lectura no la muestra y el botón sigue habilitado', async () => {
+    const html = await renderCard(base)
+    expect(html).not.toContain('leyó la sesión')
+    const conLectura = await renderCard(leido)
+    expect(conLectura).not.toMatch(/<button[^>]*disabled[^>]*>\s*Abrir/)
+  })
+})
+
+describe('PedidoPestanaCard: acciones nuevas del MCP', () => {
+  it('mensaje: a qué sesión y qué texto, con Mandar y No', async () => {
+    const html = await renderCard({
+      ...base, carpeta: '', mensaje: 'revisá el MR', accion: 'mensaje',
+      envio: { pane_id: 'w2:p1', nombre: 'Backend' },
+    })
+    expect(html).toContain('pide mandarle un mensaje a «Backend»')
+    expect(html).toContain('revisá el MR')
+    expect(html).toContain('>Mandar<')
+    expect(html).not.toContain('pide abrir una pestaña')
+    expect(html).not.toContain('preguntando antes de cada herramienta')
+  })
+
+  it('programada: hora y destino, con Programar', async () => {
+    const html = await renderCard({
+      ...base, carpeta: '', mensaje: 'acordate del deploy', accion: 'programada',
+      programada: { cuando: '09:30', pane_id: 'w1:p1', nombre: 'Tienda plugins' },
+    })
+    expect(html).toContain('pide programar un mensaje para las 09:30 a «Tienda plugins»')
+    expect(html).toContain('acordate del deploy')
+    expect(html).toContain('>Programar<')
+  })
+
+  it('tarea: ticket y carpeta, con Crear', async () => {
+    const html = await renderCard({
+      ...base, carpeta: '/home/usuario/repo', mensaje: 'mirá el CA2', nombre: 'SITE-12', accion: 'tarea',
+      tarea: { ticket: 'SITE-12' },
+    })
+    expect(html).toContain('pide una tarea para SITE-12')
+    expect(html).toContain('/home/usuario/repo')
+    expect(html).toContain('mirá el CA2')
+    expect(html).toContain('>Crear<')
+  })
+})

@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import unicodedata
 from collections import deque
@@ -23,6 +24,9 @@ LINEAS_MAX = 200
 LINEAS_POR_MIN = 6
 LINEA_MAX = 90
 ITEMS_POR_LLAMADA = 3
+CLAVE_POR_LLAMADA = 2
+CLAVE_MAX = 60  # puntos clave por reunión: el resto del tope de líneas queda para preguntas y pedidos
+PLAZAS_RESERVADAS = 2  # plazas del minuto que un punto clave no puede usar
 TRAMO_CHARS = 3000
 SOLAPE_TRAMO = 600
 CONTEXTO_CHARS = 1500
@@ -31,12 +35,24 @@ RESUMEN_CHARS = 150_000
 RESUMEN_INICIO_CHARS = 30_000
 COLA_PREGUNTAS_MAX = 5
 ABANDONO_S = 1800
+SIN_TEXTO_S = 120
+TEMA_MAX = 200
 RESPUESTA_MAX = 1200
 ARCHIVOS_MAX = 8
 ARCHIVO_MAX = 200
 REPETIDAS_VENTANA = 30
 JACCARD_MIN = 0.8
-TIPOS_DETECTADOS = frozenset({"pregunta", "requerimiento"})
+CLAVE_JACCARD = 0.6  # un punto clave se repite con otras palabras: contra los otros clave se compara más laxo
+TERMINADORES = ".?!…"
+TIPOS_DETECTADOS = frozenset({"pregunta", "requerimiento", "clave"})
+
+
+def _ordenar_items(items: object) -> list:
+    """Preguntas y pedidos primero (en su orden) y como mucho CLAVE_POR_LLAMADA puntos clave detrás."""
+    lista = list(items or []) if isinstance(items, (list, tuple)) else []
+    es_clave = [isinstance(x, dict) and x.get("tipo") == "clave" for x in lista]
+    otros = [x for x, c in zip(lista, es_clave) if not c]
+    return otros + [x for x, c in zip(lista, es_clave) if c][:CLAVE_POR_LLAMADA]
 TERMINADAS = frozenset({"llena", "terminando", "guardada"})
 SIN_RESUMEN = {"titulo": "Reunión sin resumen", "resumen": [], "pendientes": []}
 MODELOS = ("haiku", "sonnet")
@@ -80,7 +96,13 @@ def normalizar_linea(texto: str) -> str:
     return " ".join("".join(c if c.isalnum() else " " for c in sin_marcas).split())
 
 
-def es_repetida(nueva: str, previas: list[str]) -> bool:
+def es_clave_repetida(nueva: str, previas: list[str]) -> bool:
+    """Más laxa que `es_repetida`, pero con otros números (fecha, monto, porcentaje) es otro dato."""
+    numeros = set(re.findall(r"\d+", nueva))
+    return es_repetida(nueva, [p for p in previas if set(re.findall(r"\d+", p)) == numeros], CLAVE_JACCARD)
+
+
+def es_repetida(nueva: str, previas: list[str], umbral: float = JACCARD_MIN) -> bool:
     n = normalizar_linea(nueva)
     if not n:
         return True
@@ -90,14 +112,25 @@ def es_repetida(nueva: str, previas: list[str]) -> bool:
         if n == np:
             return True
         pp = set(np.split())
-        if pp and len(pn & pp) / len(pn | pp) >= JACCARD_MIN:
+        if pp and len(pn & pp) / len(pn | pp) >= umbral:
             return True
     return False
+
+
+def cortar_en_oracion(tramo_nuevo: str) -> int:
+    """Cuántos caracteres del tramo nuevo mandar: hasta la última oración cerrada, salvo que eso deje menos de la mitad."""
+    fin = max(tramo_nuevo.rfind(t) for t in TERMINADORES) + 1
+    return fin if fin * 2 >= len(tramo_nuevo) and fin > 0 else len(tramo_nuevo)
 
 
 def _limpio(texto: str) -> str:
     return " ".join("".join(" " if unicodedata.category(c) in ("Cc", "Cf", "Cs", "Zl", "Zp") else c
                             for c in texto).split())
+
+
+def limpiar_tema(texto: str) -> str:
+    """El tema que escribe Ando al empezar: una línea, sin caracteres de control."""
+    return _limpio(texto if isinstance(texto, str) else "")
 
 
 @dataclass
@@ -111,6 +144,7 @@ class _Linea:
     tramo: str = ""
     descartada: bool = False
     nota_id: Optional[str] = None
+    memoria: bool = False
 
 
 @dataclass
@@ -135,6 +169,9 @@ class _Reunion:
     cola: deque = field(default_factory=deque)
     en_curso: Optional[str] = None
     abandono: object = None
+    vigia: object = None
+    tema: str = ""
+    sin_texto: bool = False
 
     @property
     def chars(self) -> int:
@@ -146,13 +183,15 @@ class ReunionStore:
 
     def __init__(self, *, emitir: Callable, programar: Callable, lanzar: Callable, clock: Callable[[], float],
                  detector, puente, biblioteca, journal_dir: Path, ajustes: AjustesReunion,
-                 registrar_foto: Optional[Callable[[str, int, int, int], None]] = None, notas=None):
+                 registrar_foto: Optional[Callable[[str, int, int, int], None]] = None, notas=None,
+                 guardar_memoria: Optional[Callable[[str, str], None]] = None):
         self._emitir, self._programar, self._lanzar, self._clock = emitir, programar, lanzar, clock
         self._detector, self._puente, self._biblioteca = detector, puente, biblioteca
         self._dir = Path(journal_dir)
         self._ajustes = ajustes
         self._registrar_foto = registrar_foto
         self._notas = notas
+        self._guardar_memoria = guardar_memoria
         self._r: Optional[_Reunion] = None
         self._pcs: list[tuple[str, object]] = []
         self._n = 0
@@ -173,7 +212,7 @@ class ReunionStore:
                 "detecciones": r.detecciones,
                 "tope_detecciones": self._ajustes.tope_detecciones,
                 "copiloto": "abriendo" if r.abriendo else "listo" if r.copiloto_pane else "sin_copiloto",
-                "ocupado": r.en_curso is not None}
+                "sin_texto": r.sin_texto, "ocupado": r.en_curso is not None, "memoria_trabajo": self._guardar_memoria is not None}
 
     def _emitir_estado(self, r: _Reunion) -> None:
         self._emitir("reunion-estado", self._estado_ev(r))
@@ -184,7 +223,8 @@ class ReunionStore:
             return {}
         return {**self._estado_ev(r), "device": r.device, "repos": list(r.repos), "todos": r.todos,
                 "charla_chars": r.chars,
-                "lineas": [{"id": x.id, "texto": x.texto, "tipo": x.tipo, "respuesta": x.respuesta, "nota": x.nota_id}
+                "lineas": [{"id": x.id, "texto": x.texto, "tipo": x.tipo, "respuesta": x.respuesta, "nota": x.nota_id,
+                            "memoria": x.memoria}
                            for x in r.lineas if not x.descartada]}
 
     # ---- diario
@@ -212,23 +252,31 @@ class ReunionStore:
 
     # ---- empezar y texto
 
-    async def empezar(self, device: str, repos: list[str], todos: bool) -> dict:
+    async def empezar(self, device: str, repos: list[str], todos: bool, tema: str = "") -> dict:
         if self._r is not None:
             raise ReunionError(409, "Ya hay una reunión en curso.")
         self._n += 1
         rid = f"r{int(self._clock())}-{self._n}"
-        r = _Reunion(id=rid, device=device, inicio=self._clock(), repos=list(repos), todos=bool(todos), abriendo=True)
+        r = _Reunion(id=rid, device=device, inicio=self._clock(), repos=list(repos), todos=bool(todos), abriendo=True,
+                     tema=limpiar_tema(tema)[:TEMA_MAX])
         self._r = r
-        self._diario(rid, "inicio", device=device, repos=r.repos, todos=r.todos, ts=r.inicio)
+        self._diario(rid, "inicio", device=device, repos=r.repos, todos=r.todos, ts=r.inicio, tema=r.tema)
         self._emitir_estado(r)
+        r.vigia = self._programar(SIN_TEXTO_S, lambda: self._vigilar_texto(r))
         self._lanzar(self._abrir_copiloto(r))
         return {"reunion": rid, "estado": r.estado}
+
+    def _vigilar_texto(self, r: _Reunion) -> None:
+        r.vigia = None
+        if self._r is r and r.estado == "escuchando" and r.chars == 0:
+            r.sin_texto = True
+            self._emitir_estado(r)
 
     async def _abrir_copiloto(self, r: _Reunion) -> None:
         """En segundo plano: abrir la sesión tarda lo que tarda Claude en quedar listo."""
         pane = None
         try:
-            pane = await self._puente.abrir(r.id, list(r.repos), r.todos)
+            pane = await self._puente.abrir(r.id, list(r.repos), r.todos, r.tema)
         except Exception:
             log.exception("no pude abrir el Copiloto de la reunión %s", r.id)
         r.abriendo = False
@@ -258,6 +306,10 @@ class ReunionStore:
             r.tandas.append((self._clock(), nuevo.strip()))
             r.hay_nuevo = True
             self._diario(r.id, "texto", ts=r.tandas[-1][0], texto=r.tandas[-1][1])
+            self._cancelar(r, "vigia")
+            if r.sin_texto:
+                r.sin_texto = False
+                self._emitir_estado(r)
         if r.chars >= CHARLA_MAX or not nuevo.strip():
             self._cancelar(r, "pendiente")
             r.estado = "llena"
@@ -285,6 +337,7 @@ class ReunionStore:
             return
         r.corriendo = True
         fin = min(r.chars, r.ultimo_chars + TRAMO_CHARS)
+        fin = r.ultimo_chars + cortar_en_oracion(r.buffer[r.ultimo_chars:fin])
         tramo = r.buffer[max(0, r.ultimo_chars - SOLAPE_TRAMO):fin]
         r.ultimo_chars = fin
         r.hay_nuevo = fin < r.chars
@@ -293,7 +346,7 @@ class ReunionStore:
     async def _detectar(self, r: _Reunion, tramo: str) -> None:
         previas = [x.texto for x in r.lineas[-REPETIDAS_VENTANA:]]
         try:
-            items = await self._detector.detectar(tramo, previas)
+            items = await self._detector.detectar(tramo, previas, r.tema)
         except Exception:
             log.exception("falló la detección de la reunión %s", r.id)
             items = []
@@ -301,7 +354,7 @@ class ReunionStore:
         r.detecciones += 1
         if self._r is not r or r.estado in TERMINADAS:
             return
-        for item in list(items or [])[:ITEMS_POR_LLAMADA]:
+        for item in _ordenar_items(items)[:ITEMS_POR_LLAMADA]:
             self._sumar_linea_detectada(r, item)
         if self._tope(r):
             self._emitir_estado(r)
@@ -313,10 +366,15 @@ class ReunionStore:
         texto = _limpio(str(item.get("texto") or ""))[:LINEA_MAX].strip()
         if not texto or len(r.lineas) >= LINEAS_MAX or es_repetida(texto, [x.texto for x in r.lineas]):
             return
+        if item["tipo"] == "clave" and es_clave_repetida(texto, [x.texto for x in r.lineas if x.tipo == "clave"]):
+            return
         ahora = self._clock()
         while r.recientes and ahora - r.recientes[0] >= 60:
             r.recientes.popleft()
         if len(r.recientes) >= LINEAS_POR_MIN:
+            return
+        if item["tipo"] == "clave" and (len(r.recientes) >= LINEAS_POR_MIN - PLAZAS_RESERVADAS
+                                        or sum(1 for x in r.lineas if x.tipo == "clave") >= CLAVE_MAX):
             return
         r.recientes.append(ahora)
         self._crear_linea(r, texto, item["tipo"])
@@ -374,6 +432,8 @@ class ReunionStore:
             raise ReunionError(409, "Esa línea ya se descartó.")
         if lin.tipo == "mostrar":
             raise ReunionError(409, "Volvé a tocar Mostrame.")
+        if lin.tipo == "clave":
+            raise ReunionError(409, "Un punto clave no se le pregunta al Copiloto.")
         estado = (lin.respuesta or {}).get("estado")
         if estado in ("buscando", "en_cola", "lista"):
             return estado
@@ -434,6 +494,35 @@ class ReunionStore:
         self._diario(r.id, "anotada", linea=lin.id, nota=lin.nota_id)
         self._emitir("reunion-anotada", {"reunion": r.id, "linea": lin.id, "nota": lin.nota_id})
         return {"nota": lin.nota_id}
+
+    async def guardar_en_memoria(self, rid: str, linea: str) -> dict:
+        r = self._get(rid)
+        lin = self._linea(r, linea)
+        if self._guardar_memoria is None:
+            raise ReunionError(503, "La memoria de trabajo no está configurada.")
+        if lin.descartada:
+            raise ReunionError(409, "Esa línea ya se descartó.")
+        if lin.tipo == "mostrar" or not lin.nota_id:
+            raise ReunionError(409, "Primero anotá la línea.")
+        if lin.memoria:
+            return {"memoria": True}
+        hora = time.strftime("%H:%M", time.localtime(lin.ts or r.inicio))
+        contenido = f"Dicho en la reunión de las {hora} (sin verificar): {lin.texto}"
+        respuesta = (lin.respuesta or {}).get("texto") if (lin.respuesta or {}).get("estado") == "lista" else ""
+        if respuesta:
+            contenido += f"\nRespuesta del Copiloto (sin verificar): {respuesta}"
+        titulo = f"Reunión {hora}: {lin.texto[:60]}"
+        try:
+            await asyncio.to_thread(self._guardar_memoria, titulo, contenido)
+        except Exception:
+            log.warning("no pude guardar la línea %s en la memoria de trabajo", lin.id)
+            raise ReunionError(502, "No pude guardar en tu memoria de trabajo. Probá de nuevo en un rato.") from None
+        if lin.memoria:
+            return {"memoria": True}
+        lin.memoria = True
+        self._diario(r.id, "memoria", linea=lin.id)
+        self._emitir("reunion-memoria", {"reunion": r.id, "linea": lin.id})
+        return {"memoria": True}
 
     async def _enviar(self, r: _Reunion, lin: _Linea) -> str:
         r.en_curso = lin.id
@@ -601,7 +690,7 @@ class ReunionStore:
 
     def _datos(self, r: _Reunion, motivo: str, resumen: dict, recortada: bool, fin: float) -> dict:
         return {"v": 1, "reunion": r.id, "inicio": r.inicio, "fin": fin, "duracion_s": max(0, int(fin - r.inicio)),
-                "repos": list(r.repos), "motivo": motivo, "titulo": resumen["titulo"],
+                "repos": list(r.repos), "tema": r.tema, "motivo": motivo, "titulo": resumen["titulo"],
                 "resumen": resumen["resumen"], "pendientes": resumen["pendientes"], "tocadas": self._tocadas(r),
                 "lineas": len(r.lineas), "charla_chars": r.chars, "recortada": recortada}
 
@@ -620,11 +709,12 @@ class ReunionStore:
         previo = r.estado
         self._cancelar(r, "pendiente")
         self._cancelar(r, "abandono")
+        self._cancelar(r, "vigia")
         r.estado = "terminando"
         self._emitir_estado(r)
         enviada, recortada = self._recortar(self._charla(r))
         try:
-            resumen = self._resumen_valido(await self._detector.resumir(enviada, self._tocadas(r)))
+            resumen = self._resumen_valido(await self._detector.resumir(enviada, self._tocadas(r), r.tema))
         except Exception:
             log.exception("falló el resumen de la reunión %s", rid)
             resumen = dict(SIN_RESUMEN)
@@ -708,7 +798,7 @@ class ReunionStore:
             if tipo == "inicio" and r is None:
                 r = _Reunion(id=ruta.stem, device=str(ev.get("device", "")), inicio=float(ev.get("ts", 0)),
                              repos=[x for x in ev.get("repos", []) if isinstance(x, str)],
-                             todos=bool(ev.get("todos")))
+                             todos=bool(ev.get("todos")), tema=limpiar_tema(ev.get("tema", ""))[:TEMA_MAX])
             elif r is None:
                 continue
             elif tipo == "copiloto" and isinstance(ev.get("pane"), str):
@@ -719,6 +809,10 @@ class ReunionStore:
             elif tipo == "linea" and isinstance(ev.get("texto"), str):
                 r.lineas.append(_Linea(id=str(ev.get("id")), texto=ev["texto"], tipo=str(ev.get("tipo")),
                                        ts=float(ev.get("ts", r.inicio)), fin_chars=int(ev.get("fin_chars", 0))))
+            elif tipo == "memoria":
+                lin = next((x for x in r.lineas if x.id == ev.get("linea")), None)
+                if lin is not None:
+                    lin.memoria = True
             elif tipo in ("descartada", "anotada"):
                 lin = next((x for x in r.lineas if x.id == ev.get("linea")), None)
                 if lin is not None and tipo == "descartada":

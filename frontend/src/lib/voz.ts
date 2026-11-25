@@ -1,3 +1,5 @@
+import { coincide } from './teclas'
+
 export const MAX_SECONDS = 120
 export const WARN_AT = 110
 export const MIN_SECONDS = 0.5
@@ -112,10 +114,10 @@ export function kindFromStatus(status: number): VozErrorKind {
   return 'server'
 }
 
-type KeyLike = Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey'>
+type KeyLike = Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey'> & { key?: string }
 
-/** Ctrl+Shift+Espacio: Chrome/Edge ya usan Ctrl+Shift+M (perfil), Alt+Espacio (menú de la ventana) y Alt+Shift (idioma de Windows). */
-export const SHORTCUT_LABEL = 'Ctrl+Shift+Espacio'
-export function isVozShortcut(e: KeyLike): boolean {
-  return e.code === 'Space' && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey
+/** Por defecto Ctrl+Shift+Espacio: Chrome/Edge ya usan Ctrl+Shift+M (perfil), Alt+Espacio (menú de la ventana) y Alt+Shift (idioma de Windows). */
+export const SHORTCUT_COMBO = 'mod+shift+space'
+export function isVozShortcut(e: KeyLike, combo: string = SHORTCUT_COMBO): boolean {
+  return coincide({ ...e, key: e.key ?? '' }, combo)
 }

@@ -17,6 +17,10 @@ describe('aplicarEvento', () => {
     e = aplicarEvento(e, 'reunion-linea', linea('l2', 'dos'))
     expect(e.lineas.map((l) => l.id)).toEqual(['l2', 'l1'])
   })
+  it('acepta una línea clave', () => {
+    const e = aplicarEvento(activa(), 'reunion-linea', { ...linea('l1'), tipo: 'clave' })
+    expect(e.lineas[0].tipo).toBe('clave')
+  })
   it('una línea repetida no se suma', () => {
     const e = aplicarEvento(activa(), 'reunion-linea', linea('l1'))
     expect(aplicarEvento(e, 'reunion-linea', linea('l1')).lineas).toHaveLength(1)
@@ -56,6 +60,17 @@ describe('aplicarEvento', () => {
     expect(e).toMatchObject({ tope: true, soloAMano: false, detecciones: 12, topeDetecciones: 12, copiloto: 'listo' })
     const m = aplicarEvento(e, 'reunion-estado', { reunion: 'r1', estado: 'escuchando', tope: false, solo_a_mano: true, detecciones: 0, tope_detecciones: 0, copiloto: 'listo' })
     expect(m).toMatchObject({ tope: false, soloAMano: true })
+  })
+  it('reunion-estado refleja sin_texto y lo baja cuando llega texto', () => {
+    const base = { reunion: 'r1', estado: 'escuchando', tope: false, solo_a_mano: false, detecciones: 0, tope_detecciones: 10, copiloto: 'listo' }
+    const e = aplicarEvento(activa(), 'reunion-estado', { ...base, sin_texto: true })
+    expect(e.sinTexto).toBe(true)
+    expect(aplicarEvento(e, 'reunion-estado', { ...base, sin_texto: false }).sinTexto).toBe(false)
+    expect(aplicarEvento(e, 'reunion-estado', base).sinTexto).toBe(false)
+  })
+  it('el snapshot trae sin_texto', () => {
+    const e = desdeSnapshot({ reunion: 'r1', estado: 'escuchando', sin_texto: true, lineas: [] }, 'escuchando')
+    expect(e.sinTexto).toBe(true)
   })
   it('reunion-estado de una reunión nueva arranca de cero', () => {
     const vieja = activa({ estado: 'guardada', biblioteca: 'b1', lineas: [{ id: 'l1', texto: 'x', tipo: 'pregunta' }] })
@@ -196,6 +211,17 @@ describe('acciones', () => {
     expect(m.reunion.value.reunion).toBe('r1')
     expect(m.reunion.value.lector).toBe('escuchando')
   })
+  it('escuchar manda el tema; sin tema manda vacío', async () => {
+    stubFetch(() => ({ reunion: 'r1', estado: 'escuchando' }), 200)
+    stubTauri('escuchando')
+    await m.escuchar([], true, 'Plux')
+    const f = fetch as unknown as { mock: { calls: [string, { body: string }][] } }
+    expect(JSON.parse(f.mock.calls[0][1].body).tema).toBe('Plux')
+    m.reunion.value = inicial()
+    await m.escuchar([], true)
+    const ultima = f.mock.calls.filter((c) => c[0] === '/api/reunion/empezar').at(-1)!
+    expect(JSON.parse(ultima[1].body).tema).toBe('')
+  })
   it('terminar: el lector vuelca, la cola sale, lo que sobra se descarta y recién después se cierra en el back', async () => {
     stubFetch()
     stubTauri()
@@ -335,6 +361,60 @@ describe('acciones descartar y anotar', () => {
   })
 })
 
+describe('guardar en la memoria de trabajo', () => {
+  const conNota = () => {
+    m.reunion.value = {
+      ...inicial(),
+      reunion: 'r1',
+      estado: 'escuchando',
+      memoriaTrabajo: true,
+      lineas: [{ id: 'l1', texto: 'x', tipo: 'pregunta' as const, nota: 'n_1' }],
+    }
+    m.errorReunion.value = null
+  }
+  const fetchFalso = (status: number, cuerpo: unknown, llamadas: unknown[] = []) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        llamadas.push([url, init?.body])
+        return { ok: status < 400, status, json: async () => cuerpo }
+      }),
+    )
+  it('el snapshot trae memoria_trabajo y la marca de cada línea', () => {
+    const e = desdeSnapshot(
+      { reunion: 'r1', estado: 'escuchando', memoria_trabajo: true, lineas: [{ id: 'l1', texto: 'x', tipo: 'pregunta', nota: 'n', memoria: true }] },
+      'escuchando',
+    )
+    expect(e.memoriaTrabajo).toBe(true)
+    expect(e.lineas[0].memoria).toBe(true)
+  })
+  it('el evento reunion-memoria marca la línea', () => {
+    const e = aplicarEvento(
+      { ...inicial(), reunion: 'r1', lineas: [{ id: 'l1', texto: 'x', tipo: 'pregunta' as const, nota: 'n' }] },
+      'reunion-memoria',
+      { reunion: 'r1', linea: 'l1' },
+    )
+    expect(e.lineas[0].memoria).toBe(true)
+  })
+  it('guardarEnMemoria pide al back y marca la línea', async () => {
+    const llamadas: unknown[] = []
+    fetchFalso(202, { memoria: true }, llamadas)
+    conNota()
+    await m.guardarEnMemoria('l1')
+    expect(llamadas[0]).toEqual(['/api/reunion/memoria', JSON.stringify({ reunion: 'r1', linea: 'l1' })])
+    expect(m.reunion.value.lineas[0].memoria).toBe(true)
+    expect(m.guardandoMemoria.value).toEqual([])
+  })
+  it('si falla avisa con un mensaje simple y no marca', async () => {
+    fetchFalso(502, { detail: 'No pude guardar' })
+    conNota()
+    await m.guardarEnMemoria('l1')
+    expect(m.reunion.value.lineas[0].memoria).toBeUndefined()
+    expect(m.errorReunion.value).toBe('No pude guardar en tu memoria de trabajo.')
+    expect(m.guardandoMemoria.value).toEqual([])
+  })
+})
+
 describe('Mostrame: estado', () => {
   it('acepta una línea tipo mostrar y ocupado: true', () => {
     let e = aplicarEvento(activa(), 'reunion-linea', { reunion: 'r1', id: 'l1', texto: 'Mostrame', tipo: 'mostrar' })
@@ -449,5 +529,54 @@ describe('enCurso', () => {
       expect(m.enCurso({ ...inicial(), reunion: 'r1', estado })).toBe(false)
     }
     expect(m.enCurso({ ...inicial(), reunion: null, estado: 'escuchando' })).toBe(false)
+  })
+})
+
+describe('aviso de cajita acoplada', () => {
+  it('el motivo cajita_acoplada prende el aviso y cajita_escondida lo apaga', () => {
+    m.reunion.value = activa()
+    m.alLector('escuchando', 'cajita_acoplada')
+    expect(m.reunion.value.cajitaAcoplada).toBe(true)
+    m.alLector('escuchando')
+    expect(m.reunion.value.cajitaAcoplada).toBe(true)
+    m.alLector('escuchando', 'cajita_escondida')
+    expect(m.reunion.value.cajitaAcoplada).toBe(false)
+  })
+  it('apagado limpia el aviso de cajita', () => {
+    m.reunion.value = activa({ cajitaAcoplada: true })
+    m.alLector('apagado')
+    expect(m.reunion.value.cajitaAcoplada).toBe(false)
+  })
+  it('empezar otra reunión limpia el aviso', () => {
+    m.reunion.value = activa({ estado: 'guardada', cajitaAcoplada: true })
+    m.nuevaReunion()
+    expect(m.reunion.value.cajitaAcoplada).toBe(false)
+  })
+})
+
+describe('aviso de cajita y reunión nueva', () => {
+  it('el estado de una reunión nueva no borra el aviso que llegó antes', () => {
+    const antes = { ...inicial(), lector: 'escuchando' as const, cajitaAcoplada: true }
+    const despues = aplicarEvento(antes, 'reunion-estado', { reunion: 'r2', estado: 'escuchando' })
+    expect(despues.reunion).toBe('r2')
+    expect(despues.cajitaAcoplada).toBe(true)
+  })
+})
+
+describe('aviso de cajita al reconectar', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const snap = (reunion: string) => vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ reunion, estado: 'escuchando', copiloto: 'listo', lineas: [] }) }))
+  it('recargar el estado de la misma reunión conserva el aviso', async () => {
+    m.reunion.value = activa({ cajitaAcoplada: true })
+    vi.stubGlobal('fetch', snap('r1'))
+    await m.cargarEstado()
+    expect(m.reunion.value.cajitaAcoplada).toBe(true)
+  })
+  it('el estado de otra reunión no lo hereda', async () => {
+    m.reunion.value = activa({ estado: 'guardada', cajitaAcoplada: true })
+    vi.stubGlobal('fetch', snap('r9'))
+    await m.cargarEstado()
+    expect(m.reunion.value.reunion).toBe('r9')
+    expect(m.reunion.value.cajitaAcoplada).toBe(false)
   })
 })

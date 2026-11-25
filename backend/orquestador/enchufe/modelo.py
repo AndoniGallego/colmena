@@ -30,6 +30,9 @@ class Sesion:
     terminal_id: str | None = None
     titulo_crudo: str | None = None
     listo: bool | None = None
+    # Solo guardián: pid del Claude lanzado (identidad del canal MCP) y modo interno (copiloto o guía).
+    pid_claude: int | None = None
+    modo: str | None = None
 
 
 @dataclass(frozen=True)

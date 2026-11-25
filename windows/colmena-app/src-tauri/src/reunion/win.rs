@@ -2,6 +2,8 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use colmena_nucleo::posicion::Rect;
+use colmena_nucleo::reunion::cajita::{es_acoplada, Accion, Escondedor, MOTIVO_ACOPLADA, MOTIVO_ESCONDIDA};
 use colmena_nucleo::reunion::dedup::{contar_repetidas, Deduplicador};
 use colmena_nucleo::reunion::tanda::Tanda;
 use colmena_nucleo::reunion::subtitulos;
@@ -9,7 +11,8 @@ use colmena_nucleo::reunion::{espera, Espera, ESTADO_APAGADO, ESTADO_ESCUCHANDO,
 use tauri::{AppHandle, Emitter, Manager};
 use windows::core::{implement, w, Ref, BSTR, PWSTR};
 use windows::Win32::System::Variant::VARIANT;
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT};
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::{
@@ -23,7 +26,9 @@ use windows::Win32::UI::Accessibility::{
     UIA_NamePropertyId, UIA_PROPERTY_ID, UIA_TextControlTypeId, UIA_Text_TextChangedEventId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, GetClassNameW, GetWindowThreadProcessId, IsWindow, IsWindowVisible, PostMessageW, WM_CLOSE,
+    EnumWindows, FindWindowW, GetClassNameW, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsWindow,
+    IsWindowVisible, PostMessageW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_RESTORE, SW_SHOWMINNOACTIVE, WM_CLOSE,
+    WS_EX_TOOLWINDOW,
 };
 
 use super::{Fuente, Mensaje, PedidoLector};
@@ -89,6 +94,61 @@ fn ventanas_candidatas() -> Vec<HWND> {
     v
 }
 
+// ---- Esconder la cajita para que no se vea al compartir pantalla ----
+
+fn a_rect(r: RECT) -> Rect {
+    Rect {
+        x: r.left,
+        y: r.top,
+        ancho: (r.right - r.left).max(0) as u32,
+        alto: (r.bottom - r.top).max(0) as u32,
+    }
+}
+
+/// La ventana, el monitor donde está (no el principal: puede estar en otro) y su área de trabajo.
+fn rect_y_monitor(hwnd: HWND) -> Option<(Rect, Rect, Rect)> {
+    let mut r = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut r) }.ok()?;
+    let mon = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    if !unsafe { GetMonitorInfoW(mon, &mut info) }.as_bool() {
+        return None;
+    }
+    Some((a_rect(r), a_rect(info.rcMonitor), a_rect(info.rcWork)))
+}
+
+fn estilo_ex(hwnd: HWND) -> isize {
+    unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) }
+}
+
+fn tiene_toolwindow(hwnd: HWND) -> bool {
+    estilo_ex(hwnd) & WS_EX_TOOLWINDOW.0 as isize != 0
+}
+
+/// Fuera de la barra de tareas y de Alt+Tab, minimizada sin robar el foco. UIA la sigue leyendo.
+fn esconder(hwnd: HWND) {
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, estilo_ex(hwnd) | WS_EX_TOOLWINDOW.0 as isize);
+        let _ = ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+    }
+}
+
+fn restaurar(hwnd: HWND) {
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, estilo_ex(hwnd) & !(WS_EX_TOOLWINDOW.0 as isize));
+        let _ = ShowWindow(hwnd, SW_RESTORE);
+    }
+}
+
+/// Vuelve a mostrar las cajitas que escondió Colmena (al terminar o tras una caída).
+fn restaurar_escondidas() {
+    for h in ventanas_candidatas() {
+        if tiene_toolwindow(h) {
+            restaurar(h);
+        }
+    }
+}
+
 // ---- Abrir y cerrar los Subtítulos en vivo ----
 
 fn ruta_subtitulos() -> Option<std::path::PathBuf> {
@@ -124,14 +184,14 @@ fn area(el: &IUIAutomationElement) -> i64 {
         .unwrap_or(0)
 }
 
-fn elemento_de(auto: &IUIAutomation, hwnd: HWND) -> Option<IUIAutomationElement> {
+fn elemento_de(auto: &IUIAutomation, hwnd: HWND) -> Option<(IUIAutomationElement, bool)> {
     unsafe {
         let raiz = auto.ElementFromHandle(hwnd).ok()?;
         let por_id = auto
             .CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from(BSTR::from(ID_CAJITA)))
             .ok()?;
         if let Ok(e) = raiz.FindFirst(TreeScope_Descendants, &por_id) {
-            return Some(e);
+            return Some((e, true));
         }
         let textos = auto
             .CreatePropertyCondition(UIA_ControlTypePropertyId, &VARIANT::from(UIA_TextControlTypeId.0))
@@ -140,13 +200,14 @@ fn elemento_de(auto: &IUIAutomation, hwnd: HWND) -> Option<IUIAutomationElement>
         (0..todos.Length().ok()?)
             .filter_map(|i| todos.GetElement(i).ok())
             .max_by_key(area)
+            .map(|e| (e, false))
     }
 }
 
-pub(super) fn buscar_cajita(auto: &IUIAutomation) -> Option<(HWND, IUIAutomationElement)> {
+pub(super) fn buscar_cajita(auto: &IUIAutomation) -> Option<(HWND, IUIAutomationElement, bool)> {
     ventanas_candidatas()
         .into_iter()
-        .find_map(|h| elemento_de(auto, h).map(|e| (h, e)))
+        .find_map(|h| elemento_de(auto, h).map(|(e, por_id)| (h, e, por_id)))
 }
 
 fn leer_nombre(elem: &IUIAutomationElement) -> windows::core::Result<String> {
@@ -275,6 +336,8 @@ struct Lector {
     estado: &'static str,
     emitido: &'static str,
     cajita: Option<(HWND, IUIAutomationElement)>,
+    /// La cajita se halló por su id; si no, es el "texto mayor" y se sigue buscando la real.
+    cajita_por_id: bool,
     dedup: Deduplicador,
     tanda: Tanda,
     escuchando_desde_ms: u64,
@@ -286,6 +349,7 @@ struct Lector {
     abiertos_en_ms: Option<u64>,
     ultimo_visible: String,
     diag: Option<Diagnostico>,
+    escondedor: Escondedor,
 }
 
 impl Lector {
@@ -302,12 +366,16 @@ impl Lector {
         let ahora = self.ahora();
         self.ultima_busqueda_ms = ahora;
         match buscar_cajita(&self.auto) {
-            Some((h, el)) => {
+            Some((h, el, por_id)) => {
                 self.registrar(&el);
                 if let Some(d) = self.diag.as_mut() {
                     (d.ventana, d.elemento) = describir(h, &el);
                 }
                 self.cajita = Some((h, el));
+                self.cajita_por_id = por_id;
+                if self.estado == ESTADO_ESCUCHANDO || self.estado == ESTADO_SIN_SUBTITULOS {
+                    self.ocultar_cajita(h);
+                }
                 self.escuchando_desde_ms = ahora;
                 self.eventos = 0;
                 self.sondeando = false;
@@ -320,6 +388,23 @@ impl Lector {
                     self.estado = ESTADO_SIN_SUBTITULOS;
                 }
             }
+        }
+    }
+
+    /// Una sola vez por reunión: si Ando la vuelve a abrir, se respeta.
+    fn ocultar_cajita(&mut self, h: HWND) {
+        let acoplada = rect_y_monitor(h).is_some_and(|(v, m, t)| es_acoplada(&v, &m, &t));
+        match self.escondedor.ante(h.0 as isize, acoplada) {
+            Accion::Esconder => {
+                esconder(h);
+                self.estado = ESTADO_ESCUCHANDO;
+                self.sincronizar(Some(MOTIVO_ESCONDIDA));
+            }
+            Accion::Avisar => {
+                self.estado = ESTADO_ESCUCHANDO;
+                self.sincronizar(Some(MOTIVO_ACOPLADA));
+            }
+            Accion::Nada => {}
         }
     }
 
@@ -365,6 +450,7 @@ impl Lector {
                 self.soltar();
                 self.dedup = Deduplicador::default();
                 self.tanda = Tanda::default();
+                self.escondedor.olvidar();
                 self.estado = ESTADO_ESCUCHANDO;
                 self.conectar();
             }
@@ -386,7 +472,10 @@ impl Lector {
                 let abiertos = self.app.state::<Estado>().reunion.subtitulos_de_colmena.swap(false, Ordering::SeqCst);
                 if subtitulos::al_terminar(abiertos) {
                     cerrar_subtitulos();
+                } else {
+                    restaurar_escondidas();
                 }
+                self.escondedor.olvidar();
                 self.cerrar_lectura(ahora);
                 self.estado = ESTADO_APAGADO;
                 if self.diag.is_none() {
@@ -493,6 +582,22 @@ impl Lector {
             }
             return;
         };
+        if subtitulos::rebuscar_cajita(self.cajita_por_id, ahora, self.ultima_busqueda_ms, self.abiertos_en_ms) {
+            self.ultima_busqueda_ms = ahora;
+            if let Some((h, nuevo, true)) = buscar_cajita(&self.auto) {
+                self.soltar();
+                self.registrar(&nuevo);
+                if let Some(d) = self.diag.as_mut() {
+                    (d.ventana, d.elemento) = describir(h, &nuevo);
+                }
+                self.cajita = Some((h, nuevo));
+                self.cajita_por_id = true;
+                self.escuchando_desde_ms = ahora;
+                self.eventos = 0;
+                self.sondeando = false;
+                return;
+            }
+        }
         if self.eventos == 0 && ahora.saturating_sub(self.escuchando_desde_ms) >= SIN_EVENTOS_MS {
             if !self.sondeando {
                 self.sondeando = true;
@@ -564,6 +669,7 @@ pub(super) fn bucle(rx: Receiver<Mensaje>, tx: Sender<Mensaje>, app: AppHandle) 
         estado: ESTADO_APAGADO,
         emitido: ESTADO_APAGADO,
         cajita: None,
+        cajita_por_id: false,
         dedup: Deduplicador::default(),
         tanda: Tanda::default(),
         escuchando_desde_ms: 0,
@@ -574,7 +680,10 @@ pub(super) fn bucle(rx: Receiver<Mensaje>, tx: Sender<Mensaje>, app: AppHandle) 
         abiertos_en_ms: None,
         ultimo_visible: String::new(),
         diag: None,
+        escondedor: Escondedor::default(),
     };
+    // Recién arrancada no hay reunión: una cajita escondida quedó de una caída de Colmena.
+    restaurar_escondidas();
     loop {
         let recibido = match espera(lector.estado, lector.diag.is_some()) {
             Espera::Bloquear => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),

@@ -151,6 +151,16 @@ class StateStore:
         self.data["orden_tablero"] = list(orden)
         self.save()
 
+    def atajos(self) -> dict:
+        raw = self.data.get("atajos")
+        if not isinstance(raw, dict):
+            return {}
+        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+
+    def set_atajos(self, atajos: dict) -> None:
+        self.data["atajos"] = dict(atajos)
+        self.save()
+
     def orden_pestanas(self) -> dict:
         raw = self.data.get("orden_pestanas")
         if not isinstance(raw, dict):

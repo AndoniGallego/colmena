@@ -16,6 +16,7 @@ export const AVISO_ICON: Record<AvisoKindBase, IconoAviso> = {
   cierre: 'moon',
   test: 'bell',
   pestana: 'terminal',
+  trabada: 'warn',
 }
 
 export const AVISO_TIPO: Record<AvisoKindBase, string> = {
@@ -31,6 +32,7 @@ export const AVISO_TIPO: Record<AvisoKindBase, string> = {
   cierre: 'Cierre del día',
   test: 'Prueba',
   pestana: 'Pestaña',
+  trabada: 'Trabada',
 }
 
 /** Lo que una pieza aporta para mostrar sus avisos. */

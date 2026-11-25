@@ -12,7 +12,7 @@ log = logging.getLogger("orquestador.avisos")
 RETENTION = 30 * 86400
 MAX_ITEMS = 500
 MAX_PAGE = 100
-KINDS_BASE = ("asks", "blocked", "done", "terminal", "cierre", "encadenar", "vigia", "mr", "entorno", "test", "progreso", "pestana")
+KINDS_BASE = ("asks", "blocked", "done", "terminal", "cierre", "encadenar", "vigia", "mr", "entorno", "test", "progreso", "pestana", "trabada")
 # Kinds que suma una pieza opcional (registrar_kind): mismo formato que las prefs extra de push.
 KIND_RE = re.compile(r"^[a-z]{1,20}$")
 PEDIDO_RE = re.compile(

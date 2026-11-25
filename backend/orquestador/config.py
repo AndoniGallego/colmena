@@ -117,8 +117,12 @@ class Config:
     terminales: dict = field(default_factory=dict)
     guardian: dict = field(default_factory=dict)
     reunion: dict = field(default_factory=dict)
+    # Umbrales del detector de sesiones trabadas (ver trabas.Umbrales); vacío = valores por defecto.
+    trabas: dict = field(default_factory=dict)
     # Nombres propios de un kit de trabajo externo (ver kit_trabajo.py); vacío = genéricos.
     kit_trabajo: dict = field(default_factory=dict)
+    # Preparar la copia de una tarea de ticket: tabla `[preparar."<ruta del repo>"]`, reemplaza al `.colmena/setup.toml`.
+    preparar: dict = field(default_factory=dict)
 
     def self_repo_path(self) -> Path:
         return Path(self.self_repo).expanduser() if self.self_repo else REPO_ROOT

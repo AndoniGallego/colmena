@@ -343,3 +343,13 @@ def test_al_stop_que_falla_no_frena_el_stop(agg, caplog):
     assert visto == ["listo"]
     assert "boom" in caplog.text or "al_stop" in caplog.text
 
+
+
+def test_post_tool_use_failure_limpia_pendientes_y_sigue_working(agg):
+    a, r = agg
+    a.recibir(ev("PreToolUse", "t1"), "w1:p1")
+    assert a._pre_pendientes["w1:p1"] == {"t1"}
+    r.t += 1
+    a.recibir(ev("PostToolUseFailure", "t1", error="Exit code 1"), "w1:p1")
+    assert a._pre_pendientes["w1:p1"] == set()
+    assert a.estado_de("w1:p1").estado == "working"

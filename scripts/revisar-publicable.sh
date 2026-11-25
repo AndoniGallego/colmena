@@ -7,6 +7,9 @@
 #   COLMENA_EXCEPCIONES          regex (una por línea) que debe coincidir con la parte entera del identificador para no contar
 #                                (default ~/.config/colmena/palabras-excepciones.txt, opcional)
 # El script no trae la lista de palabras: es local y no se versiona.
+#
+#   revisar-publicable.sh --texto ARCHIVO   revisa solo las líneas de ese archivo con los mismos patrones (imprime
+#                                           los números de línea con hallazgo; mismos códigos de salida)
 set -euo pipefail
 
 RAIZ="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -18,16 +21,23 @@ if [[ ! -f "$LISTA" ]]; then
   exit 2
 fi
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-git -C "$RAIZ" archive HEAD | tar -x -C "$TMP"
+TEXTO=""
+if [[ "${1:-}" == "--texto" ]]; then
+  TEXTO="${2:?Falta el archivo de --texto}"
+  [[ -f "$TEXTO" ]] || { echo "No existe el archivo: $TEXTO" >&2; exit 2; }
+  TMP=""
+else
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+  git -C "$RAIZ" archive HEAD | tar -x -C "$TMP"
+fi
 
-python3 -I - "$TMP" "$LISTA" "$EXCEPCIONES" <<'PY'
+python3 -I - "$TMP" "$LISTA" "$EXCEPCIONES" "$TEXTO" <<'PY'
 import os
 import re
 import sys
 
-raiz, lista, excepciones = sys.argv[1:4]
+raiz, lista, excepciones, texto = sys.argv[1:5]
 
 def leer(path):
     try:
@@ -74,6 +84,15 @@ def revisar(texto, donde):
         if hay_hallazgo(m.group(0)):
             hallazgos.append(donde)
 
+
+if texto:
+    with open(texto, encoding="utf-8", errors="replace") as fh:
+        for n, linea in enumerate(fh.read().splitlines(), 1):
+            revisar(linea, str(n))
+    for h in dict.fromkeys(hallazgos):
+        print(h)
+    print(f"{len(hallazgos)} hallazgos", file=sys.stderr)
+    sys.exit(1 if hallazgos else 0)
 
 for dirpath, _dirs, files in os.walk(raiz):
     for nombre in files:

@@ -241,3 +241,62 @@ describe('normalizePedidosPestana: pedidos de cierre y session_id', () => {
     expect(normalizeVistaCierrePedido({ trabajando: true })).toBeNull()
   })
 })
+
+describe('uso de hoy en el tablero', () => {
+  it('conserva el uso de la sesión y descarta lo que no es un número', () => {
+    const board = normalizeBoard({
+      workspaces: [{ id: 'w1', tabs: [{ id: 't1', agents: [
+        { pane_id: 'w1:p1', status: 'working', uso: { total: 312000, usd: 4.1 } },
+        { pane_id: 'w1:p2', status: 'working', uso: { total: 900, usd: null } },
+        { pane_id: 'w1:p3', status: 'working', uso: { total: 'x', usd: 2 } },
+        { pane_id: 'w1:p4', status: 'working' },
+      ] }] }],
+    })
+    const agents = board.workspaces[0].tabs[0].agents
+    expect(agents[0].uso).toEqual({ total: 312000, usd: 4.1 })
+    expect(agents[1].uso).toEqual({ total: 900, usd: null })
+    expect(agents[2].uso).toBeNull()
+    expect(agents[3].uso).toBeNull()
+  })
+})
+
+describe('normalizePedidosPestana: acciones del MCP y lectura previa', () => {
+  const base = { id: '550e8400-e29b-41d4-a716-446655440000', carpeta: '', mensaje: 'hola', origen: { pane_id: 'w1:p1', nombre: 'S' }, ts: 1, vence: 2 }
+
+  it('conserva mensaje, programada y tarea con sus datos', async () => {
+    const { normalizePedidosPestana } = await import('./normalize')
+    const [m, p, t] = normalizePedidosPestana([
+      { ...base, accion: 'mensaje', envio: { pane_id: 'w2:p1', nombre: 'Dos', texto: 'x' } },
+      { ...base, accion: 'programada', programada: { cuando: '09:30', pane_id: 'w1:p1', nombre: 'S' } },
+      { ...base, carpeta: '/r', accion: 'tarea', tarea: { ticket: 'SITE-12' } },
+    ])
+    expect(m.accion).toBe('mensaje')
+    expect(m.envio).toEqual({ pane_id: 'w2:p1', nombre: 'Dos' })
+    expect(p.programada).toEqual({ cuando: '09:30', pane_id: 'w1:p1', nombre: 'S' })
+    expect(t.tarea).toEqual({ ticket: 'SITE-12' })
+  })
+
+  it('sin los datos de su acción se descartan', async () => {
+    const { normalizePedidosPestana } = await import('./normalize')
+    expect(normalizePedidosPestana([
+      { ...base, accion: 'mensaje' },
+      { ...base, accion: 'programada', programada: { pane_id: 'w1:p1' } },
+      { ...base, accion: 'tarea', tarea: {} },
+    ])).toEqual([])
+  })
+
+  it('conserva leyo_otra_sesion solo si es válido', async () => {
+    const { normalizePedidosPestana } = await import('./normalize')
+    const [a, b] = normalizePedidosPestana([
+      { ...base, leyo_otra_sesion: { nombre: 'Pagos', ts: 5 } },
+      { ...base, leyo_otra_sesion: { nombre: '', ts: 'x' } },
+    ])
+    expect(a.leyo_otra_sesion).toEqual({ nombre: 'Pagos', ts: 5 })
+    expect(b.leyo_otra_sesion).toBeUndefined()
+  })
+
+  it('el evento descartado se acepta (el pedido sale de la lista)', async () => {
+    const { normalizePedidoPestanaEvento } = await import('./normalize')
+    expect(normalizePedidoPestanaEvento({ id: base.id, estado: 'descartado' })).toEqual({ id: base.id, estado: 'descartado' })
+  })
+})

@@ -157,3 +157,15 @@ def test_permission_request_recorta_cwd_antes_que_tool_input():
     assert m is not None
     assert m["datos"]["tool_input"] == {"command": "ls"}
     assert len(_linea(m)) <= g.MAX_MENSAJE
+
+
+def test_post_tool_use_failure_viaja_con_error_recortado_e_interrupcion():
+    m = g.armar_mensaje(base("PostToolUseFailure", tool_name="Bash", tool_use_id="t1",
+                             tool_input={"command": "pytest"}, error="Exit code 1\n" + "x" * 2000,
+                             is_interrupt=False, duration_ms=5), {})
+    assert m is not None and m["evento"] == "PostToolUseFailure"
+    d = m["datos"]
+    assert d["tool_name"] == "Bash" and d["tool_use_id"] == "t1" and d["tool_input"] == {"command": "pytest"}
+    assert d["error"].startswith("Exit code 1") and len(d["error"].encode()) <= 512
+    assert d["is_interrupt"] is False
+    assert d["recortado"] is True

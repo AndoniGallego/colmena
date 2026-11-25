@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   acciones: {
     cargarRepos: vi.fn(async () => undefined),
-    escuchar: vi.fn(async (_r: string[], _t: boolean) => undefined),
+    escuchar: vi.fn(async (_r: string[], _t: boolean, _tema?: string) => undefined),
     tocar: vi.fn(async (_id: string) => undefined),
     descartar: vi.fn(async (_id: string) => undefined),
     anotar: vi.fn(async (_id: string) => undefined),
+    guardarEnMemoria: vi.fn(async (_id: string) => undefined),
     preguntarUltimo: vi.fn(async () => undefined),
     pausar: vi.fn(async () => undefined),
     seguir: vi.fn(async () => undefined),
@@ -33,6 +34,7 @@ vi.mock('../../state/reunion', async () => {
       { ruta: '/home/u/development/colmena', nombre: 'colmena' },
     ]),
     errorReunion: ref<string | null>(null),
+    guardandoMemoria: ref<string[]>([]),
     mirando: ref<string | null>(null),
     nudoPrendido: ref<boolean | null>(true),
     puedeMostrar: real.puedeMostrar,
@@ -45,7 +47,7 @@ vi.mock('../../state/app', async () => {
 })
 
 import { pcNudoActivo } from '../../state/app'
-import { inicial, reunion, errorReunion, mirando, nudoPrendido, type EstadoReunionFront } from '../../state/reunion'
+import { inicial, reunion, errorReunion, guardandoMemoria, mirando, nudoPrendido, type EstadoReunionFront } from '../../state/reunion'
 import NotchReunion from './NotchReunion.vue'
 
 const poner = (extra: Partial<EstadoReunionFront>) => {
@@ -72,7 +74,64 @@ describe('NotchReunion', () => {
     expect(boton(w, 'ps9')?.attributes('aria-pressed')).toBe('false')
     expect(w.text()).toContain('Abrí Subtítulos en vivo (Win+Ctrl+L)')
     await boton(w, 'Escuchar')!.trigger('click')
-    expect(h.acciones.escuchar).toHaveBeenCalledWith([], true)
+    expect(h.acciones.escuchar).toHaveBeenCalledWith([], true, '')
+  })
+
+  it('tema opcional: campo con su rótulo, tope de 200 y se manda al Escuchar', async () => {
+    const w = mount(NotchReunion)
+    const campo = w.find('input#reunion-tema')
+    expect(w.find('label[for="reunion-tema"]').text()).toBe('Tema (opcional)')
+    expect(campo.attributes('maxlength')).toBe('200')
+    await campo.setValue('Plux en ps9')
+    await boton(w, 'Escuchar')!.trigger('click')
+    expect(h.acciones.escuchar).toHaveBeenCalledWith([], true, 'Plux en ps9')
+  })
+
+  it('después de empezar el tema se vacía, así la reunión siguiente no arrastra el anterior', async () => {
+    const w = mount(NotchReunion)
+    await w.find('input#reunion-tema').setValue('Plux')
+    await boton(w, 'Escuchar')!.trigger('click')
+    await flushPromises()
+    expect((w.find('input#reunion-tema').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('Enter en el tema empieza igual que Escuchar', async () => {
+    const w = mount(NotchReunion)
+    const campo = w.find('input#reunion-tema')
+    await campo.setValue('Plux')
+    await campo.trigger('keydown', { key: 'Enter' })
+    expect(h.acciones.escuchar).toHaveBeenCalledWith([], true, 'Plux')
+  })
+
+  const AVISO_CAJITA = 'Poné Subtítulos en "Superpuesto en la pantalla" para que no se vea al compartir'
+
+  it('con la cajita acoplada muestra el aviso de Superpuesto', () => {
+    poner({ cajitaAcoplada: true })
+    const aviso = mount(NotchReunion).findAll('[role="status"]').find((x) => x.text() === AVISO_CAJITA)
+    expect(aviso?.exists()).toBe(true)
+  })
+
+  it('el aviso de la cajita no sale pausada ni sin la cajita acoplada', () => {
+    poner({ cajitaAcoplada: true, estado: 'pausada' })
+    expect(mount(NotchReunion).text()).not.toContain(AVISO_CAJITA)
+    poner({ cajitaAcoplada: false })
+    expect(mount(NotchReunion).text()).not.toContain(AVISO_CAJITA)
+  })
+
+  it('Enter durante una composición IME no empieza', async () => {
+    const w = mount(NotchReunion)
+    const campo = w.find('input#reunion-tema')
+    await campo.setValue('Plux')
+    await campo.trigger('keydown', { key: 'Enter', isComposing: true })
+    await campo.trigger('keydown', { key: 'Enter', keyCode: 229 })
+    expect(h.acciones.escuchar).not.toHaveBeenCalled()
+    await campo.trigger('keydown', { key: 'Enter' })
+    expect(h.acciones.escuchar).toHaveBeenCalledWith([], true, 'Plux')
+  })
+
+  it('en curso no se muestra el campo del tema', () => {
+    poner({})
+    expect(mount(NotchReunion).find('input#reunion-tema').exists()).toBe(false)
   })
 
   it('elegir un repo desmarca Todos y se manda esa ruta', async () => {
@@ -81,9 +140,42 @@ describe('NotchReunion', () => {
     expect(boton(w, 'Todos')?.attributes('aria-pressed')).toBe('false')
     expect(boton(w, 'ps9')?.attributes('aria-pressed')).toBe('true')
     await boton(w, 'Escuchar')!.trigger('click')
-    expect(h.acciones.escuchar).toHaveBeenCalledWith(['/home/u/development/ps9'], false)
+    expect(h.acciones.escuchar).toHaveBeenCalledWith(['/home/u/development/ps9'], false, '')
     await boton(w, 'ps9')!.trigger('click')
     expect(boton(w, 'Todos')?.attributes('aria-pressed')).toBe('true')
+  })
+
+  describe('guardar en mi memoria de trabajo', () => {
+    const memo = (w: ReturnType<typeof mount>) => w.findAll('button[aria-label="Guardar en mi memoria de trabajo"]')
+    it('aparece solo en líneas anotadas y con la memoria configurada', () => {
+      poner({ memoriaTrabajo: true, lineas: [linea('l2'), linea('l1', { nota: 'n_1' })] })
+      const w = mount(NotchReunion)
+      expect(memo(w)).toHaveLength(1)
+      expect(memo(w)[0].text()).toBe('Guardar en mi memoria')
+    })
+    it('sin memoria configurada no aparece', () => {
+      poner({ memoriaTrabajo: false, lineas: [linea('l1', { nota: 'n_1' })] })
+      expect(memo(mount(NotchReunion))).toHaveLength(0)
+    })
+    it('al tocarlo llama a guardarEnMemoria sin disparar tocar', async () => {
+      poner({ memoriaTrabajo: true, lineas: [linea('l1', { nota: 'n_1' })] })
+      const w = mount(NotchReunion)
+      await memo(w)[0].trigger('click')
+      expect(h.acciones.guardarEnMemoria).toHaveBeenCalledWith('l1')
+      expect(h.acciones.tocar).not.toHaveBeenCalled()
+    })
+    it('mientras guarda queda deshabilitado', () => {
+      poner({ memoriaTrabajo: true, lineas: [linea('l1', { nota: 'n_1' })] })
+      guardandoMemoria.value = ['l1']
+      expect(memo(mount(NotchReunion))[0].attributes('disabled')).toBeDefined()
+      guardandoMemoria.value = []
+    })
+    it('ya guardada muestra "En tu memoria" y no el botón', () => {
+      poner({ memoriaTrabajo: true, lineas: [linea('l1', { nota: 'n_1', memoria: true })] })
+      const w = mount(NotchReunion)
+      expect(memo(w)).toHaveLength(0)
+      expect(w.find('.en-memoria').text()).toBe('En tu memoria')
+    })
   })
 
   describe('descartar y anotar por línea', () => {
@@ -171,6 +263,20 @@ describe('NotchReunion', () => {
   it('lector sin_subtitulos: pide abrirlos', () => {
     poner({ lector: 'sin_subtitulos' })
     expect(mount(NotchReunion).text()).toContain('No encuentro los subtítulos: abrilos con Win+Ctrl+L')
+  })
+
+  it('sinTexto escuchando: avisa que no llega texto de los Subtítulos', () => {
+    poner({ sinTexto: true })
+    const w = mount(NotchReunion)
+    const aviso = w.findAll('[role="status"]').find((p) => p.text().includes('Hace 2 minutos que no llega texto'))
+    expect(aviso?.text()).toBe('Hace 2 minutos que no llega texto de los Subtítulos. Revisá que estén abiertos y mostrando lo que se dice.')
+  })
+
+  it('sin sinTexto, o fuera de escuchando, no avisa que no llega texto', () => {
+    poner({})
+    expect(mount(NotchReunion).text()).not.toContain('no llega texto')
+    poner({ sinTexto: true, estado: 'pausada' })
+    expect(mount(NotchReunion).text()).not.toContain('no llega texto')
   })
 
   it('sin_pc y llena muestran su texto', () => {
@@ -265,6 +371,14 @@ describe('NotchReunion', () => {
       const t = w.find('button.texto')
       expect(t.find('.tipo').text()).toBe('Mostrame')
       expect(t.attributes('disabled')).toBeDefined()
+    })
+    it('una línea clave lleva la etiqueta Clave, no es tocable y se puede anotar', () => {
+      poner({ lineas: [linea('l1', { tipo: 'clave' })] })
+      const w = mount(NotchReunion)
+      const t = w.find('button.texto')
+      expect(t.find('.tipo').text()).toBe('Clave')
+      expect(t.attributes('disabled')).toBeDefined()
+      expect(w.findAll('button[aria-label="Anotar"]')).toHaveLength(1)
     })
     it('sin pcNudo no hay botón', () => {
       pcNudoActivo.value = false

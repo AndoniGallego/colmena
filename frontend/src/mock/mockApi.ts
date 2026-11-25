@@ -444,6 +444,7 @@ export function createMockApi(onUnauthorized: () => void): Api {
   let avisosLeidos = 3
   let onOrdenTablero: ((orden: string[]) => void) | undefined
   let onOrdenPestanas: ((e: { grupo: string; orden: string[] }) => void) | undefined
+  let atajosMock: Record<string, string> = {}
   let ordenTablero: string[] = []
   let plegadasTablero: string[] = []
   let ordenPestanas: Record<string, string[]> = {}
@@ -523,6 +524,16 @@ export function createMockApi(onUnauthorized: () => void): Api {
       await sleep(120)
       need()
     },
+    async getAtajos() {
+      await sleep(60)
+      need()
+      return { ...atajosMock }
+    },
+    async setAtajos(atajos) {
+      await sleep(120)
+      need()
+      atajosMock = { ...atajos }
+    },
     async setOrdenTablero(orden) {
       await sleep(120)
       need()
@@ -579,6 +590,7 @@ export function createMockApi(onUnauthorized: () => void): Api {
     getTerminalesCarpetas: () => mockTerminalesCarpetas(),
     postTerminalesNueva: (body) => mockTerminalesNueva(body),
     postTerminalesNuevaTarea: (body) => mockTerminalesNuevaTarea(body),
+    postTerminalesNuevaTareaConfiar: async () => ({ ok: true as const }),
     postBorrarCopia: () => mockBorrarCopia(),
     getSesionesViejas: async () => [
       {

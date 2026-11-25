@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -12,8 +12,9 @@ use colmena_nucleo::nudo::orden::{
     validar_espera, validar_marcas, validar_texto, Marca, SESION_MAX, TEXTO_MAX,
 };
 use colmena_nucleo::nudo::salida::{ocultar_tras_salida, SALIDA_MS};
+use colmena_nucleo::nudo::visible::Cambio;
 use colmena_nucleo::nudo::pc::{
-    codigo_de_error, indice_en_foto, monitor_para, popup_nuevo_pegado, texto_marcas, texto_monitor,
+    codigo_de_error, indice_en_foto, monitor_para, popup_nuevo_pegado, texto_marcas, texto_monitor, Guardada,
 };
 use colmena_nucleo::nudo::zonas::{
     captura_vigente, misma_ventana, recorte_captura, tam_imagen, validar_zona, validar_zonas, zona_a_fisico, Captura,
@@ -67,6 +68,10 @@ pub struct EstadoNudo {
     pub espera: Mutex<Option<Sender<String>>>,
     pub generacion: AtomicU64,
     ultimo: Mutex<Option<(Dibujo, Option<Globo>)>>,
+    /// Ventana sobre la que se dibujó la marca: si la de adelante es otra, la marca se esconde.
+    marcada: Mutex<Option<Guardada>>,
+    /// La marca, la abejita y el globo están escondidos porque la ventana marcada no está al frente (la guía sigue).
+    escondida: AtomicBool,
     pub uia: OnceLock<HiloUia>,
     /// Foto actual: (id, cantidad de controles).
     foto: Mutex<Option<(u64, usize)>>,
@@ -108,8 +113,19 @@ pub fn dibujar(app: &AppHandle, dibujo: Dibujo, globo: Option<Globo>) {
     let estado = app.state::<Estado>();
     let globo = con_paso_guia(&estado, globo);
     let visible = globo.as_ref().map(|g| g.visible).unwrap_or(false);
-    *estado.nudo.ultimo.lock().unwrap() = Some((dibujo, globo));
+    {
+        let mut ultimo = estado.nudo.ultimo.lock().unwrap();
+        recordar_marcada(&estado);
+        *ultimo = Some((dibujo, globo));
+    }
     mostrar_ventanas(app, visible);
+}
+
+/// Guarda la ventana en la que se está guiando, salvo que la marca esté escondida (entonces la de adelante es otra).
+fn recordar_marcada(estado: &Estado) {
+    if !estado.nudo.escondida.load(Ordering::SeqCst) {
+        *estado.nudo.marcada.lock().unwrap() = crate::uia::ventana_guardada();
+    }
 }
 
 /// Dibuja solo si nadie tomó el turno después de `generacion` (chequeo y guardado bajo el mismo lock).
@@ -126,6 +142,7 @@ pub fn dibujar_si(app: &AppHandle, generacion: u64, dibujo: Dibujo, globo: Optio
         if !config_nudo(app).prendido {
             return false;
         }
+        recordar_marcada(&estado);
         *ultimo = Some((dibujo, con_paso_guia(&estado, globo)));
     }
     mostrar_ventanas(app, visible);
@@ -134,6 +151,10 @@ pub fn dibujar_si(app: &AppHandle, generacion: u64, dibujo: Dibujo, globo: Optio
 
 fn mostrar_ventanas(app: &AppHandle, globo_visible: bool) {
     emitir(app);
+    // Con la ventana marcada atrás no se muestra nada: vuelve cuando ella vuelve al frente.
+    if app.state::<Estado>().nudo.escondida.load(Ordering::SeqCst) {
+        return;
+    }
     if let Some(w) = app.get_webview_window("nudo") {
         mostrar(&w);
     }
@@ -168,6 +189,48 @@ fn programar_ocultar(app: &AppHandle) {
     });
 }
 
+/// La ventana marcada por la guía (None si no hay dibujo).
+pub fn ventana_marcada(app: &AppHandle) -> Option<Guardada> {
+    *app.state::<Estado>().nudo.marcada.lock().unwrap()
+}
+
+pub fn marca_escondida(app: &AppHandle) -> bool {
+    app.state::<Estado>().nudo.escondida.load(Ordering::SeqCst)
+}
+
+/// Esconde o vuelve a mostrar el dibujo sin borrarlo ni terminar la guía.
+pub fn aplicar_cambio(app: &AppHandle, cambio: Cambio) {
+    let estado = app.state::<Estado>();
+    match cambio {
+        Cambio::Nada => {}
+        Cambio::Esconder => {
+            // Con el lock tomado: un dibujo no puede mostrar las ventanas entre la marca y el `hide`.
+            let ultimo = estado.nudo.ultimo.lock().unwrap();
+            if ultimo.is_none() {
+                return;
+            }
+            estado.nudo.escondida.store(true, Ordering::SeqCst);
+            for label in ["nudo", "nudo-globo"] {
+                if let Some(w) = app.get_webview_window(label) {
+                    let _ = w.hide();
+                }
+            }
+            drop(ultimo);
+        }
+        Cambio::Mostrar => {
+            let globo_visible = {
+                let ultimo = estado.nudo.ultimo.lock().unwrap();
+                if ultimo.is_none() || !estado.nudo.escondida.swap(false, Ordering::SeqCst) {
+                    return;
+                }
+                ultimo.as_ref().and_then(|(_, g)| g.as_ref()).is_some_and(|g| g.visible)
+            };
+            mostrar_ventanas(app, globo_visible);
+            ventanas::reafirmar_arriba(app);
+        }
+    }
+}
+
 /// Guarda el lado del globo que mira al objetivo (lo calcula `ventanas::ubicar_nudo`).
 pub fn guardar_lado_globo(app: &AppHandle, lado: Lado) {
     *app.state::<Estado>().nudo.lado_globo.lock().unwrap() = Some(lado);
@@ -189,6 +252,8 @@ fn limpiar_si(app: &AppHandle, generacion: Option<u64>) -> bool {
         }
         estado.nudo.siguiente_generacion();
         *ultimo = None;
+        *estado.nudo.marcada.lock().unwrap() = None;
+        estado.nudo.escondida.store(false, Ordering::SeqCst);
     }
     // Las páginas animan la salida (la abejita y el globo se van) y las ventanas se ocultan después.
     emitir(app);

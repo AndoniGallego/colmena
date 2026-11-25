@@ -55,7 +55,21 @@ export function hayMensajeParaClaude(p: {
   return !!p.mensaje.trim()
 }
 
+const TITULO_MCP = { mensaje: 'Mandar mensaje', programada: 'Mensaje programado', tarea: 'Tarea de ticket' } as const
+const BOTON_MCP = { mensaje: 'Mandar', programada: 'Programar', tarea: 'Crear' } as const
+const ARIA_MCP = {
+  mensaje: ['Mandar el mensaje', 'No mandar'],
+  programada: ['Programar el mensaje', 'No programar'],
+  tarea: ['Crear la tarea', 'No crear'],
+} as const
+
+function accionMcp(p: PedidoPestana): 'mensaje' | 'programada' | 'tarea' | null {
+  return p.accion === 'mensaje' || p.accion === 'programada' || p.accion === 'tarea' ? p.accion : null
+}
+
 export function tituloPedidoPestana(p: PedidoPestana): string {
+  const mcp = accionMcp(p)
+  if (mcp) return TITULO_MCP[mcp]
   if (p.accion === 'cursor') return 'Trabajador Cursor'
   if (p.accion === 'cerrar') {
     if (!p.cierre) return 'Cerrar terminal'
@@ -66,6 +80,8 @@ export function tituloPedidoPestana(p: PedidoPestana): string {
 }
 
 export function botonPedidoPestana(p: PedidoPestana, vista?: VistaCierrePedido): string {
+  const mcp = accionMcp(p)
+  if (mcp) return BOTON_MCP[mcp]
   if (p.accion === 'cerrar') return p.cierre && vista?.trabajando ? 'Cerrar igual' : 'Cerrar'
   return p.accion === 'cursor' ? 'Lanzar' : 'Abrir'
 }
@@ -83,11 +99,15 @@ export function ariaAceptarPedidoPestana(p: PedidoPestana, vista?: VistaCierrePe
     return vista?.trabajando ? `Cerrar la ${o} igual` : `Cerrar la ${o}`
   }
   if (p.accion === 'cerrar') return 'Cerrar la terminal'
+  const mcp = accionMcp(p)
+  if (mcp) return ARIA_MCP[mcp][0]
   if (p.accion === 'cursor') return 'Lanzar el trabajador Cursor'
   return (p.pestanas?.length ?? 0) > 0 ? 'Abrir pestañas' : 'Abrir pestaña'
 }
 
 export function ariaRechazarPedidoPestana(p: PedidoPestana): string {
+  const mcp = accionMcp(p)
+  if (mcp) return ARIA_MCP[mcp][1]
   if (p.accion === 'cerrar') return 'No cerrar'
   return p.accion === 'cursor' ? 'No lanzar' : 'No abrir'
 }

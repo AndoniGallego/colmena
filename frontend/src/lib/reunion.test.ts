@@ -14,6 +14,12 @@ describe('toReunion', () => {
     expect(r.tocadas).toEqual([{ texto: 'Pago', tipo: 'pregunta', respuesta: 'Sí', archivos: ['x.py'] }])
     expect(r.inicio).not.toBe('—')
   })
+  it('lee el tema; sin tema o con un tema que no es texto da vacío', () => {
+    expect(toReunion({ ...base, tema: 'Plux' })!.tema).toBe('Plux')
+    expect(toReunion(base)!.tema).toBe('')
+    expect(toReunion({ ...base, tema: 5 })!.tema).toBe('')
+    expect(toReunion({ ...base, tema: 'x'.repeat(300) })!.tema).toBe('x'.repeat(200) + '…')
+  })
   it('devuelve null con lo que no es un objeto o con JSON roto', () => {
     for (const v of [null, undefined, 'x', 3, [], '{no es json']) expect(toReunion(v)).toBeNull()
   })

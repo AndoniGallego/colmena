@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const desktopRef = ref(false)
 
@@ -18,7 +18,14 @@ vi.mock('../lib/keyboard', () => ({
   useKeyboard: () => ({ open: ref(false), height: ref(null), top: ref(0) }),
 }))
 vi.mock('../lib/theme', () => ({ setTheme: () => {}, theme: ref('light') }))
-vi.mock('../state/app', () => ({ revokeAllSessions: vi.fn(async () => true), revokeSessionsErr: ref('') }))
+const setAtajos = vi.fn(async (_: unknown) => undefined)
+vi.mock('../state/app', () => ({
+  revokeAllSessions: vi.fn(async () => true),
+  revokeSessionsErr: ref(''),
+  auth: ref('ready'),
+  getAtajos: vi.fn(async () => ({})),
+  setAtajos: (a: unknown) => setAtajos(a),
+}))
 vi.mock('../state/ajustes', () => ({ closeAjustes: vi.fn() }))
 vi.mock('../state/limpieza', () => ({ abrirLimpieza: vi.fn() }))
 vi.mock('./Icon.vue', () => ({ default: { name: 'Icon', render: () => null } }))
@@ -32,6 +39,7 @@ vi.mock('./ViewFrame.vue', () => ({
 }))
 
 const { default: AjustesView } = await import('./AjustesView.vue')
+const { atajosGuardados, capturandoAtajo } = await import('../state/atajos')
 const KEY = 'colmena.ajustes.pestana'
 
 function montar() {
@@ -43,7 +51,10 @@ beforeEach(() => {
   document.body.innerHTML = ''
   localStorage.clear()
   desktopRef.value = false
+  atajosGuardados.value = {}
+  capturandoAtajo.value = false
   vi.restoreAllMocks()
+  setAtajos.mockClear()
 })
 
 describe('AjustesView por pestañas', () => {
@@ -139,5 +150,81 @@ describe('pestaña Atajos', () => {
     } finally {
       Object.defineProperty(Navigator.prototype, 'platform', orig)
     }
+  })
+})
+
+describe('Atajos que se pueden cambiar', () => {
+  const tecla = (init: KeyboardEventInit) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+  const montadas: ReturnType<typeof montar>[] = []
+  afterEach(() => montadas.splice(0).forEach((m) => m.unmount()))
+  async function abrir() {
+    const w = montar()
+    montadas.push(w)
+    await tabs(w).find((x) => x.text().includes('Atajos'))!.trigger('click')
+    return w
+  }
+  const fila = (w: Awaited<ReturnType<typeof abrir>>, que: string) => w.findAll('.atajo').find((f) => f.text().includes(que))!
+
+  it('las filas editables tienen Cambiar y las fijas no', async () => {
+    const w = await abrir()
+    expect(w.findAll('button').filter((b) => b.text() === 'Cambiar')).toHaveLength(5)
+    expect(fila(w, 'Abrir el buscador').find('button').text()).toBe('Cambiar')
+    expect(fila(w, 'Mandar el mensaje').find('button').exists()).toBe(false)
+    expect(w.text()).not.toContain('Volver al original')
+  })
+
+  it('cambiar el buscador: captura la combinación, la guarda y la muestra', async () => {
+    const w = await abrir()
+    await fila(w, 'Abrir el buscador').find('button').trigger('click')
+    expect(w.text()).toContain('Apretá la combinación nueva')
+    tecla({ key: 'j', ctrlKey: true })
+    await new Promise((r) => setTimeout(r))
+    expect(setAtajos).toHaveBeenCalledWith({ buscador: 'mod+j' })
+    expect(w.text()).not.toContain('Apretá la combinación nueva')
+    expect(fila(w, 'Abrir el buscador').findAll('kbd').map((k) => k.text())).toEqual(['Ctrl', 'J'])
+    expect(fila(w, 'Abrir el buscador').text()).toContain('Volver al original')
+  })
+
+  it('muestra el error en línea y sigue esperando', async () => {
+    const w = await abrir()
+    await fila(w, 'Abrir el buscador').find('button').trigger('click')
+    tecla({ key: 't', ctrlKey: true })
+    await w.vm.$nextTick()
+    expect(w.text()).toContain('El navegador usa Ctrl+T para abrir una pestaña')
+    tecla({ key: ' ', code: 'Space', ctrlKey: true, shiftKey: true })
+    await w.vm.$nextTick()
+    expect(w.text()).toContain('Ya la usa «Dictar por voz»')
+    tecla({ key: 'k' })
+    await w.vm.$nextTick()
+    expect(w.text()).toContain('Necesita Ctrl, Alt o Shift')
+    expect(setAtajos).not.toHaveBeenCalled()
+  })
+
+  it('Esc cancela la captura sin cambiar nada', async () => {
+    const w = await abrir()
+    await fila(w, 'Abrir el buscador').find('button').trigger('click')
+    expect(capturandoAtajo.value).toBe(true)
+    tecla({ key: 'Escape' })
+    await w.vm.$nextTick()
+    expect(capturandoAtajo.value).toBe(false)
+    expect(w.text()).not.toContain('Apretá la combinación nueva')
+    expect(setAtajos).not.toHaveBeenCalled()
+  })
+
+  it('Volver al original borra el cambio', async () => {
+    atajosGuardados.value = { dictar: 'mod+alt+d' }
+    const w = await abrir()
+    const f = fila(w, 'Dictar por voz')
+    expect(f.findAll('kbd').map((k) => k.text())).toEqual(['Ctrl', 'Alt', 'D'])
+    await f.findAll('button').find((b) => b.text() === 'Volver al original')!.trigger('click')
+    await new Promise((r) => setTimeout(r))
+    expect(setAtajos).toHaveBeenCalledWith({})
+    expect(fila(w, 'Dictar por voz').findAll('kbd').map((k) => k.text())).toEqual(['Ctrl', 'Shift', 'Espacio'])
+  })
+
+  it('la fila de Windows manda al ícono de Colmena junto al reloj', async () => {
+    const w = await abrir()
+    expect(w.text()).toContain('Atajos → Cambiar atajos…')
+    expect(w.text()).not.toContain('Ctrl+Alt+N')
   })
 })

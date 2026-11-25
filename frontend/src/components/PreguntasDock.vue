@@ -4,6 +4,8 @@ import { clearProgreso, initial, loadProgreso, minLabel, restore, saveProgreso, 
 import { chipLabel, type LoteDock } from '../lib/dock'
 import { desktop } from '../lib/viewport'
 import { finePointer, gsap, haptic, isSoft, useGsap } from '../motion'
+import { coincide } from '../lib/teclas'
+import { capturandoAtajo, comboDe } from '../state/atajosEstado'
 import Icon from './Icon.vue'
 import QuestionStepper from './QuestionStepper.vue'
 
@@ -229,7 +231,7 @@ watch(
 
 function onWindowKey(e: KeyboardEvent) {
   // With the bar on screen and nothing focused, M opens it again.
-  if (props.active && minLote.value && mode.value === 'input' && (e.key === 'm' || e.key === 'M') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing) {
+  if (props.active && minLote.value && mode.value === 'input' && !capturandoAtajo.value && coincide(e, comboDe('minimizar-preguntas')) && !e.isComposing) {
     const a = document.activeElement
     if (!a || a === document.body) {
       e.preventDefault()

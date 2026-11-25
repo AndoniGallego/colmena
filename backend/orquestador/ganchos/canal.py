@@ -51,16 +51,55 @@ def preparar_directorio(directorio: Path) -> None:
         os.close(fd)
 
 
-def mismo_uid(writer) -> bool:
+async def abrir_servidor_unix(ruta: Path, atender, limit: int) -> asyncio.Server:
+    """Socket unix 0600 en un directorio 0700 (sin symlinks); reemplaza un socket huérfano, nunca otro archivo."""
+    preparar_directorio(ruta.parent)
+    try:
+        st = os.lstat(ruta)
+    except FileNotFoundError:
+        pass
+    else:
+        if stat.S_ISSOCK(st.st_mode):
+            ruta.unlink()
+        else:
+            raise OSError(errno.EEXIST, "La ruta del socket no es un socket unix", str(ruta))
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    umask_prev = os.umask(0o177)
+    try:
+        sock.bind(str(ruta))
+    except Exception:
+        sock.close()
+        raise
+    finally:
+        os.umask(umask_prev)
+    try:
+        os.chmod(ruta, 0o600)
+        sock.listen()
+        return await asyncio.start_unix_server(atender, sock=sock, limit=limit)
+    except Exception:
+        sock.close()
+        try:
+            ruta.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def credenciales_par(writer) -> tuple[int, int, int] | None:
+    """(pid, uid, gid) del otro extremo por SO_PEERCRED, o None."""
     try:
         sock = writer.get_extra_info("socket")
         if sock is None:
-            return False
+            return None
         raw = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
-        _, uid, _ = struct.unpack("3i", raw)
-        return uid == os.getuid()
+        return struct.unpack("3i", raw)
     except Exception:
-        return False
+        return None
+
+
+def mismo_uid(writer) -> bool:
+    cred = credenciales_par(writer)
+    return cred is not None and cred[1] == os.getuid()
 
 
 class Conexion:
@@ -188,38 +227,7 @@ class ServidorGanchos:
                 self._tareas_atender.discard(tarea)
 
     async def abrir(self, ruta: Path) -> None:
-        preparar_directorio(ruta.parent)
-        try:
-            st = os.lstat(ruta)
-        except FileNotFoundError:
-            pass
-        else:
-            if stat.S_ISSOCK(st.st_mode):
-                ruta.unlink()
-            else:
-                raise OSError(errno.EEXIST, "La ruta del socket no es un socket unix", str(ruta))
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        umask_prev = os.umask(0o177)
-        try:
-            sock.bind(str(ruta))
-        except Exception:
-            sock.close()
-            raise
-        finally:
-            os.umask(umask_prev)
-        try:
-            os.chmod(ruta, 0o600)
-            sock.listen()
-            self._server = await asyncio.start_unix_server(
-                self.atender, sock=sock, limit=MAX_LINEA + 1
-            )
-        except Exception:
-            sock.close()
-            try:
-                ruta.unlink()
-            except OSError:
-                pass
-            raise
+        self._server = await abrir_servidor_unix(ruta, self.atender, MAX_LINEA + 1)
 
     async def cerrar(self) -> None:
         server = self._server

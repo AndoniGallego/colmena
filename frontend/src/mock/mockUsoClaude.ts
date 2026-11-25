@@ -3,6 +3,9 @@ import type { ClaudeUso, UsoAgrupar, UsoFila, UsoRango } from '../lib/usoClaude'
 
 const tk = (n: number): DiosTokens => ({ input: Math.round(n * 0.01), cache_write: Math.round(n * 0.06), cache_read: Math.round(n * 0.9), output: Math.round(n * 0.03), mensajes: Math.ceil(n / 400_000), total: n })
 
+/** Costo de mentira: unos 4 USD por millón de tokens usados, con un modelo sin precio para mostrar el guion. */
+const cu = (total: number, sinPrecio = false) => ({ usd: sinPrecio ? null : Math.round(total * 0.0000045 * 100) / 100, usdParcial: false })
+
 const SESIONES = [
   ['Arreglar el login de la tienda', 'tienda-web', 0.31],
   ['diseño · Colmena', 'orquestador', 0.22],
@@ -16,33 +19,36 @@ function filas(total: number, agrupar: UsoAgrupar): UsoFila[] {
   const rest = total
   if (agrupar === 'modelos') {
     const mods: UsoFila[] = [
-      { id: 'claude-opus-5-5', nombre: 'Opus 5.5', detalle: 'claude-opus-5-5', tipo: '', ...tk(Math.round(rest * 0.62)) },
-      { id: 'claude-sonnet-5-5', nombre: 'Sonnet 5.5', detalle: 'claude-sonnet-5-5', tipo: '', ...tk(Math.round(rest * 0.33)) },
-      { id: 'claude-haiku-5-5', nombre: 'Haiku 5.5', detalle: 'claude-haiku-5-5', tipo: '', ...tk(Math.round(rest * 0.05)) }
+      { id: 'claude-opus-5-5', nombre: 'Opus 5.5', detalle: 'claude-opus-5-5', tipo: '', ...cu(Math.round(rest * 0.62)), ...tk(Math.round(rest * 0.62)) },
+      { id: 'claude-sonnet-5-5', nombre: 'Sonnet 5.5', detalle: 'claude-sonnet-5-5', tipo: '', ...cu(Math.round(rest * 0.33)), ...tk(Math.round(rest * 0.33)) },
+      { id: 'claude-haiku-5-5', nombre: 'Haiku 5.5', detalle: 'claude-haiku-5-5', tipo: '', ...cu(Math.round(rest * 0.05), true), ...tk(Math.round(rest * 0.05)) }
     ]
     return mods.sort((a, b) => b.total - a.total)
   }
   if (agrupar === 'proyectos') {
     const by = new Map<string, number>()
     for (const [, p, f] of SESIONES) by.set(p, (by.get(p) ?? 0) + f)
-    const out: UsoFila[] = [...by].map(([p, f]) => ({ id: p, nombre: p, detalle: '', tipo: '', ...tk(Math.round(rest * f)) }))
-    out.push({ id: '_otras', nombre: 'Otras 3', detalle: '', tipo: 'otras', ...tk(Math.round(rest * 0.11)) })
+    const out: UsoFila[] = [...by].map(([p, f]) => ({ id: p, nombre: p, detalle: '', tipo: '', ...cu(Math.round(rest * f)), ...tk(Math.round(rest * f)) }))
+    out.push({ id: '_otras', nombre: 'Otras 3', detalle: '', tipo: 'otras', ...cu(Math.round(rest * 0.11)), ...tk(Math.round(rest * 0.11)) })
     return out.sort((a, b) => b.total - a.total)
   }
-  const out: UsoFila[] = SESIONES.map(([nombre, p, f], i) => ({ id: `s${i}`, nombre, detalle: p, tipo: '', ...tk(Math.round(rest * f)) }))
-  out.push({ id: '_otras', nombre: 'Otras 9', detalle: '', tipo: 'otras', ...tk(Math.round(rest * 0.11)) })
+  const out: UsoFila[] = SESIONES.map(([nombre, p, f], i) => ({ id: `s${i}`, nombre, detalle: p, tipo: '', ...cu(Math.round(rest * f)), ...tk(Math.round(rest * f)) }))
+  out.push({ id: '_otras', nombre: 'Otras 9', detalle: '', tipo: 'otras', ...cu(Math.round(rest * 0.11)), ...tk(Math.round(rest * 0.11)) })
   return out.sort((a, b) => b.total - a.total)
 }
 
 export function mockClaudeUso(diosDias: DiosDia[], diosHoy: DiosTokens): ClaudeUso {
-  const historial = diosDias.map((d, i) => ({ ...tk(d.total * 38 + (i % 4) * 9_000_000 + (d.total ? 4_000_000 : 0)), fecha: d.fecha }))
+  const historial = diosDias.map((d, i) => {
+    const total = d.total * 38 + (i % 4) * 9_000_000 + (d.total ? 4_000_000 : 0)
+    return { ...tk(total), ...cu(total), fecha: d.fecha }
+  })
   const sum = (n: number) => historial.slice(-n).reduce((a, d) => a + d.total, 0)
   const span: Record<UsoRango, number> = { hoy: 1, '7d': 7, '30d': 30 }
   const totales = {} as ClaudeUso['totales']
   const desglose = {} as ClaudeUso['desglose']
   for (const r of Object.keys(span) as UsoRango[]) {
     const total = sum(span[r])
-    totales[r] = tk(total)
+    totales[r] = { ...tk(total), ...cu(total) }
     desglose[r] = { sesiones: filas(total, 'sesiones'), proyectos: filas(total, 'proyectos'), modelos: filas(total, 'modelos') }
   }
   const now = Date.now()

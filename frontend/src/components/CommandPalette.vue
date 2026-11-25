@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ATAJO, saltoDeGrupo, tramos, type Resultado } from '../lib/buscador'
+import { saltoDeGrupo, tramos, type Resultado } from '../lib/buscador'
 import { useFocusTrap } from '../lib/focusTrap'
 import { useKeyboard } from '../lib/keyboard'
 import { desktop } from '../lib/viewport'
 import { gsap, haptic, isSoft, useGsap } from '../motion'
+import { coincideCtrlOCmd } from '../lib/teclas'
+import { capturandoAtajo, comboDe, etiquetaDe } from '../state/atajosEstado'
 import { alternarPaleta, cerrarPaleta, elegir, paleta, planos, resultados } from '../state/buscador'
 import Icon from './Icon.vue'
 
@@ -81,7 +83,7 @@ function abrir(r: Resultado) {
 }
 
 function onGlobal(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+  if (!capturandoAtajo.value && coincideCtrlOCmd(e, comboDe('buscador'))) {
     e.preventDefault()
     alternarPaleta()
   }
@@ -225,7 +227,7 @@ function onLeave(el: Element, done: () => void) {
             <span><kbd>↑</kbd><kbd>↓</kbd> moverse</span>
             <span><kbd>↵</kbd> abrir</span>
             <span><kbd>Tab</kbd> cambiar de grupo</span>
-            <span class="push"><kbd>{{ ATAJO }}</kbd> abrir o cerrar</span>
+            <span class="push"><kbd>{{ etiquetaDe('buscador') }}</kbd> abrir o cerrar</span>
           </footer>
         </div>
       </div>
