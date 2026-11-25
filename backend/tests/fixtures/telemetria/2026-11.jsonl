@@ -1,0 +1,35 @@
+{"v":1,"ts":"2026-11-02T10:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.ganchos.enrutador","plantilla":"enrutador no pudo manejar %s: %s","tipo_exc":"AttributeError","n":1,"primera":"2026-11-02T10:00:00-03:00","ultima":"2026-11-02T10:00:00-03:00"}
+{"v":1,"ts":"2026-11-14T12:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.ganchos.enrutador","plantilla":"enrutador no pudo manejar %s: %s","tipo_exc":"AttributeError","n":12,"primera":"2026-11-10T10:00:00-03:00","ultima":"2026-11-14T12:00:00-03:00"}
+{"v":1,"ts":"2026-11-14T11:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.board","plantilla":"observer del board falló: %s","tipo_exc":null,"n":5,"primera":"2026-11-10T11:00:00-03:00","ultima":"2026-11-14T11:00:00-03:00"}
+{"v":1,"ts":"2026-11-20T09:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.demo","plantilla":"fallo de ejemplo uno","tipo_exc":null,"n":9,"primera":"2026-11-16T09:00:00-03:00","ultima":"2026-11-20T09:00:00-03:00"}
+{"v":1,"ts":"2026-11-17T10:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.ganchos.enrutador","plantilla":"enrutador no pudo manejar %s: %s","tipo_exc":"AttributeError","n":100,"primera":"2026-11-17T10:00:00-03:00","ultima":"2026-11-17T10:00:00-03:00"}
+{"v":1,"ts":"2026-11-22T23:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.ganchos.enrutador","plantilla":"enrutador no pudo manejar %s: %s","tipo_exc":"AttributeError","n":162,"primera":"2026-11-22T22:00:00-03:00","ultima":"2026-11-22T23:00:00-03:00"}
+{"v":1,"ts":"2026-11-19T09:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.demo","plantilla":"fallo de ejemplo dos","tipo_exc":"ValueError","n":7,"primera":"2026-11-18T09:00:00-03:00","ultima":"2026-11-19T09:00:00-03:00"}
+{"v":1,"ts":"2026-11-19T10:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.demo","plantilla":"fallo de ejemplo tres","tipo_exc":null,"n":6,"primera":"2026-11-18T10:00:00-03:00","ultima":"2026-11-19T10:00:00-03:00"}
+{"v":1,"ts":"2026-11-19T11:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.demo","plantilla":"fallo de ejemplo cuatro","tipo_exc":null,"n":4,"primera":"2026-11-18T11:00:00-03:00","ultima":"2026-11-19T11:00:00-03:00"}
+{"v":1,"ts":"2026-11-19T12:00:00-03:00","ev":"error_back","fuente":"back","nivel":"WARNING","logger":"orquestador.demo","plantilla":"fallo de ejemplo cinco","tipo_exc":null,"n":2,"primera":"2026-11-18T12:00:00-03:00","ultima":"2026-11-19T12:00:00-03:00"}
+{"v":1,"ts":"2026-11-17T09:00:00-03:00","ev":"pedido","fuente":"back","tipo":"pestana","origen":"mcp","creado":true,"estado":"abierto","motivo":null,"segundos":20,"leyo_otra_sesion":false,"proyecto":null}
+{"v":1,"ts":"2026-11-17T09:10:00-03:00","ev":"pedido","fuente":"back","tipo":"cerrar","origen":"marca","creado":false,"estado":"rechazado","motivo":"carpeta","segundos":40,"leyo_otra_sesion":false,"proyecto":null}
+{"v":1,"ts":"2026-11-17T09:20:00-03:00","ev":"pedido","fuente":"back","tipo":"pestana","origen":"mcp","creado":false,"estado":"vencido","motivo":"vencio","segundos":600,"leyo_otra_sesion":false,"proyecto":null}
+{"v":1,"ts":"2026-11-17T09:30:00-03:00","ev":"pedido","fuente":"back","tipo":"tarea","origen":"mcp","creado":false,"estado":"descartado","motivo":"reemplazado","segundos":null,"leyo_otra_sesion":false,"proyecto":null}
+{"v":1,"ts":"2026-11-18T10:00:00-03:00","ev":"respuesta","fuente":"back","aviso":"asks","resultado":"respondio","segundos":60,"via":"prompt","en_app":false}
+{"v":1,"ts":"2026-11-18T10:10:00-03:00","ev":"respuesta","fuente":"back","aviso":"asks","resultado":"respondio","segundos":600,"via":"prompt","en_app":false}
+{"v":1,"ts":"2026-11-18T10:20:00-03:00","ev":"respuesta","fuente":"back","aviso":"asks","resultado":"respondio","segundos":30,"via":"prompt","en_app":true}
+{"v":1,"ts":"2026-11-18T10:30:00-03:00","ev":"respuesta","fuente":"back","aviso":"blocked","resultado":"respondio","segundos":120,"via":"prompt","en_app":false}
+{"v":1,"ts":"2026-11-18T10:40:00-03:00","ev":"respuesta","fuente":"back","aviso":"blocked","resultado":"sin_respuesta","segundos":null,"via":"prompt","en_app":false}
+{"v":1,"ts":"2026-11-19T10:00:00-03:00","ev":"traba","fuente":"back","fase":"inicio","tipo":"colgada","avisada":true,"segundos":null,"fin":null}
+{"v":1,"ts":"2026-11-19T10:05:00-03:00","ev":"traba","fuente":"back","fase":"fin","tipo":"colgada","avisada":true,"segundos":300,"fin":"prompt"}
+{"v":1,"ts":"2026-11-19T11:00:00-03:00","ev":"traba","fuente":"back","fase":"inicio","tipo":"quieta","avisada":true,"segundos":null,"fin":null}
+{"v":1,"ts":"2026-11-19T11:02:00-03:00","ev":"traba","fuente":"back","fase":"fin","tipo":"quieta","avisada":true,"segundos":100,"fin":"dejo_de_trabajar"}
+{"v":1,"ts":"2026-11-20T10:00:00-03:00","ev":"comando_sesion","fuente":"back","resultado":"corrido","codigo":null,"proyecto":null}
+{"v":1,"ts":"2026-11-20T10:01:00-03:00","ev":"comando_sesion","fuente":"back","resultado":"corrido","codigo":null,"proyecto":null}
+{"v":1,"ts":"2026-11-20T10:02:00-03:00","ev":"comando_sesion","fuente":"back","resultado":"fallo","codigo":"exit_1","proyecto":null}
+{"v":1,"ts":"2026-11-20T10:03:00-03:00","ev":"comando_sesion","fuente":"back","resultado":"no","codigo":null,"proyecto":null}
+{"v":1,"ts":"2026-11-20T11:00:00-03:00","ev":"cierre_frenado","fuente":"back","motivo":"estado","resuelto":true}
+{"v":1,"ts":"2026-11-20T11:01:00-03:00","ev":"cierre_frenado","fuente":"back","motivo":"estado","resuelto":true}
+{"v":1,"ts":"2026-11-20T11:02:00-03:00","ev":"cierre_frenado","fuente":"back","motivo":"estado","resuelto":false}
+{"v":1,"ts":"2026-11-21T10:00:00-03:00","ev":"app","fuente":"windows","origen":"tuneles","evento":"tunel_fallo","ok":false,"codigo":"ssh_rechazado","ms":null,"version":null}
+{"v":1,"ts":"2026-11-21T10:10:00-03:00","ev":"app","fuente":"windows","origen":"app","evento":"desconectado","ok":true,"codigo":null,"ms":null,"version":null}
+{"v":1,"ts":"2026-11-21T10:20:00-03:00","ev":"app","fuente":"windows","origen":"app","evento":"arranque","ok":true,"codigo":null,"ms":null,"version":null}
+{"v":1,"ts":"2026-11-21T10:30:00-03:00","ev":"app","fuente":"windows","origen":"atajos","evento":"error","ok":false,"codigo":null,"ms":null,"version":null}
+{"v":1,"ts":"2026-11-23T09:00:00-03:00","ev":"resumen","fuente":"back","semana":"2026-W46","propuestas":0}

@@ -67,30 +67,13 @@ async function renderBar(props: { compact?: boolean }) {
 }
 
 describe('TopBar', () => {
-  it('en escritorio (!compact) muestra cuatro acciones y no el menú de puntos', async () => {
+  it('en escritorio todo va al menú de puntos, también Ajustes y el tema', async () => {
     const html = await renderBar({ compact: false })
-    expect(html).toContain('aria-label="Ajustes"')
-    expect(html).toContain('aria-label="Entornos"')
-    expect(html).toContain('aria-label="Limpiar sesiones"')
-    expect(html).toContain('aria-label="Salir de Colmena"')
-    expect(html).not.toContain('Más opciones')
-  })
-
-  it('en escritorio ofrece el botón de Tareas programadas', async () => {
-    const html = await renderBar({ compact: false })
-    expect(html).toContain('aria-label="Tareas programadas"')
-  })
-
-  it('los íconos de escritorio no llevan title y sí la descripción accesible', async () => {
-    const html = await renderBar({ compact: false })
-    for (const n of ['Ajustes', 'Entornos', 'Kit', 'Tareas programadas', 'Limpiar sesiones', 'Salir de Colmena', 'Tema oscuro']) {
-      const tag = html.match(new RegExp(`<button[^>]*aria-label="${n}"[^>]*>`))?.[0] ?? ''
-      expect(tag, n).not.toBe('')
-      expect(tag, n).not.toContain('title=')
-      expect(tag, n).toContain('aria-description=')
+    expect(html).toContain('aria-label="Más opciones"')
+    for (const n of ['Ajustes', 'Tema oscuro', 'Tema claro', 'Entornos', 'Kit', 'Tareas programadas', 'Limpiar sesiones', 'Salir de Colmena']) {
+      expect(html, n).not.toContain(`aria-label="${n}"`)
     }
     expect(html).toMatch(/class="conn"[^>]*aria-description="Conexión en vivo con la notebook"/)
-    expect(html).toContain('aria-description="Pedidos que corren solos a su hora"')
   })
 
   it('en celu (compact) mantiene el menú de puntos', async () => {

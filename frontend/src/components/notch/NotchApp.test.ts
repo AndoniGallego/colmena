@@ -109,6 +109,40 @@ vi.mock('../../lib/notchPuente', () => ({
   }),
 }))
 
+const detenerRegistro = vi.fn()
+const iniciarRegistroNotch = vi.fn(() => detenerRegistro)
+vi.mock('../../lib/registroPuente', () => ({ iniciarRegistroNotch, crearReporteConexion: () => () => undefined }))
+
+const hooks = vi.hoisted(() => ({ montados: [] as Array<() => void>, desmontados: [] as Array<() => void> }))
+vi.mock('vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue')>()
+  return {
+    ...actual,
+    onMounted: (fn: () => void) => { hooks.montados.push(fn); return actual.onMounted(fn) },
+    onBeforeUnmount: (fn: () => void) => { hooks.desmontados.push(fn); return actual.onBeforeUnmount(fn) },
+  }
+})
+
+describe('NotchApp registro', () => {
+  it('al montar arranca el registro y al desmontar lo detiene', async () => {
+    auth.value = 'ready'
+    avisoActual.value = null
+    modo.value = 'cerrado'
+    vi.stubGlobal('document', { documentElement: { classList: { add() {}, remove() {} } } })
+    const { default: NotchApp } = await import('./NotchApp.vue')
+    await renderToString(createSSRApp({ render: () => h(NotchApp) }))
+    for (const fn of hooks.montados) {
+      try { fn() } catch { /* el resto del montaje necesita un DOM real; acá solo importa el registro */ }
+    }
+    expect(iniciarRegistroNotch).toHaveBeenCalled()
+    for (const fn of hooks.desmontados) {
+      try { fn() } catch { /* idem */ }
+    }
+    expect(detenerRegistro).toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})
+
 describe('NotchApp brillo en pastilla', () => {
   it('con aviso done la pastilla tiene brillo; sin aviso no', async () => {
     modo.value = 'aviso'

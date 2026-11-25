@@ -7,7 +7,7 @@ import re
 import shutil
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Literal, Optional
@@ -18,6 +18,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, ValidationError, model_validator
 
 from . import auth
+from .actualizacion import build_router as actualizacion_router
 from .biblioteca import ITEM_ID, Library
 from .sse_gzip import acepta_gzip, comprimir
 from .board import BoardHub, _agents as board_agents, find_session_agent, fingerprint, session_activity
@@ -76,6 +77,10 @@ from .push import NOTCH_PRUEBA_KINDS, EndpointBody, PushService, SubscribeBody, 
 from .atajos import AtajosBody
 from .orden_tablero import OrdenPestanasBody, OrdenTableroBody, PlegadasBody, SilencioBody
 from .state import StateStore
+from .telemetria import Telemetria
+from .telemetria_respuesta import SeguidorRespuestas
+from .telemetria_cierres import SeguidorCierres
+from .telemetria_eventos import campos_pedido
 from .sombra import Sombra
 from .internas import predicado_de_carpetas
 from .terminales import Terminales, merged_panes
@@ -486,7 +491,9 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                mcp_socket: Optional[Path] = None,
                kit_opts: Optional[dict] = None, piezas: Optional[list] = None,
                piezas_opts: Optional[dict] = None, piezas_paquete: str = "orquestador.piezas",
-               reunion_opts: Optional[dict] = None) -> FastAPI:
+               reunion_opts: Optional[dict] = None,
+               telemetria: Optional[Telemetria] = None, telemetria_handler=None,
+               registro_dir: Optional[Path] = None) -> FastAPI:
     # entrada_interna=False: sin Host/CIDR/Tailscale/Hardening aquí; envolver con entrada.pila_para.
     if enchufe is None:
         enchufe = crear_terminales(cfg)
@@ -498,6 +505,9 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     env_pane = sesion_propia() if env_pane_id is None else env_pane_id
     epoch = [load_epoch(data_directory)]
     silencio.configurar(data_directory / silencio.MARCA)
+
+    if telemetria is None:
+        telemetria = Telemetria(data_directory / "telemetria", activa=lambda: cfg.telemetria_activa)
 
     uso = UsoStore(data_directory)
     reunion_opts = reunion_opts or {}
@@ -514,11 +524,13 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     terminales = Terminales(enchufe, hub.terminals, lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                             writes=lambda: cfg.terminales_escritura is True)
     terminales.interna = hub.interna
+    seguidor = SeguidorRespuestas(telemetria.anotar)
     traspasos = TraspasoService(enchufe, state, handoffs_dir, locks, cfg.protected_workspaces, lambda: {p for p in (hub.self_pane_id, env_pane) if p},
-                                lambda event, data: emit_all(event, data))
+                                lambda event, data: emit_all(event, data), al_escribir=seguidor.escribio_colmena)
 
     mensajes = MensajeService(enchufe, state, lambda: hub.self_pane_id, uploads_dir, locks, cfg.protected_workspaces,
-                              lambda: {p for p in (hub.self_pane_id, env_pane) if p})
+                              lambda: {p for p in (hub.self_pane_id, env_pane) if p},
+                              al_escribir=seguidor.escribio_colmena)
     pregunta_sesion = PreguntaSesionService(hub.current, digests, mensajes, cfg.protected_workspaces,
                                             lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                                             lambda: hub.refresh(force=True))
@@ -528,7 +540,8 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                             cfg.protected_workspaces, lambda: hub.refresh(force=True), fondo=fondo,
                             worktrees=worktrees_nt)
     guardado = GuardadoService(cierres, enchufe, locks, call_later=lambda d, fn: asyncio.get_running_loop().call_later(d, fn),
-                               emit=lambda event, data: emit_all(event, data), spawn=lambda coro: spawn(coro))
+                               emit=lambda event, data: emit_all(event, data), spawn=lambda coro: spawn(coro),
+                               al_escribir=seguidor.escribio_colmena)
     limpieza = LimpiezaService(enchufe, hub, lambda: {p for p in (hub.self_pane_id, env_pane) if p},
                                cfg.protected_workspaces, data_directory, lambda: cfg.limpieza_dias)
     transcripts = TranscriptService(digests)
@@ -580,6 +593,16 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             hub._offer(queue, ("aviso", {"id": entry["id"]}))
 
     push.listeners.append(avisos_broadcast)
+    push.listeners.append(seguidor.al_aviso)
+
+    def seguidor_al_tablero(_previous, board) -> None:
+        try:
+            if board and board.get("terminales") != "sin_conexion":
+                seguidor.revisar({a.get("session_id") for a in board_agents(board) if a.get("session_id")})
+        except Exception:
+            pass
+
+    hub.observers.append(seguidor_al_tablero)
 
     def emit_all(event: str, data: dict) -> None:
         for queue in list(hub.subscribers):
@@ -595,6 +618,14 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     pedidos_pestana.on_change(lambda pid, estado: emit_all("pedido_pestana", {"id": pid, "estado": estado}))
     avisos_origen = AvisosOrigen(lambda body: mensajes.execute(body), lambda: hub.board, spawn)
     pedidos_pestana.on_descarte(avisos_origen.al_descarte)
+
+    def telemetria_pedido(item, origen, estado, motivo) -> None:
+        try:
+            telemetria.anotar("pedido", **campos_pedido(item, origen, estado, motivo, pedidos_pestana.wall()))
+        except Exception:
+            pass
+
+    pedidos_pestana.on_final(telemetria_pedido)
     hub.observers.append(avisos_origen.al_tablero)
 
     push.leidos_listeners.append(lambda tags: emit_all("avisos_leidos", {"tags": tags}))
@@ -617,6 +648,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     recarga_svc = RecargaService(
         sesiones=lambda: sesiones_desde_board(hub.board),
         mandar=enchufe.mandar_prompt,
+        al_escribir=seguidor.escribio_colmena,
         marcar_silencio=silencio.marcar,
         self_pane=lambda: hub.self_pane_id,
         protected_panes=lambda: {p for p in (hub.self_pane_id, env_pane) if p},
@@ -657,6 +689,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         avisar=avisar_pedido,
         al_cambiar=lambda: None,
         estado_pane=estado_pane,
+        al_decidir=seguidor.al_permiso,
     )
 
     def permisos_broadcast() -> None:
@@ -740,6 +773,8 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     app.state.cupos_vivo = cupos_vivo
     app.state.library = library
     app.state.notas = notas
+    app.state.telemetria = telemetria
+    app.state.telemetria_handler = telemetria_handler
     app.state.locks = locks
     app.state.terminales = terminales
     app.state.dialogos = dialogos
@@ -793,6 +828,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
 
     public = APIRouter(prefix="/api")
     api = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
+    public.include_router(actualizacion_router(data_directory / "actualizaciones", lambda: cfg.app_origin))
 
     @public.post("/login")
     async def login(body: LoginBody, request: Request):
@@ -1431,9 +1467,15 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     comando_sesion = ComandoSesionService(lambda: hub.refresh(force=True), digests, enchufe, locks, tacciones.audit,
                                           tacciones.limit, escritura, tnotify,
                                           lambda: {p for p in (hub.self_pane_id, env_pane) if p},
-                                          protected_workspaces=cfg.protected_workspaces)
+                                          protected_workspaces=cfg.protected_workspaces,
+                                          anotar=telemetria.anotar)
     app.state.comando_sesion = comando_sesion
     app.state.pedidos_pestana = pedidos_pestana
+    pedidos_pestana.on_registro(lambda e: tacciones.audit.write({
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "accion": "pedido_pestana",
+        "pedido_accion": e["pedido_accion"], "via": e["via"], "pane_id": e["pane_id"],
+        "session_id": e["session_id"], "ok": e["resultado"] == "creado",
+        "error": "" if e["resultado"] == "creado" else e["resultado"]}))
     app.state.mensajes = mensajes
     app.state.pregunta_sesion = pregunta_sesion
 
@@ -1940,9 +1982,9 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         if respuesta is not None:
             if final != "pendiente":
                 # Si una aprobación lo tomó mientras tanto, `marcar` no lo cambia y no se avisa dos veces.
-                marcado = pedidos_pestana.marcar(pedido_id, final)
+                marcado = pedidos_pestana.marcar(pedido_id, final, motivo=motivo)
                 if marcado is not None and marcado["estado"] == final:
-                    pedidos_pestana.descartar(item.get("origen") or {}, motivo)
+                    pedidos_pestana.descartar(item.get("origen") or {}, motivo, pid=pedido_id)
                     push.avisos.marcar_donde(pedido=pedido_id)
             return respuesta
         vista = vista_cierre(preview)
@@ -1962,7 +2004,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             preview, final, motivo, respuesta = await _verificar_cierre(item)
             if respuesta is not None:
                 if motivo:
-                    pedidos_pestana.descartar(origen, motivo)
+                    pedidos_pestana.descartar(origen, motivo, pid=pedido_id)
                 return respuesta
             cuerpo = CierreBody(id=f"pc-{pedido_id.replace('-', '')[:48]}", tipo=cierre["tipo"],
                                 target_id=cierre["target_id"], huella=preview["huella"], origen="pedido-pestana",
@@ -1978,7 +2020,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             if not (body.huella and body.huella == cierre.get("vista_huella") == preview["huella"]):
                 # Sin la vista, o con otra huella: lo que se aprobó no es lo que hay ahora.
                 final = "rechazado"
-                pedidos_pestana.descartar(origen, "cierre_cambio")
+                pedidos_pestana.descartar(origen, "cierre_cambio", pid=pedido_id)
                 return JSONResponse({"detail": "Cambió lo que había que cerrar: descarté el pedido"}, status_code=409)
             avisado = False
 
@@ -1992,7 +2034,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                 avisado = True
                 if lote.vencido:
                     guardado.cancelar(lote.id)
-                pedidos_pestana.descartar(origen, motivo)
+                pedidos_pestana.descartar(origen, motivo, pid=pedido_id)
 
             out = await guardado.iniciar_uno(cuerpo, listener=al_lote)
             final = "abierto"
@@ -2002,14 +2044,14 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             if exc.status != 409:
                 final = "rechazado"
                 pedidos_pestana.descartar(origen, "cierre_protegido" if exc.status in (400, 403)
-                                          else "cierre_no_hecho")
+                                          else "cierre_no_hecho", pid=pedido_id)
             return JSONResponse({"detail": exc.detail, **({"bloqueantes": exc.extra["bloqueantes"]}
                                                           if "bloqueantes" in exc.extra else {})},
                                 status_code=exc.status)
         except Exception:
             log.exception("pedido-pestana: falló al cerrar %s", cierre.get("target_id"))
             final = "rechazado"
-            pedidos_pestana.descartar(origen, "cierre_no_hecho")
+            pedidos_pestana.descartar(origen, "cierre_no_hecho", pid=pedido_id)
             return JSONResponse({"detail": "falló al cerrar"}, status_code=500)
         finally:
             pedidos_pestana.soltar_lanzamiento(pedido_id, final)
@@ -2675,6 +2717,7 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         avisar=_avisar_traba,
         silenciada=lambda sid: sid in state.silenciadas(),
         al_cambiar=lambda: hub.reaplicar(),
+        al_traba=lambda ev: telemetria.anotar("traba", **ev),
         umbrales=UmbralesTrabas.de_dict(cfg.trabas),
     )
     hub.trabas = vigia_trabas.traba_de
@@ -2706,6 +2749,10 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
             spawn(vigia_entornos.run())
             spawn(vigia_trabas.run())
         loop_ref[:] = [asyncio.get_running_loop()]
+        try:
+            telemetria.borrar_viejos()
+        except Exception:
+            log.exception("no pude borrar la telemetría vieja")
         try:
             reunion.recuperar()
         except Exception:
@@ -2783,11 +2830,14 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
         if not sid:
             return
         if msg.evento == "UserPromptSubmit":
+            seguidor.al_prompt(sid, pane)
             vigia_trabas.rearmar(sid)
         else:
             spawn(vigia_trabas.revisar(sid))
 
-    enrutador = Enrutador(estados, permisos, hub, post_tool_use=_post_tool_use, al_evento=_al_evento_trabas)
+    seguidor_cierres = SeguidorCierres(telemetria.anotar)
+    enrutador = Enrutador(estados, permisos, hub, post_tool_use=_post_tool_use, al_evento=_al_evento_trabas,
+                          al_stop=seguidor_cierres.al_stop)
 
     if ganchos_socket is not None:
         from .ganchos.canal import ServidorGanchos
@@ -2970,6 +3020,19 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
                                      if t["origen"].get("tipo") == "claude" else None)
     app.router.on_startup.append(cursor_runner.al_arrancar)   # marca interrumpidos
     app.router.on_shutdown.append(cursor_runner.cerrar)
+
+    def telemetria_shutdown() -> None:
+        try:
+            pedidos_pestana.cortar()
+        except Exception:
+            log.exception("no pude cortar los pedidos al apagar")
+        if telemetria_handler is not None:
+            try:
+                telemetria_handler.flush()
+            except Exception:
+                log.exception("no pude volcar la telemetría al apagar")
+
+    app.router.on_shutdown.append(telemetria_shutdown)
     api.include_router(cursor_router(cursor_runner))
     # (fin pista-E1)
     # ── [pista-E2] tareas programadas ──
@@ -2979,6 +3042,10 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     from .programadas import Programadas
     from .programadas_api import build_router as programadas_router
     from .notas_api import build_router as notas_router
+    from .registro_app import RegistroApp, build_router as registro_app_router, carpeta_registro_app
+    from .telemetria_api import build_router as telemetria_router
+    from . import telemetria_resumen
+    from .telemetria_resumen import PropuestasStore, ResumenSemanal, metrica_de
 
     async def lanzar_programada_claude(repo: str, mensaje: str, nombre: str, ident: str) -> dict:
         # Claude programado: Nueva tarea en modo `default` (cada herramienta pide aprobación a Ando); Colmena no aprueba nada.
@@ -3006,6 +3073,53 @@ def create_app(cfg: Config, secret: bytes, state: StateStore, hub: Optional[Boar
     app.router.on_startup.append(programadas_startup)
     api.include_router(programadas_router(programadas, limiter, verify_pin, cfg.pin))
     api.include_router(notas_router(notas, emit_all))
+    api.include_router(registro_app_router(RegistroApp(registro_dir or carpeta_registro_app(os.environ)), telemetria))
+    propuestas = PropuestasStore(data_directory / "telemetria" / "propuestas.json",
+                                 wall=lambda: datetime.now(timezone.utc))
+    app.state.propuestas = propuestas
+
+    def metrica_actual_propuesta(pid: str) -> float | None:
+        try:
+            e = propuestas.cargar().get(pid)
+            with library._lock:
+                resumenes = [i for i in library.items.values() if i["kind"] == "resumen"]
+            if not e or not resumenes:
+                return None
+            ultimo = max(resumenes, key=lambda i: i["ts"])
+            resumen = json.loads(ultimo["resumen_raw"])["resumen"]
+            return metrica_de(resumen, e["regla"], e["clave"])
+        except Exception:
+            return None
+
+    api.include_router(telemetria_router(telemetria, propuestas=propuestas, metrica_actual=metrica_actual_propuesta))
+
+    class _SinVolcado:
+        def flush(self) -> None:
+            pass
+
+    async def ejecutar_resumen(semana: str) -> None:
+        try:
+            await telemetria_resumen.generar_resumen(
+                directorio=telemetria.directorio, semana=semana, propuestas=propuestas, biblioteca=library,
+                push=push, handler=telemetria_handler or _SinVolcado(), telemetria=telemetria,
+                ahora=datetime.now().astimezone())
+        except Exception:
+            log.exception("no pude generar el resumen semanal")
+
+    resumen_semanal = ResumenSemanal(data_directory, lambda: cfg.telemetria_resumen_hora, lambda: cfg.telemetria_resumen_dias,
+                                     ejecutar_resumen)
+    app.state.resumen_semanal = resumen_semanal
+    push.avisos.registrar_kind("resumen")
+
+    def iniciar_resumen() -> None:
+        try:
+            library.quitar_resumenes_viejos(datetime.now(timezone.utc))
+        except Exception:
+            log.exception("no pude quitar los resúmenes viejos de la Biblioteca")
+        if parse_hora(cfg.telemetria_resumen_hora) and not os.environ.get("ORQ_NO_AUTOINDEX"):
+            spawn(resumen_semanal.run())
+
+    inicio_piezas.append(iniciar_resumen)
     # (fin pista-E2)
     api.include_router(mrs_router(mrs, redactor, limiter, verify_pin, cfg.pin))
     api.include_router(entornos_router(cfg, entornos_runner))

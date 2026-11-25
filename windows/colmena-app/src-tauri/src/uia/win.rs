@@ -16,6 +16,7 @@ use colmena_nucleo::nudo::pc::{
 };
 use colmena_nucleo::nudo::{ERR_FALLO_PC, ERR_FOTO_VIEJA, ERR_SIN_CONTROL, ERR_SIN_CONTROLES, ERR_SIN_VENTANA};
 use colmena_nucleo::posicion::{monitor_de, Ancla, Rect};
+use colmena_nucleo::registro::{Nivel, Origen};
 use tauri::{AppHandle, Manager};
 use windows::core::{implement, Ref, BOOL, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT};
@@ -44,6 +45,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use super::{Lectura, PedidoUia};
+use crate::registro;
 
 const MAX_NODOS: usize = 3000;
 const MAX_PROFUNDIDAD: usize = 64;
@@ -495,7 +497,7 @@ pub(super) fn arrancar_vigia(vigia: Arc<AtomicIsize>, app: AppHandle) {
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
         );
         if hook.is_invalid() {
-            eprintln!("nudo: no pude seguir la ventana al frente");
+            registro::anotar(Nivel::Error, Origen::Nudo, "no pude seguir la ventana al frente");
             return;
         }
         // Un menú que se abre no siempre cambia la ventana al frente: avisa aparte.
@@ -509,7 +511,7 @@ pub(super) fn arrancar_vigia(vigia: Arc<AtomicIsize>, app: AppHandle) {
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
         );
         if menu.is_invalid() {
-            eprintln!("nudo: no pude seguir los menús abiertos");
+            registro::anotar(Nivel::Error, Origen::Nudo, "no pude seguir los menús abiertos");
         }
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
@@ -710,7 +712,11 @@ pub(super) fn bucle(rx: Receiver<PedidoUia>, vigia: Arc<AtomicIsize>) {
     let auto = match crear_automation() {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("nudo: UI Automation no arrancó: {e}");
+            registro::anotar(
+                Nivel::Error,
+                Origen::Nudo,
+                &format!("UI Automation no arrancó: {e}"),
+            );
             for p in rx {
                 fallar(p);
             }

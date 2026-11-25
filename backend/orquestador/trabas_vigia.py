@@ -39,6 +39,7 @@ class VigiaTrabas:
         avisar: Callable[[dict, Traba], Awaitable[Any]],
         silenciada: Callable[[str], bool] = lambda sid: False,
         al_cambiar: Callable[[], None] = lambda: None,
+        al_traba: Callable[[dict], None] = lambda ev: None,
         umbrales: Optional[Umbrales] = None,
         wall: Callable[[], float] = time.time,
         sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
@@ -51,6 +52,7 @@ class VigiaTrabas:
         self._avisar = avisar
         self._silenciada = silenciada
         self._al_cambiar = al_cambiar
+        self._al_traba = al_traba
         self._umbrales = umbrales
         self._wall = wall
         self._sleep = sleep
@@ -67,13 +69,23 @@ class VigiaTrabas:
         return {"tipo": t.tipo, "desde": t.desde, "detalle": t.detalle}
 
     def rearmar(self, sid: str) -> None:
-        self._activas.pop(sid, None)
+        self._cerrar_activas(sid, self._activas.pop(sid, {}), "prompt")
         ent = self._cache.get(sid)
         if ent is not None:
             # El prompt nuevo puede llegar al transcript después del gancho: lo anterior no vuelve a contar.
             ent["corte"] = len(ent["lineas"])
         if self._trabas.pop(sid, None):
             self._notificar_cambio()
+
+    def _emitir(self, ev: dict) -> None:
+        try:
+            self._al_traba(ev)
+        except Exception:
+            log.warning("al_traba falló", exc_info=True)
+
+    def _cerrar_activas(self, sid: str, activas: dict, motivo: str) -> None:
+        for (tipo, _firma), desde in activas.items():
+            self._emitir({"fase": "fin", "tipo": tipo, "segundos": max(0, int(self._wall() - desde)), "fin": motivo})
 
     def _notificar_cambio(self) -> None:
         try:
@@ -130,9 +142,16 @@ class VigiaTrabas:
                     log.exception("no pude evaluar trabas")
                     trabas = []
             claves = {(t.tipo, t.firma) for t in trabas}
-            previas = self._activas.get(s, set())
+            previas = self._activas.get(s, {})
             nuevas = [t for t in trabas if (t.tipo, t.firma) not in previas]
-            self._activas[s] = claves
+            terminadas = {k: d for k, d in previas.items() if k not in claves}
+            motivo = "dejo_de_trabajar" if sesion.get("status") != "working" else "se_destrabo"
+            self._cerrar_activas(s, terminadas, motivo)
+            ahora = self._wall()
+            self._activas[s] = {(t.tipo, t.firma): previas.get((t.tipo, t.firma), t.desde or ahora) for t in trabas}
+            silenciada = self._silenciada(s)
+            for t in nuevas:
+                self._emitir({"fase": "inicio", "tipo": t.tipo, "avisada": not silenciada})
             if bool(trabas) != bool(self._trabas.get(s)) or [(t.tipo, t.firma) for t in trabas] != [
                     (t.tipo, t.firma) for t in self._trabas.get(s, [])]:
                 cambio = True
@@ -148,9 +167,9 @@ class VigiaTrabas:
                 except Exception:
                     log.exception("avisar traba falló")
         if sid is None:
-            for s in [k for k in self._trabas if k not in vistos]:
-                del self._trabas[s]
-                self._activas.pop(s, None)
+            for s in [k for k in {*self._trabas, *self._activas} if k not in vistos]:
+                self._trabas.pop(s, None)
+                self._cerrar_activas(s, self._activas.pop(s, {}), "sesion_cerrada")
                 self._cache.pop(s, None)
                 cambio = True
         if cambio:

@@ -15,7 +15,7 @@ from orquestador.config import Config, hash_pin
 from orquestador.digest import DigestService
 from orquestador.enchufe import FakeTerminales
 from orquestador.ganchos.mensaje import Ids, MensajeGancho
-from orquestador.pedidos_pestana import PedidosPestanaStore
+from orquestador.pedidos_pestana import MAX_POR_SESION, MAX_TOTAL, VENCE_S, PedidosPestanaStore
 from orquestador.push import PushService
 from orquestador.state import StateStore
 
@@ -989,8 +989,8 @@ def test_pedido_en_repo_colmena_descartado_con_aviso(apagada_app, tmp_path, monk
 def test_aviso_carpeta_colmena_tiene_texto():
     from orquestador.avisos_origen import TEXTOS
 
-    assert TEXTOS["carpeta_colmena"] == ("Colmena no abre pedidos en su propio repo: si hace falta, "
-                                         "Ando lo abre a mano desde el tablero.")
+    t = TEXTOS["carpeta_colmena"]
+    assert "repo de Colmena" in t and "tablero" in t and "subagentes" in t
 
 
 def test_abrir_pedido_en_repo_colmena_se_rechaza(apagada_app, tmp_path, monkeypatch):
@@ -1166,7 +1166,7 @@ def _espiar_descartes(app, monkeypatch):
     motivos = []
     original = app.state.pedidos_pestana.descartar
     monkeypatch.setattr(app.state.pedidos_pestana, "descartar",
-                        lambda origen, motivo: (motivos.append(motivo), original(origen, motivo))[1])
+                        lambda origen, motivo, **kw: (motivos.append(motivo), original(origen, motivo, **kw))[1])
     return motivos
 
 
@@ -1650,3 +1650,148 @@ def test_la_marca_tambien_trae_leyo_otra_sesion():
     store.registrar_lectura("s-uno", "Otra")
     it, _ = store.crear("/tmp", "a", None, {"pane_id": "w1:p1", "nombre": "Uno", "session_id": "s-uno"})
     assert next(f for f in store.listar_pendientes() if f["id"] == it["id"])["leyo_otra_sesion"]["nombre"] == "Otra"
+
+
+# --- registro (auditoría) de pedidos ---
+
+
+def test_registro_de_pedido_creado_por_mcp_y_por_marca():
+    s = PedidosPestanaStore()
+    vistos = []
+    s.on_registro(vistos.append)
+    s.crear("/x", "m", None, {"pane_id": "w1:p1", "session_id": "s1", "via": "mcp"})
+    s.crear("/x", "m", None, {"pane_id": "w1:p2", "session_id": "s2"}, accion="cursor")
+    assert [(v["pedido_accion"], v["via"], v["resultado"]) for v in vistos] == [
+        ("abrir", "mcp", "creado"), ("cursor", "marca", "creado")]
+
+
+def test_registro_de_descartes_incluye_el_motivo_y_la_via():
+    s = PedidosPestanaStore()
+    vistos = []
+    s.on_registro(vistos.append)
+    s.descartar({"pane_id": "w1:p1", "session_id": "s1", "via": "mcp"}, "carpeta_no_permitida")
+    assert vistos == [{"pedido_accion": "", "via": "mcp", "pane_id": "w1:p1", "session_id": "s1",
+                       "resultado": "carpeta_no_permitida"}]
+
+
+def test_un_gancho_de_registro_que_falla_no_rompe_el_store():
+    s = PedidosPestanaStore()
+    s.on_registro(lambda e: 1 / 0)
+    item, motivo = s.crear("/x", "m", None, {"pane_id": "w1:p1", "session_id": "s1"})
+    assert item is not None
+
+
+def test_app_audita_pedidos_con_via(apagada_app):
+    c, app, _push, _sender, _wall = apagada_app
+    app.state.pestana_desde_bash(_msg_bash(SID, _json_cmd(carpeta="/tmp", mensaje="arrancá")), "w1:p1")
+    app.state.pedidos_pestana.crear("/tmp", "hola", None, {"pane_id": "w1:p2", "session_id": "s-mcp"}, via="mcp")
+    entradas = c.get("/api/terminales/auditoria").json()["entradas"]
+    filas = [e for e in entradas if e["accion"] == "pedido_pestana"]
+    assert {(e["pedido_accion"], e["via"], e["ok"]) for e in filas} >= {("abrir", "marca", True),
+                                                                        ("abrir", "mcp", True)}
+    assert all("carpeta" not in e and "mensaje" not in e and "nombre" not in e for e in filas)
+
+
+# --- on_final: un intento, una línea ---
+
+O_FINAL = {"pane_id": "w1:p1", "nombre": "Uno", "session_id": SID}
+
+
+def _store_final():
+    reloj, mono, finales = [1_800_000_000.0], [0.0], []
+    store = PedidosPestanaStore(wall=lambda: reloj[0], monotonic=lambda: mono[0])
+    store.on_final(lambda it, o, e, m: finales.append((it and it["id"], e, m)))
+    return store, reloj, mono, finales
+
+
+def test_un_intento_una_linea_abierto():
+    store, _, _, finales = _store_final()
+    item, _ = store.crear("/tmp", "a", None, O_FINAL)
+    store.marcar(item["id"], "abierto")
+    assert finales == [(item["id"], "abierto", None)]
+
+
+def test_un_intento_una_linea_rechazado_con_motivo_de_cierre():
+    store, _, _, finales = _store_final()
+    item, _ = store.crear("/tmp", "a", None, O_FINAL)
+    store.marcar(item["id"], "rechazado", motivo="cierre_cambio")
+    store.descartar(item["origen"], "cierre_cambio", pid=item["id"])
+    assert finales == [(item["id"], "rechazado", "cierre_cambio")]
+
+
+def test_un_intento_una_linea_lanzamiento_con_motivo_previo():
+    store, _, _, finales = _store_final()
+    item, _ = store.crear("/tmp", "a", None, O_FINAL)
+    pid = item["id"]
+    assert store.tomar_para_lanzar(pid)
+    store.descartar(item["origen"], "cierre_protegido", pid=pid)
+    assert finales == []
+    store.soltar_lanzamiento(pid, "rechazado")
+    assert finales == [(pid, "rechazado", "cierre_protegido")]
+
+
+def test_un_intento_una_linea_vencido_por_tiempo():
+    store, reloj, _, finales = _store_final()
+    item, _ = store.crear("/tmp", "a", None, O_FINAL)
+    reloj[0] += VENCE_S + 1
+    store.marcar(item["id"], "abierto")
+    assert finales == [(item["id"], "vencido", "vencido")]
+
+
+def test_un_intento_una_linea_vencido_por_tope():
+    store, _, mono, finales = _store_final()
+    ids = []
+    for n in range(MAX_TOTAL + 2):  # el tope se aplica antes de sumar el nuevo
+        o = {"pane_id": f"w1:p{n}", "nombre": "x", "session_id": f"sid-{n}"}
+        ids.append(store.crear("/tmp", "a", None, o)[0]["id"])
+        mono[0] += 31
+    assert finales == [(ids[0], "vencido", "tope")]
+
+
+def test_fallar_y_cancelar():
+    store, _, mono, finales = _store_final()
+    a, _ = store.crear("/tmp", "a", None, O_FINAL)
+    mono[0] += 31
+    b, _ = store.crear("/tmp", "b", None, O_FINAL)
+    store.fallar(a["id"], "tope_terminales")
+    assert store.cancelar(b["id"]) is True
+    assert finales == [(a["id"], "descartado", "tope_terminales"), (b["id"], "descartado", "cancelado")]
+
+
+def test_descartes_sin_item():
+    store, _, mono, finales = _store_final()
+    store.crear("/tmp", "a", None, O_FINAL)
+    store.crear("/tmp", "b", None, O_FINAL)
+    assert finales == [(None, "descartado", "cooldown")]
+    finales.clear()
+    for _ in range(MAX_POR_SESION):
+        mono[0] += 31
+        store.crear("/tmp", "c", None, O_FINAL)
+    assert finales == [(None, "descartado", "fila_llena")]
+    finales.clear()
+    store.descartar(O_FINAL, "carpeta_no_permitida")
+    assert finales == [(None, "descartado", "carpeta_no_permitida")]
+
+
+def test_al_lote_tardio_no_suma_linea():
+    store, _, _, finales = _store_final()
+    item, _ = store.crear("/tmp", "a", None, O_FINAL)
+    store.marcar(item["id"], "abierto")
+    store.descartar(item["origen"], "cierre_no_hecho", pid=item["id"])
+    assert finales == [(item["id"], "abierto", None)]
+
+
+def test_cortar_emite_cortado():
+    store, _, mono, finales = _store_final()
+    a, _ = store.crear("/tmp", "a", None, O_FINAL)
+    mono[0] += 31
+    b, _ = store.crear("/tmp", "b", None, O_FINAL)
+    assert store.cortar() == 2
+    assert finales == [(a["id"], "cortado", None), (b["id"], "cortado", None)]
+
+
+def test_listener_que_lanza_no_rompe():
+    store = PedidosPestanaStore()
+    store.on_final(lambda *a: 1 / 0)
+    item, _ = store.crear("/tmp", "a", None, O_FINAL)
+    assert store.marcar(item["id"], "abierto")["estado"] == "abierto"

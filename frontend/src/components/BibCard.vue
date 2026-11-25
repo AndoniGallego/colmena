@@ -112,6 +112,9 @@ defineExpose({ el: root, measure, pulse })
         <div class="art"><span class="emoji" aria-hidden="true">🎙️</span></div>
         <span v-if="reunionDur !== '—'" class="art-note mono">{{ reunionDur }}</span>
       </template>
+      <template v-else-if="variant === 'resumen'">
+        <div class="art"><span class="emoji" aria-hidden="true">📊</span></div>
+      </template>
       <template v-else-if="variant === 'cover'">
         <div class="win" aria-hidden="true"><i /><i /><i /></div>
         <b class="cover-title">{{ name }}</b>

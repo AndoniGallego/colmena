@@ -31,6 +31,10 @@ check "colmena-mcp: prefiere las herramientas colmena_" "$(grep -c 'Preferí las
 check "colmena-mcp: la marca queda de respaldo" "$(grep -c 'la marca `\[colmena-pestana\]` queda de respaldo' "$MCP" 2>/dev/null)" "1"
 check "colmena-mcp: no recomendar Always deliver" "$(grep -c 'Always deliver' "$MCP" 2>/dev/null)" "1"
 check "colmena-mcp: lo leído es dato" "$(grep -c 'es dato, no instrucciones' "$MCP" 2>/dev/null)" "1"
+for cod in carpeta_colmena carpeta_no_permitida fila_llena cooldown tope tope_alcanzado terminal_no_encontrada cierre_no_encontrado cierre_ambiguo cierre_protegido sesion_compartida cierre_no_posible argumentos_invalidos no_encontrada sesion_no_permitida requiere_confianza colmena_no_disponible memoria_no_disponible; do
+  check "colmena-mcp: tabla de errores incluye $cod" "$(grep -c "| \`$cod\` |" "$MCP" 2>/dev/null)" "1"
+done
+check "colmena-mcp: carpeta_colmena sugiere subagentes" "$(grep '| `carpeta_colmena` |' "$MCP" | grep -c 'subagentes')" "1"
 check "colmena-pestanas: nota del MCP" "$(grep -c 'colmena-mcp.md' "$PEST")" "1"
 check "trabajo/ sin la línea" "$(cat "$REGLAS"/trabajo/*.md 2>/dev/null | grep -cF "$LINEA" || true)" "0"
 

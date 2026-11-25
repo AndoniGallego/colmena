@@ -157,3 +157,18 @@ def test_tarea_en_el_repo_de_colmena_se_descarta():
 
     ps, store, _, _ = _armar(Path(config.REPO_ROOT))
     assert ps.tarea("SITE-1", str(config.REPO_ROOT), "", PANE, SID, NOMBRE)[1] == "carpeta_colmena"
+
+
+def test_carpeta_no_permitida_en_pestana_tambien_se_descarta(tmp_path):
+    ps, store, _, _ = _armar(tmp_path)
+    ps.abrir({"carpeta": str(tmp_path), "pestanas": [{"nombre": "a", "tipo": "terminal", "carpeta": "/no/existe"}]},
+             PANE, SID, NOMBRE)
+    assert [d["motivo"] for d in store.descartes_de(SID)] == ["carpeta_no_permitida"]
+
+
+def test_marca_carpeta_no_permitida_se_descarta_con_origen(tmp_path):
+    ps, store, _, _ = _armar(tmp_path)
+    visto = []
+    store.on_descarte(lambda origen, motivo: visto.append((origen["session_id"], motivo)))
+    ps.abrir({"carpeta": "/no/existe"}, PANE, SID, NOMBRE)
+    assert visto == [(SID, "carpeta_no_permitida")]

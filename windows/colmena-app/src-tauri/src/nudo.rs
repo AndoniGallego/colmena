@@ -22,13 +22,14 @@ use colmena_nucleo::nudo::zonas::{
 };
 use colmena_nucleo::nudo::{ERR_APAGADO, ERR_FALLO_PC, ERR_FOTO_VIEJA, ERR_SIN_VENTANA};
 use colmena_nucleo::posicion::Rect;
+use colmena_nucleo::registro::{Nivel, Origen};
 use colmena_nucleo::validar::es_url_local;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Monitor, State, WebviewWindow};
 
 use crate::captura::capturar_bgra;
 use crate::uia::HiloUia;
-use crate::{exige_ventana, ventanas, Estado};
+use crate::{exige_ventana, registro, ventanas, Estado};
 
 // Los eventos no llevan datos: son solo el aviso de "cambió". Las páginas piden el estado
 // con `nudo_pagina_estado`, que solo permiten las capabilities locales (un emit del notch remoto no inyecta nada).
@@ -310,6 +311,7 @@ pub fn actualizar_se_ve(app: &AppHandle, se_ve: bool) {
 pub fn nudo_listo(window: WebviewWindow, estado: State<'_, Estado>) -> Result<(), String> {
     exige_local(&window, &["nudo-globo"])?;
     responder(&estado, "listo");
+    registro::anotar(Nivel::Info, Origen::Nudo, "nudo listo");
     Ok(())
 }
 
@@ -502,6 +504,20 @@ async fn en_hilo<T: Send + 'static>(
         .await
         .map_err(|_| ERR_FALLO_PC.to_string())?
         .map_err(|e| codigo_de_error(&e))
+}
+
+fn origen_de(guia: Option<bool>) -> &'static str {
+    if guia == Some(true) { "guia" } else { "nudo" }
+}
+
+/// Anota solo el código del error (nunca su texto) y devuelve el resultado sin tocarlo.
+fn anotado<T>(comando: &str, origen: &str, r: Result<T, String>) -> Result<T, String> {
+    if let Err(e) = &r {
+        let codigo = codigo_de_error(e);
+        registro::anotar(Nivel::Aviso, Origen::Nudo, &format!("{comando}: {codigo}"));
+        registro::anotar_evento(origen, "error", false, Some(&codigo), None);
+    }
+    r
 }
 
 fn hilo(app: &AppHandle) -> Result<&HiloUia, String> {
@@ -850,8 +866,12 @@ pub async fn nudo_controles(
     estado: State<'_, Estado>,
     app: AppHandle,
 ) -> Result<ListaControles, String> {
-    exige_nudo(&window, &estado, &app)?;
-    en_hilo(move || controles(&app)).await
+    let r: Result<ListaControles, String> = async {
+        exige_nudo(&window, &estado, &app)?;
+        en_hilo(move || controles(&app)).await
+    }
+    .await;
+    anotado("nudo_controles", "nudo", r)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -867,12 +887,16 @@ pub async fn nudo_senalar(
     esperar: Option<u32>,
     guia: Option<bool>,
 ) -> Result<String, String> {
-    exige_nudo(&window, &estado, &app)?;
-    let texto = validar_texto(&texto, TEXTO_MAX)?;
-    let sesion = validar_texto(&sesion, SESION_MAX)?;
-    let esperar = validar_espera(esperar)?;
-    let guia = guia.unwrap_or(false);
-    en_hilo(move || senalar(&app, foto, n, texto, sesion, esperar, guia)).await
+    let r: Result<String, String> = async {
+        exige_nudo(&window, &estado, &app)?;
+        let texto = validar_texto(&texto, TEXTO_MAX)?;
+        let sesion = validar_texto(&sesion, SESION_MAX)?;
+        let esperar = validar_espera(esperar)?;
+        let guia = guia.unwrap_or(false);
+        en_hilo(move || senalar(&app, foto, n, texto, sesion, esperar, guia)).await
+    }
+    .await;
+    anotado("nudo_senalar", origen_de(guia), r)
 }
 
 #[tauri::command]
@@ -885,11 +909,15 @@ pub async fn nudo_marcar(
     sesion: String,
     guia: Option<bool>,
 ) -> Result<String, String> {
-    exige_nudo(&window, &estado, &app)?;
-    let marcas = validar_marcas(marcas)?;
-    let guia = guia.unwrap_or(false);
-    let sesion = validar_texto(&sesion, SESION_MAX)?;
-    en_hilo(move || marcar(&app, foto, marcas, sesion, guia)).await
+    let r: Result<String, String> = async {
+        exige_nudo(&window, &estado, &app)?;
+        let marcas = validar_marcas(marcas)?;
+        let guia = guia.unwrap_or(false);
+        let sesion = validar_texto(&sesion, SESION_MAX)?;
+        en_hilo(move || marcar(&app, foto, marcas, sesion, guia)).await
+    }
+    .await;
+    anotado("nudo_marcar", origen_de(guia), r)
 }
 
 #[tauri::command]
@@ -898,8 +926,12 @@ pub async fn nudo_mostrar(
     estado: State<'_, Estado>,
     app: AppHandle,
 ) -> Result<Mostrar, String> {
-    exige_nudo(&window, &estado, &app)?;
-    en_hilo(move || mostrame(&app)).await
+    let r: Result<Mostrar, String> = async {
+        exige_nudo(&window, &estado, &app)?;
+        en_hilo(move || mostrame(&app)).await
+    }
+    .await;
+    anotado("nudo_mostrar", "mostrar", r)
 }
 
 #[tauri::command]
@@ -913,11 +945,15 @@ pub async fn nudo_senalar_zona(
     sesion: String,
     guia: Option<bool>,
 ) -> Result<String, String> {
-    exige_nudo(&window, &estado, &app)?;
-    let texto = validar_texto(&texto, TEXTO_MAX)?;
-    let sesion = validar_texto(&sesion, SESION_MAX)?;
-    let guia = guia.unwrap_or(false);
-    en_hilo(move || senalar_zona(&app, foto, zona, texto, sesion, guia)).await
+    let r: Result<String, String> = async {
+        exige_nudo(&window, &estado, &app)?;
+        let texto = validar_texto(&texto, TEXTO_MAX)?;
+        let sesion = validar_texto(&sesion, SESION_MAX)?;
+        let guia = guia.unwrap_or(false);
+        en_hilo(move || senalar_zona(&app, foto, zona, texto, sesion, guia)).await
+    }
+    .await;
+    anotado("nudo_senalar_zona", origen_de(guia), r)
 }
 
 #[tauri::command]
@@ -930,10 +966,14 @@ pub async fn nudo_marcar_zonas(
     sesion: String,
     guia: Option<bool>,
 ) -> Result<String, String> {
-    exige_nudo(&window, &estado, &app)?;
-    let sesion = validar_texto(&sesion, SESION_MAX)?;
-    let guia = guia.unwrap_or(false);
-    en_hilo(move || marcar_zonas(&app, foto, zonas, sesion, guia)).await
+    let r: Result<String, String> = async {
+        exige_nudo(&window, &estado, &app)?;
+        let sesion = validar_texto(&sesion, SESION_MAX)?;
+        let guia = guia.unwrap_or(false);
+        en_hilo(move || marcar_zonas(&app, foto, zonas, sesion, guia)).await
+    }
+    .await;
+    anotado("nudo_marcar_zonas", origen_de(guia), r)
 }
 
 #[tauri::command]
@@ -976,7 +1016,7 @@ pub fn nudo_visibilidad(
     }
     actualizar_se_ve(&app, if resultado.is_ok() { se_ve } else { antes });
     crate::bandeja::sincronizar_nudo(&app);
-    resultado
+    anotado("nudo_visibilidad", "nudo", resultado)
 }
 
 /// Aplica la afinidad primero y guarda solo si salió bien: la config nunca dice "no se ve" sin que sea cierto.

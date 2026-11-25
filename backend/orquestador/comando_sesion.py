@@ -21,6 +21,7 @@ from .jsonl_incremental import read_new_lines
 from .legado import LEGACY_FENCE
 from .opciones import lenient_json
 from .terminales import clean, redactar
+from .telemetria import proyecto_de
 from .terminales_acciones import COMANDO_LIMITS, MAX_COMMAND, validar_comando
 from .traspaso import TraspasoError
 
@@ -202,7 +203,8 @@ def leer_pedido(path: Path, mid: str, indice: int) -> dict:
 class ComandoSesionService:
     def __init__(self, board: Callable[[], Awaitable[Optional[dict]]], digests, enchufe, locks, audit, limit,
                  enabled: Callable[[], bool], notify=None, protected_panes: Callable[[], set] = lambda: set(),
-                 sleep: Callable[[float], Awaitable] = asyncio.sleep, protected_workspaces: Optional[list] = None):
+                 sleep: Callable[[float], Awaitable] = asyncio.sleep, protected_workspaces: Optional[list] = None,
+                 anotar: Callable = lambda ev, **c: None):
         self.board = board
         self.digests = digests
         self.enchufe = enchufe
@@ -213,6 +215,7 @@ class ComandoSesionService:
         self.notify = notify
         self.protected_panes = protected_panes
         self.sleep = sleep
+        self.anotar = anotar
         self.protected = {w.strip().casefold() for w in (protected_workspaces or []) if isinstance(w, str)}
         self._usados: OrderedDict = OrderedDict()
         self._inflight: set = set()
@@ -225,6 +228,16 @@ class ComandoSesionService:
             "session_id": sid, "pane_id": pane, "cwd": clean(cwd, 200),
             "comando": redactar(comando)[:MAX_COMMAND], "ok": ok, "error": redactar(error)[:200],
         })
+
+    def _anotar(self, info: dict, resultado: str, detail: Optional[str] = None) -> None:
+        try:
+            codigo = None
+            if detail is not None:
+                from .telemetria_eventos import codigo_traspaso  # tardío: telemetria_eventos importa este módulo
+                codigo = codigo_traspaso(detail)
+            self.anotar("comando_sesion", resultado=resultado, codigo=codigo, proyecto=proyecto_de(info["cwd"]))
+        except Exception as exc:
+            log.warning("telemetría de comando de sesión falló: %s", type(exc).__name__)
 
     def _usado(self, key: str) -> None:
         self._usados[key] = True
@@ -252,8 +265,10 @@ class ComandoSesionService:
             if info["tocado"]:
                 self._usado(key)
             self._registrar(ctx, sid, info["pane"], info["cwd"], info["comando"], False, exc.detail)
+            self._anotar(info, "fallo", exc.detail)
             raise
         self._registrar(ctx, sid, info["pane"], info["cwd"], info["comando"], True)
+        self._anotar(info, "corrido")
         await self._avisar(info, ctx)
         return result
 

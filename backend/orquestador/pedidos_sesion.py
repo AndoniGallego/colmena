@@ -132,10 +132,12 @@ class PedidosSesion:
 
     def abrir(self, payload: dict, pane: str, sid: str, nombre: str, via: Optional[str] = None,
               **extra: Any) -> Resultado:
+        origen_pedido = self._origen(pane, sid, nombre, via)
         try:
             carpeta = validar_carpeta(payload["carpeta"], self.cfg.plan_cwds)
         except TraspasoError:
             log.info("colmena-pestana carpeta no permitida: %s", pane)
+            self.store.descartar(origen_pedido, "carpeta_no_permitida")
             return None, "carpeta_no_permitida"
         pestanas = payload.get("pestanas")
         carpetas = [carpeta]
@@ -145,9 +147,9 @@ class PedidosSesion:
                     carpetas.append(validar_carpeta(p["carpeta"], self.cfg.plan_cwds))
                 except TraspasoError:
                     log.info("colmena-pestana carpeta no permitida (pestaña): %s", pane)
+                    self.store.descartar(origen_pedido, "carpeta_no_permitida")
                     return None, "carpeta_no_permitida"
 
-        origen_pedido = self._origen(pane, sid, nombre, via)
         if any(es_repo_colmena(c) for c in carpetas):
             log.info("colmena-pestana carpeta de Colmena: %s", pane)
             self.store.descartar(origen_pedido, "carpeta_colmena")
@@ -180,12 +182,13 @@ class PedidosSesion:
 
     def cursor(self, payload: dict, pane: str, sid: str, nombre: str, via: Optional[str] = None,
                **extra: Any) -> Resultado:
+        origen_pedido = self._origen(pane, sid, nombre, via)
         try:
             carpeta = validar_carpeta(payload["carpeta"], self.cfg.plan_cwds)
         except TraspasoError:
             log.info("colmena-pestana cursor carpeta no permitida: %s", pane)
+            self.store.descartar(origen_pedido, "carpeta_no_permitida")
             return None, "carpeta_no_permitida"
-        origen_pedido = self._origen(pane, sid, nombre, via)
         if es_repo_colmena(carpeta):
             log.info("colmena-pestana cursor carpeta de Colmena: %s", pane)
             self.store.descartar(origen_pedido, "carpeta_colmena")
@@ -278,11 +281,12 @@ class PedidosSesion:
 
         if not isinstance(ticket, str) or not _TICKET_RE.fullmatch(ticket.strip()):
             return None, "ticket_invalido"
+        origen = self._origen(pane, sid, nombre, via)
         try:
             real = validar_carpeta(carpeta, self.cfg.plan_cwds)
         except TraspasoError:
+            self.store.descartar(origen, "carpeta_no_permitida")
             return None, "carpeta_no_permitida"
-        origen = self._origen(pane, sid, nombre, via)
         if es_repo_colmena(real):
             self.store.descartar(origen, "carpeta_colmena")
             return None, "carpeta_colmena"

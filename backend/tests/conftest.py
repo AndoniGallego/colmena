@@ -200,6 +200,7 @@ def authed(client):
 def _isolated_home(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("xdg")))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path_factory.mktemp("xdg-data")))
     monkeypatch.setenv("ORQ_NO_AUTOINDEX", "1")
     monkeypatch.setenv("ORQ_DATA_DIR", str(tmp_path_factory.mktemp("datos-vacios")))
     # Los defaults de las carpetas internas se calculan al importar con el HOME real: el arranque de la app

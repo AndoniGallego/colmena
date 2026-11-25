@@ -257,7 +257,7 @@ describe('tokens CSS', () => {
     expect(ui).toMatch(/\.icon-swap-leave-active/)
     expect(ui).toMatch(/\.icon-swap-enter-from/)
     expect(ui).toMatch(/scale:\s*0\.25/)
-    for (const f of ['TopBar', 'LoginScreen', 'DiagramaCard', 'MrDetail']) {
+    for (const f of ['LoginScreen', 'DiagramaCard', 'MrDetail']) {
       const t = Object.entries(rawVue).find(([k]) => k.endsWith(`/${f}.vue`))![1]
       expect(t, f).toMatch(/<Transition name="icon-swap" mode="out-in"/)
     }

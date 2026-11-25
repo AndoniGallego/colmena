@@ -528,3 +528,39 @@ def test_cerrar_igual_no_fuerza_una_sesion_que_esta_trabajando_si_no_vencio(m):
     _mut_snap(m, lambda s: s["agents"][-1].__setitem__("agent_status", "working"))  # retomó antes de que llegara el aviso del tablero
     run(m.svc.accion("cierre-0001", "cerrar_igual"))
     assert not m.closes() and lote.targets["t1"].estado == "guardando"
+
+
+def test_guardado_avisa_al_escribir_con_el_pane(tmp_path):
+    llamadas = []
+    m = Mundo(tmp_path)
+    m.svc.al_escribir = llamadas.append
+    run(m.confirmar())
+    assert llamadas == ["w1:p2"]
+
+
+def test_guardado_que_falla_igual_marcaba_antes(tmp_path):
+    llamadas = []
+    m = Mundo(tmp_path)
+    m.svc.al_escribir = llamadas.append
+    m.t.mandar_prompt = _falla_prompt
+    run(m.confirmar())
+    assert llamadas == ["w1:p2"]
+
+
+async def _falla_prompt(*a, **k):
+    from orquestador.enchufe import TerminalesError
+    raise TerminalesError("caído")
+
+
+def test_guardado_marca_el_pane_antes_de_mandar_el_prompt(tmp_path):
+    orden = []
+    m = Mundo(tmp_path)
+    m.svc.al_escribir = orden.append
+    original = m.t.mandar_prompt
+
+    async def espiado(*a, **k):
+        orden.append("mandar")
+        return await original(*a, **k)
+    m.t.mandar_prompt = espiado
+    run(m.confirmar())
+    assert orden == ["w1:p2", "mandar"]

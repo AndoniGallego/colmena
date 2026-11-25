@@ -154,7 +154,9 @@ class TraspasoService:
     def __init__(self, enchufe, state, handoffs: Path, locks: Optional[PaneLocks] = None,
                  protected_workspaces=(),
                  protected_panes: Callable[[], set] = lambda: set(),
-                 emit: Callable[[str, dict], None] = lambda e, d: None):
+                 emit: Callable[[str, dict], None] = lambda e, d: None,
+                 al_escribir: Callable[[str], None] = lambda pane: None):
+        self.al_escribir = al_escribir
         self.enchufe = enchufe
         self.emit = emit
         self.state = state
@@ -232,6 +234,10 @@ class TraspasoService:
             outcome["tab_id"] = creado.linea_id
             outcome["agent_name"] = plan["agent_name"]
             await self.enchufe.arrancar_claude(pane, plan["agent_name"])
+        try:
+            self.al_escribir(pane)
+        except Exception:
+            log.warning("al_escribir falló", exc_info=True)
         await self.enchufe.mandar_prompt(pane, message)
         outcome["pane_id"] = pane
         return outcome

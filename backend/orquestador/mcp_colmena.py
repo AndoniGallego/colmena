@@ -36,8 +36,11 @@ def _str(maximo: int, minimo: int = 1, desc: str = "") -> dict:
     return out
 
 
-def _int(minimo: int, maximo: int, defecto: int) -> dict:
-    return {"type": "integer", "minimum": minimo, "maximum": maximo, "default": defecto}
+def _int(minimo: int, maximo: int, defecto: int, desc: str = "") -> dict:
+    out: dict = {"type": "integer", "minimum": minimo, "maximum": maximo, "default": defecto}
+    if desc:
+        out["description"] = desc
+    return out
 
 
 def _obj(props: dict | None = None, requeridos: tuple = ()) -> dict:
@@ -47,37 +50,79 @@ def _obj(props: dict | None = None, requeridos: tuple = ()) -> dict:
     return out
 
 
-_PESTANA = _obj({"nombre": _str(60), "tipo": {"type": "string", "enum": ["claude", "terminal"]},
-                 "mensaje": _str(3900), "carpeta": _str(4096), "comando": _str(500)}, ("nombre", "tipo"))
+_CARPETA = "Ruta absoluta de una carpeta que Colmena permite (no el repo de Colmena)"
+_UNO = "; usá exactamente uno de sesion, pestana, tarjeta o terminal"
+
+_PESTANA = _obj({
+    "nombre": _str(60, desc="Etiqueta corta de la pestaña"),
+    "tipo": {"type": "string", "enum": ["claude", "terminal"],
+             "description": "claude abre una sesión de Claude (necesita mensaje); terminal abre una consola común"},
+    "mensaje": _str(3900, desc="Brief para la sesión nueva; obligatorio si tipo es claude"),
+    "carpeta": _str(4096, desc="Ruta absoluta de esta pestaña; si falta usa la carpeta del pedido"),
+    "comando": _str(500, desc="Comando que queda escrito en la terminal sin ejecutarse; solo tipo terminal"),
+}, ("nombre", "tipo"))
 
 # (nombre, op del canal, es acción, descripción, inputSchema)
 HERRAMIENTAS: tuple[tuple[str, str, bool, str, dict], ...] = (
-    ("colmena_sesiones", "sesiones", False, "Lista las sesiones de Colmena (sin el copiloto ni la guía).", _obj()),
+    ("colmena_sesiones", "sesiones", False,
+     "Lista las sesiones de Colmena (sin el copiloto ni la guía). Devuelve id, nombre, estado y carpeta de cada una.",
+     _obj()),
     ("colmena_leer_sesion", "leer_sesion", False,
-     "Lee los últimos turnos de otra sesión, en solo lectura. " + _DATO,
-     _obj({"sesion": _str(64, desc="id o pane de la sesión"), "turnos": _int(1, 10, 5),
-           "chars": _int(1, 4000, 2000)}, ("sesion",))),
-    ("colmena_pedidos", "pedidos", False, "Tus pedidos a Colmena pendientes y recientes.", _obj()),
-    ("colmena_buscar_memoria", "buscar_memoria", False, "Busca en la memoria de trabajo de Ando. " + _DATO,
-     _obj({"consulta": _str(200), "limite": _int(1, 10, 5)}, ("consulta",))),
-    ("colmena_abrir", "abrir", True, "Pide abrir una pestaña, o una tarjeta con pestañas. " + _PIDE,
-     _obj({"carpeta": _str(4096), "mensaje": _str(3900), "nombre": _str(60), "tarjeta": _str(60),
-           "pestanas": {"type": "array", "minItems": 1, "maxItems": 6, "items": _PESTANA}}, ("carpeta",))),
+     "Lee los últimos turnos de otra sesión, en solo lectura. Devuelve los turnos recientes. " + _DATO,
+     _obj({"sesion": _str(64, desc="id o pane de la sesión"),
+           "turnos": _int(1, 10, 5, "Cuántos turnos recientes leer"),
+           "chars": _int(1, 4000, 2000, "Máximo de caracteres por turno")}, ("sesion",))),
+    ("colmena_pedidos", "pedidos", False,
+     "Tus pedidos a Colmena pendientes y recientes. Devuelve cada pedido con su estado.", _obj()),
+    ("colmena_buscar_memoria", "buscar_memoria", False,
+     "Busca en la memoria de trabajo de Ando. Devuelve las coincidencias. " + _DATO,
+     _obj({"consulta": _str(200, desc="Texto a buscar"),
+           "limite": _int(1, 10, 5, "Máximo de resultados")}, ("consulta",))),
+    ("colmena_abrir", "abrir", True,
+     "Usala para abrir una pestaña de Claude o una tarjeta con varias pestañas, en vez de la marca "
+     "[colmena-pestana]. La carpeta es una ruta absoluta que Colmena permite; en el repo de Colmena se rechaza "
+     "con carpeta_colmena. Devuelve pedido_id y estado pendiente. " + _PIDE,
+     _obj({"carpeta": _str(4096, desc=_CARPETA),
+           "mensaje": _str(3900, desc="Brief para la sesión nueva (pestaña única)"),
+           "nombre": _str(60, desc="Etiqueta corta de la pestaña"),
+           "tarjeta": _str(60, desc="Nombre de la tarjeta nueva; si falta va al grupo de la sesión que pide"),
+           "pestanas": {"type": "array", "minItems": 1, "maxItems": 6, "items": _PESTANA,
+                        "description": "De 1 a 6 pestañas (Claude o terminal) para una tarjeta"}},
+          ("carpeta",))),
     ("colmena_cerrar", "cerrar", True,
-     "Pide cerrar una sesión, pestaña, tarjeta o terminal (exactamente uno). " + _PIDE,
-     _obj({"sesion": _str(64), "pestana": _str(64), "tarjeta": _str(64), "terminal": _str(64)})),
-    ("colmena_cursor", "cursor", True, "Pide un trabajador Cursor para un cambio mecánico. " + _PIDE,
-     _obj({"carpeta": _str(4096), "nombre": _str(60), "pedido": _str(4000), "modelo": _str(80)},
+     "Pide cerrar una sesión, pestaña, tarjeta o terminal (exactamente uno). Usala solo si el usuario te pida "
+     "explícitamente cerrar eso en esta conversación. Devuelve pedido_id y estado pendiente. " + _PIDE,
+     _obj({"sesion": _str(64, desc="id de una sesión de Claude" + _UNO),
+           "pestana": _str(64, desc="id o nombre de una pestaña" + _UNO),
+           "tarjeta": _str(64, desc="id o nombre de una tarjeta" + _UNO),
+           "terminal": _str(64, desc="id de panel o nombre de una terminal común" + _UNO)})),
+    ("colmena_cursor", "cursor", True,
+     "Pide un trabajador Cursor para un cambio mecánico y bien especificado. Devuelve pedido_id y estado "
+     "pendiente. " + _PIDE,
+     _obj({"carpeta": _str(4096, desc=_CARPETA + "; Cursor parte del último commit"),
+           "nombre": _str(60, desc="Etiqueta corta del trabajo"),
+           "pedido": _str(4000, desc="Qué hacer, con archivos, criterio de listo y qué no tocar"),
+           "modelo": _str(80, desc="Modelo de Cursor (opcional)")},
           ("carpeta", "nombre", "pedido"))),
-    ("colmena_mensaje", "mensaje", True, "Pide mandarle un mensaje a otra sesión. Ando lo aprueba siempre.",
-     _obj({"sesion": _str(64), "texto": _str(3900)}, ("sesion", "texto"))),
-    ("colmena_programar", "programar", True, "Pide programar un mensaje de una sola vez. " + _PIDE,
-     _obj({"texto": _str(3900), "cuando": _str(40, desc="Hora HH:MM: la próxima vez que llegue esa hora"), "sesion": _str(64)},
+    ("colmena_mensaje", "mensaje", True,
+     "Pide mandarle un mensaje a otra sesión. Devuelve pedido_id y estado pendiente. Ando lo aprueba siempre.",
+     _obj({"sesion": _str(64, desc="id o pane de la sesión destino"),
+           "texto": _str(3900, desc="Texto del mensaje")}, ("sesion", "texto"))),
+    ("colmena_programar", "programar", True,
+     "Pide programar un mensaje de una sola vez. Devuelve pedido_id y estado pendiente. " + _PIDE,
+     _obj({"texto": _str(3900, desc="Texto del mensaje programado"),
+           "cuando": _str(40, desc="Hora HH:MM: la próxima vez que llegue esa hora"),
+           "sesion": _str(64, desc="id o pane de la sesión destino; si falta, la tuya")},
           ("texto", "cuando"))),
-    ("colmena_tarea_ticket", "tarea_ticket", True, "Pide crear una tarea para un ticket. " + _PIDE,
-     _obj({"ticket": _str(40), "carpeta": _str(4096), "nota": _str(2000)}, ("ticket", "carpeta"))),
-    ("colmena_estado_pedido", "estado_pedido", False, "Estado de un pedido tuyo (respaldo si no hay Tasks).",
-     _obj({"pedido_id": _str(64)}, ("pedido_id",))),
+    ("colmena_tarea_ticket", "tarea_ticket", True,
+     "Pide crear una tarea para un ticket (copia del repo con rama propia). Devuelve pedido_id y estado "
+     "pendiente. " + _PIDE,
+     _obj({"ticket": _str(40, desc="Id del ticket, por ejemplo ABC-123"),
+           "carpeta": _str(4096, desc=_CARPETA),
+           "nota": _str(2000, desc="Nota para la sesión de la tarea (opcional)")}, ("ticket", "carpeta"))),
+    ("colmena_estado_pedido", "estado_pedido", False,
+     "Estado de un pedido tuyo (respaldo si no hay Tasks). Devuelve estado y detalle.",
+     _obj({"pedido_id": _str(64, desc="El pedido_id que devolvió la acción")}, ("pedido_id",))),
 )
 _POR_NOMBRE = {h[0]: h for h in HERRAMIENTAS}
 
@@ -227,6 +272,7 @@ class ServidorStdio:
         out = {"name": nombre, "description": desc, "inputSchema": esquema,
                "annotations": {"readOnlyHint": not accion, "openWorldHint": False}}
         if accion:
+            out["annotations"]["destructiveHint"] = nombre == "colmena_cerrar"
             out["execution"] = {"taskSupport": "optional"}
         return out
 

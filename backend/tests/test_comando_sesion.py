@@ -538,3 +538,45 @@ def test_transcript_expone_el_cwd_real_del_mensaje(authed, projects):
     items = authed.get(f"/api/sessions/{SID}/transcript").json()["items"]
     last = [i for i in items if i.get("kind") == "claude"][-1]
     assert last["ccwd"] == "/srv/app"
+
+
+# ---------- telemetría ----------
+
+def anotadas_de(authed):
+    anotadas = []
+    authed.app.state.comando_sesion.anotar = lambda ev, **c: anotadas.append((ev, c))
+    return anotadas
+
+
+def test_correr_ok_anota_corrido(authed, projects, enchufe, on):
+    anotadas = anotadas_de(authed)
+    pedir(projects)
+    assert post(authed).status_code == 200
+    assert anotadas == [("comando_sesion", {"resultado": "corrido", "codigo": None, "proyecto": "tmp"})]
+
+
+def test_correr_trabajando_anota_fallo(authed, projects, enchufe, on):
+    anotadas = anotadas_de(authed)
+    pedir(projects)
+    aplicar_snapshot(enchufe, make_snapshot("working"))
+    assert post(authed).status_code == 409
+    assert anotadas == [("comando_sesion", {"resultado": "fallo", "codigo": "trabajando", "proyecto": "tmp"})]
+    assert CMD not in json.dumps(anotadas)
+
+
+def test_anotar_que_lanza_no_cambia_la_respuesta(authed, projects, enchufe, on):
+    authed.app.state.comando_sesion.anotar = lambda *a, **k: 1 / 0
+    pedir(projects)
+    assert post(authed).status_code == 200
+    pedir(projects, mid="bbbbbbbb-1111-2222-3333-444444444444")
+    aplicar_snapshot(enchufe, make_snapshot("working"))
+    assert post(authed, mid="bbbbbbbb-1111-2222-3333-444444444444").status_code == 409
+
+
+def test_codigo_traspaso_que_lanza_no_cambia_el_error(authed, projects, enchufe, on, monkeypatch):
+    from orquestador import telemetria_eventos
+    monkeypatch.setattr(telemetria_eventos, "codigo_traspaso", lambda d: 1 / 0)
+    pedir(projects)
+    aplicar_snapshot(enchufe, make_snapshot("working"))
+    r = post(authed)
+    assert r.status_code == 409 and r.json()["detail"] == "La sesión está trabajando; probá cuando termine"

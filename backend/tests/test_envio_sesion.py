@@ -63,3 +63,11 @@ def test_agente_por_sesion_busca_en_el_tablero():
     board = {"workspaces": [{"tabs": [{"agents": [{"session_id": "s1"}, {"session_id": "s2", "x": 1}]}]}]}
     assert agente_por_sesion(board, "s2") == {"session_id": "s2", "x": 1}
     assert agente_por_sesion(board, "nada") is None and agente_por_sesion(None, "s1") is None
+
+
+def test_envio_avisa_al_escribir(tmp_path):
+    t = FakeTerminales.desde_snapshot(make_snapshot())
+    llamadas = []
+    s = MensajeService(t, StateStore(tmp_path), al_escribir=llamadas.append)
+    asyncio.run(mandar(s, pane_id="w1:p1", texto="hola", origen="mr-job", ident="abcdefgh"))
+    assert llamadas == ["w1:p1"]

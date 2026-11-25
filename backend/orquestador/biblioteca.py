@@ -13,7 +13,7 @@ import threading
 import time
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -25,7 +25,7 @@ from .digest import SESSION_ID
 
 log = logging.getLogger("orquestador.biblioteca")
 
-KINDS = ("html", "image", "svg", "gif", "pdf", "video", "text", "diagrama", "pruebas", "remoto", "reunion", "otro")
+KINDS = ("html", "image", "svg", "gif", "pdf", "video", "text", "diagrama", "pruebas", "remoto", "reunion", "resumen", "otro")
 MB = 1024 * 1024
 MAX_BY_KIND = {"html": 5 * MB, "image": 25 * MB, "gif": 25 * MB, "svg": 2 * MB, "pdf": 50 * MB,
                "video": 200 * MB, "text": 1 * MB}
@@ -975,7 +975,7 @@ class Library:
         return {"kind": kind, "source": source, "session_id": ctx["session_id"], "project": ctx["project"],
                 "subagent": ctx["subagent"], "tool_use_id": tool_use_id, "ts": ts, "title": "", "description": "",
                 "caption": "", "path": "", "exists": False, "size": 0, "mime": "", "url": "", "version": 0,
-                "versions": [], "assets": {}, "diagrama_raw": None, "pruebas_raw": None, "reunion_raw": None, "allowed": True, "motivo": "", "copia": False,
+                "versions": [], "assets": {}, "diagrama_raw": None, "pruebas_raw": None, "reunion_raw": None, "resumen_raw": None, "allowed": True, "motivo": "", "copia": False,
                 "keys": []}
 
     def _put(self, ctx: dict, item: dict, is_new: bool) -> None:
@@ -1571,12 +1571,50 @@ class Library:
                 self._register(item)
             self._fresh = set()
             self.save()
+        self._avisar([ident])
+        return ident
+
+    def _avisar(self, ids: list) -> None:
         for fn in list(self.listeners):
             try:
-                fn([ident])
+                fn(ids)
             except Exception as exc:
                 log.warning("listener de la biblioteca falló: %s", exc)
+
+    def agregar_resumen(self, datos: dict) -> str:
+        semana = str(datos.get("semana") or "")
+        if not semana:
+            raise ValueError("el resumen no trae semana")
+        desde = date.fromisoformat(str(datos["desde"]))
+        hasta = date.fromisoformat(str(datos["hasta"]))
+        generado = datos.get("generado") if isinstance(datos.get("generado"), (int, float)) else time.time()
+        ident = item_id(f"resumen-{semana}", semana, 0)
+        raw = json.dumps(datos, ensure_ascii=False)
+        item = {"kind": "resumen", "source": "resumen", "session_id": f"resumen-{semana}", "project": "Colmena",
+                "subagent": False, "tool_use_id": "", "ts": self._ts_iso(generado),
+                "title": clip(f"Semana del {desde:%d/%m} al {hasta:%d/%m}", TITLE_CHARS), "description": "",
+                "caption": "", "path": "", "exists": True, "size": len(raw.encode()), "mime": "application/json",
+                "url": "", "version": 0, "versions": [], "assets": {}, "diagrama_raw": None, "pruebas_raw": None,
+                "reunion_raw": None, "resumen_raw": raw, "allowed": True, "motivo": "", "copia": False, "keys": [],
+                "id": ident}
+        with self._index_lock:
+            with self._lock:
+                self.quitados.discard(ident)
+                self.items[ident] = item
+                self._register(item)
+            self.save()
+        self._avisar([ident])
         return ident
+
+    @staticmethod
+    def _ts_iso(epoch: float) -> str:
+        return datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+    def quitar_resumenes_viejos(self, ahora: Optional[datetime] = None, dias: int = 90) -> int:
+        limite = self._ts_iso(((ahora or datetime.now(timezone.utc)) - timedelta(days=dias)).timestamp())
+        with self._lock:
+            viejos = [i["id"] for i in self.items.values() if i["kind"] == "resumen" and i["ts"] < limite]
+        return self.quitar(viejos) if viejos else 0
 
     def charla_de(self, ident: str) -> Optional[str]:
         item = self.items.get(ident)
@@ -1615,7 +1653,7 @@ class Library:
         return res
 
     def view_of(self, item: dict, with_src: bool = True) -> dict:
-        exists, size = (self._stat_of(item["path"]) if item["path"] else (item["kind"] in ("diagrama", "pruebas", "reunion"), item["size"]))
+        exists, size = (self._stat_of(item["path"]) if item["path"] else (item["kind"] in ("diagrama", "pruebas", "reunion", "resumen"), item["size"]))
         copia = bool(item.get("copia")) and self._blob_file(item) is not None
         kind = item["kind"]
         servible = (kind in SERVED_KINDS or kind == "text") and item["allowed"] and (exists or copia)
@@ -1644,7 +1682,7 @@ class Library:
                "mime": item["mime"], "url": item["url"], "version": item["version"],
                "versions": [{"version": v["version"], "ts": v["ts"]} for v in item["versions"]],
                "diagrama_raw": item.get("diagrama_raw"), "pruebas_raw": item.get("pruebas_raw"),
-               "reunion_raw": item.get("reunion_raw"), "tiene_charla": kind == "reunion" and copia,
+               "reunion_raw": item.get("reunion_raw"), "resumen_raw": item.get("resumen_raw"), "tiene_charla": kind == "reunion" and copia,
                "evidencias": dict(item.get("evidencias") or {}), "src": ""}
         if with_src and servible and kind in SERVED_KINDS:
             out["src"] = self.src_for(item["id"])

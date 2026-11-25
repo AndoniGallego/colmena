@@ -787,7 +787,36 @@ export class ApiError extends Error {
   }
 }
 
-export type LibKind = 'html' | 'image' | 'svg' | 'gif' | 'pdf' | 'video' | 'text' | 'diagrama' | 'pruebas' | 'reunion' | 'remoto' | 'otro'
+export type DecisionPropuesta = 'hacer' | 'ignorar' | 'mas_adelante'
+
+/** Candidata del resumen semanal; todo salvo `id` y `texto` puede faltar. */
+export interface Propuesta {
+  id: string
+  texto: string
+  regla?: string
+  clave?: string
+  metrica?: { nombre?: string; valor?: number }
+  peso?: number
+  volvio?: boolean
+}
+
+export interface Seguimiento {
+  id: string
+  texto: string
+  base?: number | null
+  valor?: number | null
+  tendencia?: 'bajo' | 'subio' | 'igual'
+}
+
+export interface ResumenSemanal {
+  semana: string
+  desde: string
+  hasta: string
+  resumen: Record<string, any>
+  propuestas: { nuevas: Propuesta[]; mas_adelante: Propuesta[]; seguimiento: Seguimiento[]; volvio: Propuesta[] }
+}
+
+export type LibKind = 'html' | 'image' | 'svg' | 'gif' | 'pdf' | 'video' | 'text' | 'diagrama' | 'pruebas' | 'reunion' | 'resumen' | 'remoto' | 'otro'
 
 export interface LibItem {
   id: string
@@ -817,6 +846,8 @@ export interface LibItem {
   pruebas_raw?: string
   /** Reunión guardada en JSON (solo kind 'reunion'): fechas como epoch en segundos. */
   reunion_raw?: string | null
+  /** Resumen semanal de la telemetría en JSON (solo kind 'resumen'). */
+  resumen_raw?: string | null
   /** La charla completa sigue en disco (se borra a los 90 días). */
   tiene_charla?: boolean
   /** ruta de la captura -> id de la Biblioteca */
@@ -959,6 +990,8 @@ export interface Api {
   getPregunta(sessionId: string): Promise<PreguntaSesion>
   responderPregunta(sessionId: string, body: RespuestaPreguntaRequest): Promise<{ ok: boolean }>
   correrComando(sessionId: string, body: { mid: string; indice: number; comando: string }): Promise<{ ok: boolean; comando: string; cwd?: string }>
+  telemetriaComandoNo(clave: string): Promise<void>
+  marcarPropuesta(id: string, decision: DecisionPropuesta): Promise<{ id: string; estado: string }>
   answerDialog(body: DialogAnswerRequest): Promise<DialogAnswerResult>
   decidirPermiso(id: string, req: DecidirPermisoRequest): Promise<PedidoPermiso>
   getPermisos(): Promise<{ pedidos: PedidoPermiso[] }>

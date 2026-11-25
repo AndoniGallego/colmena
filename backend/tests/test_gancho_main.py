@@ -224,7 +224,7 @@ def test_solo_stdlib():
         for n in ast.walk(arbol)
         if isinstance(n, ast.ImportFrom) and n.module
     }
-    assert mods <= {"json", "os", "socket", "sys"}
+    assert mods <= {"json", "os", "re", "socket", "sys"}
 
 
 def test_main_no_conecta_si_mensaje_no_entra():

@@ -28,10 +28,10 @@ class _Push:
         return 1
 
 
-def _armar(tmp_path):
+def _armar(tmp_path, plan_cwds=None):
     store = PedidosPestanaStore()
     tareas = []
-    ps = PedidosSesion(store, lambda: {}, SimpleNamespace(plan_cwds=[str(tmp_path)]), _Push(),
+    ps = PedidosSesion(store, lambda: {}, SimpleNamespace(plan_cwds=plan_cwds or [str(tmp_path)]), _Push(),
                        lambda coro: (tareas.append(coro), coro.close()), cierres=None)
 
     async def listar():
@@ -379,3 +379,34 @@ def test_cierre_del_mcp_trabajando_sigue_pendiente_para_cerrar_igual(apagada_app
     r = c.post(f"/api/pedidos-pestana/{pid}/abrir", json={"forzar": True, "huella": v["huella"]})
     assert r.status_code == 200 and r.json()["cerrada"] is True
     assert app.state.pedidos_pestana.get(pid)["estado"] == "abierto"
+
+
+# --- rechazos con motivo y qué hacer ---
+
+def test_abrir_en_repo_colmena_explica_que_hacer(tmp_path):
+    from orquestador import config
+
+    ops, _ = _armar(tmp_path, [str(config.REPO_ROOT)])
+    err = _error(ops.abrir(YO, {"carpeta": str(config.REPO_ROOT), "mensaje": "hacé x"}))
+    assert err.codigo == "carpeta_colmena"
+    assert err.mensaje != "Colmena descartó el pedido." and "subagentes" in err.mensaje and "tablero" in err.mensaje
+
+
+def test_abrir_carpeta_no_permitida_explica_y_queda_en_descartes(tmp_path):
+    ops, store = _armar(tmp_path)
+    err = _error(ops.abrir(YO, {"carpeta": "/no/existe", "mensaje": "hacé x"}))
+    assert err.codigo == "carpeta_no_permitida" and "decile a Ando" in err.mensaje
+    assert [d["motivo"] for d in store.descartes_de("c-yo")] == ["carpeta_no_permitida"]
+
+
+def test_cursor_y_tarea_carpeta_no_permitida_se_registran(tmp_path):
+    ops, store = _armar(tmp_path)
+    _error(ops.cursor(YO, {"carpeta": "/no/existe", "nombre": "n", "pedido": "p"}))
+    _error(ops.tarea_ticket(YO, {"ticket": "ABC-1", "carpeta": "/no/existe"}))
+    assert [d["motivo"] for d in store.descartes_de("c-yo")] == ["carpeta_no_permitida"] * 2
+
+
+def test_motivo_desconocido_no_devuelve_el_texto_generico():
+    with pytest.raises(mcp_canal.ErrorCanal) as exc:
+        mcp_ops.OpsAcciones._respuesta((None, "algo_raro"))
+    assert "algo_raro" in exc.value.mensaje and "decile a Ando" in exc.value.mensaje

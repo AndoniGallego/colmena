@@ -10,6 +10,7 @@ import {
   tramosComando,
   type Comando,
 } from '../lib/comando'
+import { claveNo } from '../lib/telemetria'
 import Icon from './Icon.vue'
 
 const props = defineProps<{
@@ -54,6 +55,19 @@ async function correr() {
 function descartar() {
   if (!abierta.value) return
   ponerEstadoComando(clave.value, { fase: 'descartado' })
+  void avisarNo()
+}
+
+async function avisarNo() {
+  if (!props.sessionId || !props.mid) return
+  try {
+    const k = await claveNo(props.sessionId, props.mid, props.indice ?? 0)
+    if (!k) return
+    const { telemetriaComandoNo } = await import('../state/app')
+    await telemetriaComandoNo(k)
+  } catch {
+    // La telemetría nunca rompe la tarjeta.
+  }
 }
 
 function onKey(e: KeyboardEvent) {

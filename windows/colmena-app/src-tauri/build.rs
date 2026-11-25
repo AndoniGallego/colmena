@@ -40,6 +40,10 @@ fn main() {
                 "reunion_terminar",
                 "reunion_estado",
                 "reunion_mostrar_ventana",
+                "registro_pendiente",
+                "registro_enviado",
+                "registro_anotar",
+                "registro_evento",
             ]),
         ),
     )

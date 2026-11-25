@@ -37,7 +37,7 @@ import {
 import { gsap, haptic, isSoft, useGsap } from '../motion'
 import Icon from './Icon.vue'
 
-const props = defineProps<{ open: boolean; grupoInicial?: string }>()
+const props = defineProps<{ open: boolean; grupoInicial?: string; tareaInicial?: string }>()
 const emit = defineEmits<{ close: [] }>()
 const atajoTexto = computed(() => etiquetaDe('crear-terminal').replace(' ', '+'))
 const { run } = useGsap()
@@ -95,7 +95,9 @@ watch(
     pideConfianza.value = null
     avisoPuertos.value = false
     masOpciones.value = false
-    modo.value = props.grupoInicial ? 'terminal' : leerModo()
+    const conBrief = props.tareaInicial !== undefined
+    modo.value = conBrief ? 'tarea' : props.grupoInicial ? 'terminal' : leerModo()
+    if (conBrief) tarea.value = props.tareaInicial!.slice(0, MAX_TAREA)
     carpetaRuta.value = ''
     grupoId.value = ''
     tipo.value = 'shell'
@@ -106,7 +108,7 @@ watch(
       carpetas.value = data.carpetas
       grupos.value = data.grupos ?? []
       if (props.grupoInicial && grupos.value.some((g) => g.id === props.grupoInicial)) grupoId.value = props.grupoInicial
-      if (modo.value === 'tarea') elegirRepoInicial()
+      if (modo.value === 'tarea' && !conBrief) elegirRepoInicial()
     } catch (e) {
       error.value = msg(e, 'No pude leer las carpetas')
     } finally {

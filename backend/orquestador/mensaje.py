@@ -17,6 +17,7 @@ MAX_ATTACHMENTS = 5
 TEXT_CONTROL_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f  ]")
 LINE_BREAK_RE = re.compile(r"\s*\n\s*")
 ORIGENES_PUBLICOS = ("manual", "jefe")
+ORIGENES_DE_ANDO = ORIGENES_PUBLICOS + ("comentario-diff",)
 UNCERTAIN = "Puede que ese mensaje ya haya llegado: mirá la sesión. Si no llegó, volvé a mandarlo."
 log = logging.getLogger(__name__)
 
@@ -49,7 +50,9 @@ def prepare_text(raw: str) -> str:
 class MensajeService:
     def __init__(self, enchufe, state, self_pane: Callable[[], Optional[str]] = lambda: None,
                  uploads_dir: Optional[Path] = None, locks: Optional[PaneLocks] = None,
-                 protected_workspaces: Optional[list] = None, protected_panes: Callable[[], set] = lambda: set()):
+                 protected_workspaces: Optional[list] = None, protected_panes: Callable[[], set] = lambda: set(),
+                 al_escribir: Callable[[str], None] = lambda pane: None):
+        self.al_escribir = al_escribir
         self.enchufe = enchufe
         self.protected = {w.strip().casefold() for w in (protected_workspaces or [])}
         self.protected_panes = protected_panes
@@ -109,6 +112,11 @@ class MensajeService:
             raise TraspasoError(400, "esa sesión está en el workspace protegido")
         if agent.get("agent_status") == "blocked":
             raise TraspasoError(409, "la sesión espera una aprobación tuya en la terminal")
+        if body.origen not in ORIGENES_DE_ANDO:
+            try:
+                self.al_escribir(pane)
+            except Exception:
+                log.warning("al_escribir falló", exc_info=True)
         try:
             await self.enchufe.mandar_prompt(pane, text)
         except TerminalesError as exc:

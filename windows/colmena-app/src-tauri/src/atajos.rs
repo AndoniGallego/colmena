@@ -3,12 +3,13 @@ use std::str::FromStr;
 use colmena_nucleo::atajo_cambio::{decidir_cambio, CambioAtajo};
 use colmena_nucleo::atajo_teclas::{armar_atajo, atajo_valido, duplicado_de};
 use colmena_nucleo::config::{escribir_config, Accion, Atajos};
+use colmena_nucleo::registro::{Nivel, Origen};
 use colmena_nucleo::validar::es_url_local;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use crate::{bandeja, leer_config_archivo, ventanas, Estado};
+use crate::{bandeja, leer_config_archivo, registro, ventanas, Estado};
 
 pub const EVENTO_NOTAS: &str = "notas-abrir";
 pub const EVENTO_GUIA: &str = "guia-abrir";
@@ -110,6 +111,18 @@ fn registrar_uno(app: &AppHandle, accion: Accion, atajo: &str) -> Result<(), Str
         .map_err(|e| e.to_string())
 }
 
+fn anotar_atajo(accion: Accion, atajo: &str, ok: bool) {
+    let (nivel, estado) = if ok { (Nivel::Info, "registrado") } else { (Nivel::Aviso, "ocupado") };
+    registro::anotar(nivel, Origen::Atajos, &format!("{} {estado}: {atajo}", accion.clave()));
+    registro::anotar_evento(
+        "atajos",
+        if ok { "atajo_registrado" } else { "atajo_conflicto" },
+        ok,
+        Some(accion.clave()),
+        None,
+    );
+}
+
 fn soltar_uno(app: &AppHandle, atajo: &str) {
     if let Ok(shortcut) = Shortcut::from_str(atajo) {
         let _ = app.global_shortcut().unregister(shortcut);
@@ -128,6 +141,9 @@ pub fn arrancar(app: &AppHandle, atajos: &Atajos) {
             e.registrado[i] && e.activo[i] == atajo
         };
         let ok = ya || registrar_uno(app, a, atajo).is_ok();
+        if !ya {
+            anotar_atajo(a, atajo, ok);
+        }
         let mut e = estado.atajos.lock().unwrap();
         e.activo[i] = atajo.to_string();
         e.registrado[i] = ok;
@@ -309,6 +325,7 @@ pub fn guardar_atajo(
     exige_atajos(&window)?;
     let accion = accion_de(&accion)?;
     let cambio = cambiar(&app, accion, &atajo)?;
+    anotar_atajo(accion, &atajo, !cambio.ocupado);
     if cambio.ocupado {
         return Err(format!("Lo usa otro programa: queda {}", cambio.activo));
     }

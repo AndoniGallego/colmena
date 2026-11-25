@@ -34,9 +34,10 @@ let app: ReturnType<typeof createApp>
 const abierta = ref(false)
 
 const grupoInicial = ref<string | undefined>(undefined)
+const tareaInicial = ref<string | undefined>(undefined)
 
 async function montar() {
-  app = createApp({ render: () => h(Sheet, { open: abierta.value, grupoInicial: grupoInicial.value }) })
+  app = createApp({ render: () => h(Sheet, { open: abierta.value, grupoInicial: grupoInicial.value, tareaInicial: tareaInicial.value }) })
   app.mount(document.createElement('div'))
   abierta.value = true
   await tick()
@@ -50,6 +51,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   grupoInicial.value = undefined
+  tareaInicial.value = undefined
   abierta.value = false
   app.unmount()
   document.body.innerHTML = ''
@@ -109,6 +111,34 @@ describe('NuevaTerminalSheet: nueva tarea', () => {
     await tick()
     expect(q('textarea.tarea')).not.toBeNull()
     expect(localStorage.getItem('orq.nuevaModo')).toBe('tarea')
+  })
+
+  it('con tareaInicial abre en modo tarea con el brief y sin carpeta', async () => {
+    localStorage.setItem('orq.nuevaRepo', '~/Proyectos/acmekit')
+    tareaInicial.value = 'Propuesta del resumen: probar algo'
+    await montar()
+    expect(q<HTMLTextAreaElement>('textarea.tarea')!.value).toBe('Propuesta del resumen: probar algo')
+    expect(document.body.querySelectorAll('.carp[aria-pressed="true"]')).toHaveLength(0)
+    expect(botonAbrir().disabled).toBe(true)
+    expect(api.postTerminalesNuevaTarea).not.toHaveBeenCalled()
+  })
+
+  it('con tareaInicial recorta al tope y no pisa el modo guardado', async () => {
+    tareaInicial.value = 'y'.repeat(4500)
+    await montar()
+    expect(q<HTMLTextAreaElement>('textarea.tarea')!.value).toHaveLength(4000)
+    expect(localStorage.getItem('orq.nuevaModo')).toBeNull()
+  })
+
+  it('al reabrir con otro brief muestra el nuevo', async () => {
+    tareaInicial.value = 'primero'
+    await montar()
+    abierta.value = false
+    await tick()
+    tareaInicial.value = 'segundo'
+    abierta.value = true
+    await tick()
+    expect(q<HTMLTextAreaElement>('textarea.tarea')!.value).toBe('segundo')
   })
 
   it('en modo terminal sigue mostrando las carpetas de siempre', async () => {

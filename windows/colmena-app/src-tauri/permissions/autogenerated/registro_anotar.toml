@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-registro-anotar"
+description = "Enables the registro_anotar command without any pre-configured scope."
+commands.allow = ["registro_anotar"]
+
+[[permission]]
+identifier = "deny-registro-anotar"
+description = "Denies the registro_anotar command without any pre-configured scope."
+commands.deny = ["registro_anotar"]

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as m from './reunion'
+
+const anotarNotch = vi.hoisted(() => vi.fn())
+vi.mock('../lib/registroPuente', async (orig) => ({
+  ...(await orig<typeof import('../lib/registroPuente')>()),
+  anotarNotch,
+}))
 import { aplicarEvento, desdeSnapshot, inicial, LINEAS_VISIBLES, type EstadoReunionFront } from './reunion'
 
 const activa = (extra: Partial<EstadoReunionFront> = {}): EstadoReunionFront => ({
@@ -578,5 +584,45 @@ describe('aviso de cajita al reconectar', () => {
     await m.cargarEstado()
     expect(m.reunion.value.reunion).toBe('r9')
     expect(m.reunion.value.cajitaAcoplada).toBe(false)
+  })
+})
+
+describe('errores de Mostrame y de la reunión en el registro', () => {
+  beforeEach(() => {
+    anotarNotch.mockClear()
+    m.errorReunion.value = null
+    m.mirando.value = null
+    m.reunion.value = { ...inicial(), reunion: 'r1', estado: 'escuchando' }
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    m.reunion.value = inicial()
+  })
+
+  it('Mostrame con error se anota con el código y sin la pregunta', async () => {
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke: async () => Promise.reject('sin_ventana') } } })
+    await m.mostrarAhora('pregunta-secreta-77')
+    expect(anotarNotch).toHaveBeenCalledWith('aviso', 'mostrar: sin_ventana')
+    expect(JSON.stringify(anotarNotch.mock.calls)).not.toContain('pregunta-secreta-77')
+  })
+
+  it('un texto libre del invoke se anota como código fijo', async () => {
+    vi.stubGlobal('window', { __TAURI__: { core: { invoke: async () => Promise.reject('texto libre de la ventana') } } })
+    await m.mostrarAhora('x')
+    expect(anotarNotch).toHaveBeenCalledWith('aviso', 'mostrar: fallo')
+    expect(JSON.stringify(anotarNotch.mock.calls)).not.toContain('texto libre')
+  })
+
+  it('sin invoke se anota mostrar: fallo', async () => {
+    vi.stubGlobal('window', {})
+    await m.mostrarAhora('x')
+    expect(anotarNotch).toHaveBeenCalledWith('aviso', 'mostrar: fallo')
+  })
+
+  it('un catch de la reunión anota el error sin el mensaje en castellano', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ detalle: 'texto del back' }) })))
+    await m.tocar('l1')
+    expect(anotarNotch).toHaveBeenCalledWith('error', 'reunion: Error: 409')
+    expect(JSON.stringify(anotarNotch.mock.calls)).not.toContain('texto del back')
   })
 })

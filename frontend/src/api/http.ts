@@ -822,6 +822,10 @@ export function createHttpApi(onUnauthorized: () => void, kindsAviso: () => read
     async cerrarVentana(token, keepalive = false) {
       await request('/api/terminales/ventana/cerrar', { method: 'POST', body: '{}', keepalive, headers: { 'X-Orq-Escritura': token } })
     },
+    // Sin guard: un 401 de telemetría no debe desloguear al usuario.
+    telemetriaComandoNo: (clave) => post('/api/telemetria/comando-no', { clave }).then(() => undefined),
+    marcarPropuesta: (id, decision) =>
+      guard(post(`/api/telemetria/propuestas/${encodeURIComponent(id)}`, { decision }).then((r) => r.json())).then((d) => ({ id: str(d?.id), estado: str(d?.estado) })),
     async enviarComando(body, token) {
       await guard(request('/api/terminales/comando', { method: 'POST', body: JSON.stringify(body), headers: { 'X-Orq-Escritura': token } }))
     },

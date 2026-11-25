@@ -272,3 +272,36 @@ def test_mcp_como_proceso_responde_sin_backend(corto):
     lineas = [json.loads(x) for x in out.stdout.splitlines() if x.strip()]
     assert [x["id"] for x in lineas] == [1, 2]
     assert lineas[1]["result"]["structuredContent"]["codigo"] == "colmena_no_disponible"
+
+
+def _props(esquema):
+    for nombre, p in esquema.get("properties", {}).items():
+        yield nombre, p
+        if p.get("type") == "array":
+            yield from _props(p["items"])
+
+
+def test_todo_parametro_tiene_description():
+    from orquestador.mcp_colmena import HERRAMIENTAS
+    sin = [(h[0], n) for h in HERRAMIENTAS for n, p in _props(h[4]) if not p.get("description")]
+    assert sin == []
+
+
+def test_anotaciones_de_lectura_y_destructivas():
+    from orquestador.mcp_colmena import HERRAMIENTAS, ServidorStdio
+    defs = {h[0]: ServidorStdio._definicion(h) for h in HERRAMIENTAS}
+    for n in ("colmena_sesiones", "colmena_leer_sesion", "colmena_pedidos", "colmena_buscar_memoria",
+              "colmena_estado_pedido"):
+        assert defs[n]["annotations"]["readOnlyHint"] is True
+    assert defs["colmena_cerrar"]["annotations"] == {"readOnlyHint": False, "destructiveHint": True,
+                                                     "openWorldHint": False}
+    for n in ("colmena_abrir", "colmena_cursor", "colmena_mensaje", "colmena_programar", "colmena_tarea_ticket"):
+        assert defs[n]["annotations"]["readOnlyHint"] is False
+        assert defs[n]["annotations"]["destructiveHint"] is False
+
+
+def test_descripciones_de_herramientas_dicen_cuando_usar():
+    from orquestador.mcp_colmena import _POR_NOMBRE
+    abrir, cerrar = _POR_NOMBRE["colmena_abrir"][3], _POR_NOMBRE["colmena_cerrar"][3]
+    assert "ruta absoluta" in abrir and "repo de Colmena" in abrir and "Devuelve" in abrir
+    assert "pida explícitamente" in cerrar and "Devuelve" in cerrar

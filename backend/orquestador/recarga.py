@@ -67,7 +67,9 @@ class RecargaService:
         clock: Callable[[], float] = time.time,
         self_pane: Callable[[], str | None] = lambda: None,
         protected_panes: Callable[[], set[str]] = lambda: set(),
+        al_escribir: Callable[[str], None] = lambda pane: None,
     ) -> None:
+        self._al_escribir = al_escribir
         self._sesiones = sesiones
         self._mandar = mandar
         self._marcar_silencio = marcar_silencio
@@ -116,9 +118,16 @@ class RecargaService:
             return True
         return pane_id in self._protected_panes()
 
+    def _avisar_escritura(self, pane_id: str) -> None:
+        try:
+            self._al_escribir(pane_id)
+        except Exception:
+            log.warning("al_escribir falló", exc_info=True)
+
     async def _mandar_recarga(self, pane_id: str) -> bool:
         self._marcar_silencio()
         try:
+            self._avisar_escritura(pane_id)
             await self._mandar(pane_id, TEXTO_RECARGA)
         except NoTomado:
             log.info("recarga enviada a %s sin confirmación de toma", pane_id)

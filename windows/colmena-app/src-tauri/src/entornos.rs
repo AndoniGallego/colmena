@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use colmena_nucleo::entornos::{
     Apertura, EstadoEntornos, EstadoTunel, FaseTunel, argv_ssh, conflicto_con_tuneles,
@@ -7,6 +7,7 @@ use colmena_nucleo::entornos::{
     validar_nombre, validar_pedido,
 };
 use colmena_nucleo::config::{escribir_config, Destino};
+use colmena_nucleo::registro::{Nivel, Origen};
 use colmena_nucleo::validar::{es_url_local, url_entornos};
 use colmena_nucleo::validar::validar_destino;
 use tauri::{AppHandle, State, WebviewWindow};
@@ -14,7 +15,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::tuneles::Tuneles;
 use crate::ventanas;
-use crate::{exige_ventana, leer_config_archivo, Estado};
+use crate::{exige_ventana, leer_config_archivo, registro, Estado};
 
 fn exige_colmena(window: &WebviewWindow, estado: &Estado) -> Result<String, String> {
     exige_ventana(window, estado, "colmena")
@@ -31,6 +32,16 @@ fn exige_notebook(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Anota el motivo de un error de `entorno_abrir` y lo devuelve igual.
+fn fallo_abrir(motivo: String) -> String {
+    registro::anotar(Nivel::Aviso, Origen::Tuneles, &format!("entorno_abrir: {motivo}"));
+    motivo
+}
+
+fn ms_desde(inicio: Instant) -> u64 {
+    inicio.elapsed().as_millis() as u64
+}
+
 const SIN_NOTEBOOK: &str = "Configurá la notebook primero: tocá \"cambiar\" arriba y guardá su dirección.";
 
 #[tauri::command]
@@ -45,14 +56,15 @@ pub async fn entorno_abrir(
     let origen = exige_colmena(&window, &estado)?;
     let ruta_config = estado.ruta_config.clone();
     let tuneles = estado.tuneles.clone();
-    let ordenados = validar_pedido(&nombre, &puertos, principal, Some(origen.as_str()))?;
+    let ordenados = validar_pedido(&nombre, &puertos, principal, Some(origen.as_str()))
+        .map_err(fallo_abrir)?;
 
     match decidir_apertura(tuneles.abiertos(&nombre).as_deref(), &ordenados) {
         Apertura::SoloNavegador => {
             app
                 .opener()
                 .open_url(url_principal(principal), None::<&str>)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| fallo_abrir(e.to_string()))?;
             return Ok(EstadoTunel {
                 estado: FaseTunel::Abierto,
                 puertos: ordenados.clone(),
@@ -65,26 +77,29 @@ pub async fn entorno_abrir(
 
     let destino = leer_config_archivo(&ruta_config)
         .destino()
-        .ok_or_else(|| SIN_NOTEBOOK.to_string())?;
+        .ok_or_else(|| fallo_abrir(SIN_NOTEBOOK.to_string()))?;
 
     let otros = tuneles.otros(&nombre);
     if let Some(msg) = conflicto_con_tuneles(&nombre, &ordenados, &otros) {
-        return Err(msg);
+        return Err(fallo_abrir(msg));
     }
     let ocupados = puertos_ocupados(&ordenados);
     if !ocupados.is_empty() {
-        return Err(mensaje_ocupados(&ocupados));
+        return Err(fallo_abrir(mensaje_ocupados(&ocupados)));
     }
 
     let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
     let ruta_ssh_exe = PathBuf::from(ruta_ssh(&system_root));
     if !ruta_ssh_exe.exists() {
-        return Err("falta el cliente SSH de Windows".into());
+        return Err(fallo_abrir("falta el cliente SSH de Windows".into()));
     }
 
     let argv = argv_ssh(&destino, &ordenados);
-    let generacion = tuneles.lanzar(&nombre, ordenados.clone(), &ruta_ssh_exe, &argv)?;
+    let generacion = tuneles
+        .lanzar(&nombre, ordenados.clone(), &ruta_ssh_exe, &argv)
+        .map_err(fallo_abrir)?;
 
+    let inicio = Instant::now();
     let tuneles_cl = tuneles.clone();
     let nombre_cl = nombre.clone();
     let espera = tauri::async_runtime::spawn_blocking(move || {
@@ -96,17 +111,22 @@ pub async fn entorno_abrir(
         )
     })
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| fallo_abrir(e.to_string()))?;
 
     if let Err(e) = espera {
         tuneles.cerrar_si(&nombre, generacion);
+        registro::anotar(Nivel::Error, Origen::Tuneles, &format!("túnel {nombre} falló: {e}"));
+        registro::anotar_evento("tuneles", "tunel_fallo", false, Some("sin_puerto"), Some(ms_desde(inicio)));
         return Err(e);
     }
+    let abierto = format!("túnel {nombre} abierto en {principal}");
+    registro::anotar(Nivel::Info, Origen::Tuneles, &abierto);
+    registro::anotar_evento("tuneles", "tunel_abierto", true, None, Some(ms_desde(inicio)));
 
     app
         .opener()
         .open_url(url_principal(principal), None::<&str>)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| fallo_abrir(e.to_string()))?;
 
     Ok(EstadoTunel {
         estado: FaseTunel::Abierto,
@@ -123,6 +143,7 @@ pub fn entorno_cerrar(
 ) -> Result<(), String> {
     exige_colmena(&window, &estado)?;
     if !validar_nombre(&nombre) {
+        registro::anotar(Nivel::Aviso, Origen::Tuneles, "entorno_cerrar: nombre inválido");
         return Err("nombre inválido".into());
     }
     estado.tuneles.cerrar(&nombre);

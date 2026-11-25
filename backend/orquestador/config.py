@@ -92,6 +92,9 @@ class Config:
     limpieza_dias: int = 7
     cierre_hora: str = "17:30"
     cierre_dias: list = field(default_factory=lambda: [0, 1, 2, 3, 4])
+    telemetria_activa: bool = True
+    telemetria_resumen_hora: str = "09:00"
+    telemetria_resumen_dias: list = field(default_factory=lambda: [0])
     dios_modelo: str = "sonnet"
     dios_tope_diario_tokens: int = 1_500_000
     dios_tope_mensaje_usd: float = 2.0

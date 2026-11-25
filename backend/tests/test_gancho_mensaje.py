@@ -169,3 +169,20 @@ def test_post_tool_use_failure_viaja_con_error_recortado_e_interrupcion():
     assert d["error"].startswith("Exit code 1") and len(d["error"].encode()) <= 512
     assert d["is_interrupt"] is False
     assert d["recortado"] is True
+
+
+def test_stop_reenvia_stop_hook_active_y_tiene_estado():
+    m = g.armar_mensaje({"hook_event_name": "Stop", "stop_hook_active": True,
+                         "last_assistant_message": "hola\n```estado\n{\"hizo\":\"x\"}\n```"}, {})
+    assert m["datos"]["stop_hook_active"] is True and m["datos"]["tiene_estado"] is True
+
+
+def test_stop_recortado_conserva_tiene_estado():
+    texto = "x" * 9000 + "\n```estado\n{\"hizo\":\"x\"}\n```"
+    m = g.armar_mensaje({"hook_event_name": "Stop", "last_assistant_message": texto}, {})
+    assert m["datos"]["recortado"] is True and m["datos"]["tiene_estado"] is True
+
+
+def test_stop_sin_estado_ni_activo():
+    m = g.armar_mensaje({"hook_event_name": "Stop", "last_assistant_message": "hola"}, {})
+    assert m["datos"]["stop_hook_active"] is False and m["datos"]["tiene_estado"] is False

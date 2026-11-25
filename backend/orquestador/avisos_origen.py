@@ -38,8 +38,22 @@ TEXTOS = {
     "cierre_cambio": "Colmena: no cerré lo que pediste porque cambió desde que lo pediste.",
     "cierre_no_hecho": "Colmena: no se cerró lo que pediste (falló o no terminó de guardar a tiempo). Si hace falta, "
                        "Ando lo cierra desde el tablero.",
-    "carpeta_colmena": "Colmena no abre pedidos en su propio repo: si hace falta, Ando lo abre a mano desde el tablero.",
+    "carpeta_colmena": "Colmena: es el repo de Colmena y no abre pedidos ahí. Pedile a Ando que la abra desde el "
+                       "tablero, o hacé el trabajo con ayudantes (subagentes).",
+    "carpeta_no_permitida": "Colmena: esa carpeta no está entre las que permite. No pruebes otra por tu cuenta: "
+                            "decile a Ando cuál querías o que la abra a mano desde el tablero.",
 }
+QUE_HACER = {"tope": "Esperá a que Ando responda los pendientes y reintentá."}
+
+
+def texto_mcp(motivo: str) -> str:
+    """Texto del error del MCP: el mismo del aviso, sin prefijo de marca y con qué hacer."""
+    base = TEXTOS.get(motivo)
+    if base is None:
+        return f"Colmena descartó el pedido ({motivo}). No lo repitas igual: decile a Ando qué querías hacer."
+    base = base.removeprefix("Colmena: ").replace("pedido de pestaña", "pedido")
+    extra = QUE_HACER.get(motivo)
+    return f"{base} {extra}" if extra else base
 
 
 class AvisosOrigen:

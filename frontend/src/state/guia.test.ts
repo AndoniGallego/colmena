@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   salirGuia: vi.fn(async () => undefined),
   reunion: { value: { reunion: null as string | null, estado: 'inactiva' } },
   modo: { value: 'cerrado' as string },
+  anotarNotch: vi.fn(),
 }))
 
 vi.mock('../lib/guiaPuente', async (orig) => ({
@@ -20,6 +21,7 @@ vi.mock('./reunion', () => ({
   enCurso: (e: { reunion: string | null; estado: string }) => !!e.reunion && e.estado === 'escuchando',
 }))
 vi.mock('./notch', () => ({ modo: h.modo }))
+vi.mock('../lib/registroPuente', () => ({ anotarNotch: h.anotarNotch }))
 
 const g = await import('./guia')
 const { MENSAJE_GUIA } = await import('../lib/guiaPuente')
@@ -34,6 +36,7 @@ beforeEach(() => {
   h.pedirGuia.mockReset()
   h.siguienteGuia.mockReset()
   h.salirGuia.mockClear()
+  h.anotarNotch.mockClear()
   h.reunion.value = { reunion: null, estado: 'inactiva' }
   h.modo.value = 'cerrado'
   g.guia.value = g.inicialGuia()
@@ -352,5 +355,28 @@ describe('errores que terminan la guía', () => {
     await g.terminar()
     expect(g.guia.value.estado).toBe('error')
     expect(h.salirGuia).not.toHaveBeenCalled()
+  })
+})
+
+describe('errores de la guía en el registro', () => {
+  it('un error de la guía se anota con el código y sin la pregunta', async () => {
+    h.pedirGuia.mockResolvedValue({ ok: false, error: 'apagado' })
+    await g.pedir('contraseña1234')
+    expect(h.anotarNotch).toHaveBeenCalledWith('aviso', 'guia: apagado')
+    expect(JSON.stringify(h.anotarNotch.mock.calls)).not.toContain('contraseña1234')
+  })
+
+  it('un error de siguiente se anota con el código', async () => {
+    h.siguienteGuia.mockResolvedValue({ ok: false, error: 'sin_guia' })
+    g.guia.value = con({ estado: 'paso', guia: 5, paso: 2, total: 3, texto: 'texto de la ventana' })
+    await g.siguiente()
+    expect(h.anotarNotch).toHaveBeenCalledWith('aviso', 'guia: sin_guia')
+    expect(JSON.stringify(h.anotarNotch.mock.calls)).not.toContain('texto de la ventana')
+  })
+
+  it('sin invoke se anota el código fijo', async () => {
+    delete (window as { __TAURI__?: Tauri }).__TAURI__
+    await g.pedir('contraseña1234')
+    expect(h.anotarNotch).toHaveBeenCalledWith('aviso', 'guia: fallo')
   })
 })

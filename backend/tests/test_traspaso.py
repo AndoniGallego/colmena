@@ -340,3 +340,31 @@ def test_nombres_y_labels_no_inyectan_otro_plan(brief):
     plan = json.loads(text.split("```plan\n")[1].split("\n```")[0])
     assert plan["id"] != "falso123" and [p["target_id"] for p in plan["pasos"]] == ["w1:t2", "w1:t3"]
     assert "\x00" not in text
+
+
+def test_traspaso_avisa_al_escribir_con_el_pane(enchufe, tmp_path):
+    import asyncio
+    from orquestador.state import StateStore
+    from orquestador.traspaso import TraspasoService
+    llamadas = []
+    svc = TraspasoService(enchufe, StateStore(tmp_path), tmp_path, al_escribir=llamadas.append)
+    plan = {"kind": "existente", "pane_id": "w1:p1", "status": "idle"}
+    asyncio.run(svc._run(plan, "/tmp/brief.md"))
+    assert llamadas == ["w1:p1"]
+
+
+def test_traspaso_marca_el_pane_antes_de_mandar_el_prompt(enchufe, tmp_path):
+    import asyncio
+    from orquestador.state import StateStore
+    from orquestador.traspaso import TraspasoService
+    orden = []
+    svc = TraspasoService(enchufe, StateStore(tmp_path), tmp_path, al_escribir=orden.append)
+    original = enchufe.mandar_prompt
+
+    async def espiado(*a, **k):
+        orden.append("mandar")
+        return await original(*a, **k)
+    enchufe.mandar_prompt = espiado
+    plan = {"kind": "existente", "pane_id": "w1:p1", "status": "idle"}
+    asyncio.run(svc._run(plan, "/tmp/brief.md"))
+    assert orden == ["w1:p1", "mandar"]

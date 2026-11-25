@@ -896,3 +896,97 @@ def test_decidir_automatico_rechazado_sin_auditoria(svc, tmp_path, quien):
         assert auditoria(tmp_path) == antes
 
     asyncio.run(esc())
+
+
+def _svc_al_decidir(tmp_path, llamadas):
+    return PermisosService(
+        AuditoriaPermisos(tmp_path / "permisos.jsonl"),
+        PaneLocks(),
+        espera=lambda: 120.0,
+        desde_app=lambda: True,
+        realpath=lambda p: p,
+        al_decidir=llamadas.append,
+    )
+
+
+def test_decidir_avisa_al_decidir_con_la_sesion(tmp_path):
+    llamadas = []
+    s = _svc_al_decidir(tmp_path, llamadas)
+
+    async def esc():
+        p = await s.atender(pr(sid="sesion-7"), "w1:p1", FakeConexion())
+        with pytest.raises(PermisoError):
+            await s.decidir(p.id, "inventada")
+        with pytest.raises(PermisoError):
+            await s.decidir("no-existe", "permitir")
+        assert llamadas == []
+        await s.decidir(p.id, "permitir")
+        assert llamadas == ["sesion-7"]
+
+    asyncio.run(esc())
+
+
+def test_decidir_sigue_si_al_decidir_falla(tmp_path):
+    def roto(sid):
+        raise RuntimeError("x")
+
+    s = _svc_al_decidir(tmp_path, [])
+    s.al_decidir = roto
+
+    async def esc():
+        p = await s.atender(pr(), "w1:p1", FakeConexion())
+        assert (await s.decidir(p.id, "permitir"))["estado"] == "permitido"
+
+    asyncio.run(esc())
+
+
+def test_resolver_en_terminal_avisa_al_decidir(tmp_path):
+    llamadas = []
+    s = _svc_al_decidir(tmp_path, llamadas)
+
+    async def esc():
+        p = await s.atender(pr(sid="sesion-8"), "w1:p1", FakeConexion())
+        await s.resolver_en_terminal(p, "terminal")
+        assert llamadas == ["sesion-8"]
+        await s.resolver_en_terminal(p, "terminal")
+        assert llamadas == ["sesion-8"]
+
+    asyncio.run(esc())
+
+
+@pytest.mark.parametrize("evento", ["UserPromptSubmit", "Stop"])
+def test_senal_de_prompt_o_stop_no_avisa_al_decidir(tmp_path, evento):
+    llamadas = []
+    s = _svc_al_decidir(tmp_path, llamadas)
+
+    async def esc():
+        p = await s.atender(pr(sid="sesion-9"), "w1:p1", FakeConexion())
+        await s.senal("sesion-9", evento, None)
+        assert p.estado == "terminal" and llamadas == []
+
+    asyncio.run(esc())
+
+
+def test_pane_desaparecido_no_avisa_al_decidir(tmp_path):
+    llamadas = []
+    s = _svc_al_decidir(tmp_path, llamadas)
+
+    async def esc():
+        p = await s.atender(pr(sid="sesion-9"), "w1:p1", FakeConexion())
+        await s.observar_herdr("w1:p1", None)
+        assert p.estado == "terminal" and llamadas == []
+
+    asyncio.run(esc())
+
+
+def test_cambio_de_estado_del_pane_avisa_al_decidir(tmp_path):
+    llamadas = []
+    s = _svc_al_decidir(tmp_path, llamadas)
+
+    async def esc():
+        await s.atender(pr(sid="sesion-9"), "w1:p1", FakeConexion())
+        await s.observar_herdr("w1:p1", "blocked")
+        await s.observar_herdr("w1:p1", "working")
+        assert llamadas == ["sesion-9"]
+
+    asyncio.run(esc())

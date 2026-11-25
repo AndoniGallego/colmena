@@ -2,13 +2,16 @@ use std::sync::atomic::Ordering;
 
 use colmena_nucleo::atajo_cambio::{aviso_ocupado, linea_bandeja, tooltip_bandeja};
 use colmena_nucleo::config::{escribir_config, leer_config, Accion, Config, ConfigNudo};
+use colmena_nucleo::registro::{Nivel, Origen};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, Monitor, Wry,
 };
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_opener::OpenerExt;
 
+use crate::registro;
 use crate::ventanas;
 use crate::Estado;
 
@@ -72,8 +75,24 @@ fn alternar_prendido(app: &AppHandle) {
     let estado = app.state::<Estado>();
     let mut nudo = leer_cfg(&estado).nudo;
     nudo.prendido = !nudo.prendido;
-    if guardar_nudo(&estado, nudo).is_ok() && !nudo.prendido {
-        crate::nudo::apagar(app);
+    if guardar_nudo(&estado, nudo).is_ok() {
+        if !nudo.prendido {
+            crate::nudo::apagar(app);
+        }
+        registro::anotar(
+            Nivel::Info,
+            Origen::Nudo,
+            if nudo.prendido { "nudo prendido" } else { "nudo apagado" },
+        );
+        registro::anotar_evento(
+            "nudo",
+            if nudo.prendido { "nudo_prendido" } else { "nudo_apagado" },
+            true,
+            None,
+            None,
+        );
+    } else {
+        registro::anotar(Nivel::Aviso, Origen::Nudo, "no pude guardar el estado");
     }
     sincronizar_nudo(app);
 }
@@ -90,6 +109,11 @@ fn alternar_se_ve(app: &AppHandle) {
         antes
     };
     crate::nudo::actualizar_se_ve(app, valor);
+    registro::anotar(
+        Nivel::Info,
+        Origen::Nudo,
+        if valor { "se ve al compartir" } else { "no se ve al compartir" },
+    );
     sincronizar_nudo(app);
 }
 
@@ -276,10 +300,13 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let entornos = MenuItem::with_id(app, "entornos", "Entornos", true, None::<&str>)
         .map_err(|e| e.to_string())?;
+    let registro_item = MenuItem::with_id(app, "abrir_registro", "Abrir registro", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
     let notebook = MenuItem::with_id(app, "notebook", "Dirección de la notebook…", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     let cambiar = MenuItem::with_id(app, "cambiar_origen", "Cambiar dirección…", true, None::<&str>)
         .map_err(|e| e.to_string())?;
+    let actualizar = crate::actualizador::crear_item(app).map_err(|e| e.to_string())?;
     let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)
         .map_err(|e| e.to_string())?;
 
@@ -295,6 +322,7 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
             &toggle_notch,
             &abrir,
             &entornos,
+            &registro_item,
             &arranque_item,
             &nudo_prendido,
             &nudo_se_ve,
@@ -304,6 +332,7 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
             &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
             &notebook,
             &cambiar,
+            &actualizar,
             &salir,
         ],
     )
@@ -389,6 +418,20 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
                         let _ = crate::entornos::abrir_entornos_desde_bandeja(app, &o);
                     }
                 }
+                "abrir_registro" => {
+                    let abierto = registro::carpeta().is_some_and(|c| {
+                        app.opener()
+                            .open_path(c.to_string_lossy().to_string(), None::<&str>)
+                            .is_ok()
+                    });
+                    if !abierto {
+                        registro::anotar(
+                            Nivel::Aviso,
+                            Origen::App,
+                            "no pude abrir la carpeta del registro",
+                        );
+                    }
+                }
                 "notebook" => {
                     let _ = ventanas::crear_notebook(app);
                 }
@@ -421,6 +464,7 @@ pub fn inicializar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
                 "nudo_prendido" => alternar_prendido(app),
                 "nudo_se_ve" => alternar_se_ve(app),
                 "nudo_dibujo" => crate::nudo::dibujo_de_prueba(app.clone()),
+                crate::actualizador::ID_ITEM => crate::actualizador::tocar(app),
                 "salir" => {
                     app.exit(0);
                 }

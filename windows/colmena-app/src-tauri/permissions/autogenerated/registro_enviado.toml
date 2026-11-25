@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-registro-enviado"
+description = "Enables the registro_enviado command without any pre-configured scope."
+commands.allow = ["registro_enviado"]
+
+[[permission]]
+identifier = "deny-registro-enviado"
+description = "Denies the registro_enviado command without any pre-configured scope."
+commands.deny = ["registro_enviado"]

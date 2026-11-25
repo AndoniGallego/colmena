@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { LibItem } from '../api/types'
-import { diagramaOf, formatSize, KIND_LABEL, pathLabel, pruebasOf, reunionOf, safeClaudeUrl, viewerKind } from '../lib/biblioteca'
+import { diagramaOf, formatSize, KIND_LABEL, pathLabel, pruebasOf, reunionOf, resumenOf, safeClaudeUrl, viewerKind } from '../lib/biblioteca'
 import { copyText } from '../lib/clipboard'
 import { renderMarkdown } from '../lib/markdown'
 import { clock } from '../lib/time'
@@ -16,6 +16,7 @@ import DiagramaCard from './DiagramaCard.vue'
 import Icon from './Icon.vue'
 import PruebasCard from './PruebasCard.vue'
 import ReunionCard from './ReunionCard.vue'
+import ResumenCard from './ResumenCard.vue'
 
 const props = defineProps<{
   item: LibItem
@@ -30,6 +31,7 @@ const claude = computed(() => safeClaudeUrl(props.item.url))
 const title = computed(() => props.item.title || props.item.nombre || KIND_LABEL[props.item.kind])
 const diagrama = computed(() => (kind.value === 'diagrama' ? diagramaOf(props.item) : null))
 const pruebas = computed(() => (kind.value === 'pruebas' ? pruebasOf(props.item) : null))
+const resumen = computed(() => (kind.value === 'resumen' ? resumenOf(props.item) : null))
 const reunion = computed(() => (kind.value === 'reunion' ? reunionOf(props.item) : null))
 const when = computed(() => {
   const t = Date.parse(props.item.ts)
@@ -260,6 +262,13 @@ onBeforeUnmount(() => {
         <div v-else class="note">
           <Icon name="warn" :size="30" />
           <p>No pude leer esta reunión.</p>
+        </div>
+      </div>
+      <div v-else-if="kind === 'resumen'" class="doc diagrama">
+        <ResumenCard v-if="resumen" :data="resumen" :item-id="item.id" />
+        <div v-else class="note">
+          <Icon name="warn" :size="30" />
+          <p>No pude leer este resumen.</p>
         </div>
       </div>
       <div v-else-if="kind === 'remote'" class="note">

@@ -1,3 +1,4 @@
+pub mod actualizacion;
 pub mod atajo_cambio;
 pub mod atajo_teclas;
 pub mod config;
@@ -7,6 +8,9 @@ pub mod forma;
 pub mod notas_pendiente;
 pub mod nudo;
 pub mod posicion;
+pub mod registro;
+pub mod registro_cola;
+pub mod registro_eventos;
 pub mod reunion;
 pub mod util;
 pub mod validar;

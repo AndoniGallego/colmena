@@ -356,6 +356,7 @@ class PermisosService:
         avisar: Callable[[Pedido], None] = lambda p: None,
         al_cambiar: Callable[[], None] = lambda: None,
         al_cerrar: Callable[[Pedido], None] = lambda p: None,
+        al_decidir: Callable[[str], None] = lambda sid: None,
         realpath=os.path.realpath,
         wall: Callable[[], float] = time.time,
         responder_timeout: float = 2.0,
@@ -368,6 +369,7 @@ class PermisosService:
         self.avisar = avisar
         self.al_cambiar = al_cambiar
         self.al_cerrar = al_cerrar
+        self.al_decidir = al_decidir
         self.realpath = realpath
         self._wall = wall
         self.responder_timeout = responder_timeout
@@ -420,7 +422,7 @@ class PermisosService:
             return True
         return evento in ("Stop", "UserPromptSubmit")
 
-    async def resolver_en_terminal(self, p: Pedido, motivo: str) -> None:
+    async def resolver_en_terminal(self, p: Pedido, motivo: str, avisar: bool = True) -> None:
         cambio = False
         async with self.locks.get(p.pane_id):
             if p.estado != "abierto":
@@ -429,13 +431,24 @@ class PermisosService:
             cambio = True
         if cambio:
             self.al_cambiar()
+            if avisar:
+                self._avisar_decidido(p.session_id)
+
+    def _avisar_decidido(self, session_id: str) -> None:
+        try:
+            self.al_decidir(session_id)
+        except Exception:
+            _LOG.warning("al_decidir falló", exc_info=True)
 
     async def senal(
         self, session_id: str, evento: str, tool_use_id: str | None
     ) -> None:
         for p in self._pedidos_abiertos_sesion(session_id):
             if self._senal_resuelve_pedido(p, evento, tool_use_id):
-                await self.resolver_en_terminal(p, motivo=f"señal {evento}")
+                await self.resolver_en_terminal(
+                    p, motivo=f"señal {evento}",
+                    avisar=evento not in ("Stop", "UserPromptSubmit"),
+                )
 
     async def observar_herdr(
         self, pane_id: str, status_herdr: str | None
@@ -445,7 +458,9 @@ class PermisosService:
             return
         if status_herdr is None:
             for p in pedidos:
-                await self.resolver_en_terminal(p, motivo=_MOTIVO_PANE_DESAPARECIDO)
+                await self.resolver_en_terminal(
+                    p, motivo=_MOTIVO_PANE_DESAPARECIDO, avisar=False
+                )
             return
         if status_herdr == "blocked":
             for p in pedidos:
@@ -700,6 +715,7 @@ class PermisosService:
                 ]
                 self._cerrar_pedido(p)
                 self.al_cambiar()
+                self._avisar_decidido(p.session_id)
                 return p.publico()
 
             p.estado = "terminal"

@@ -6,6 +6,7 @@ use std::sync::mpsc::{channel, sync_channel, Sender, SyncSender};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use colmena_nucleo::registro::{Nivel, Origen};
 use colmena_nucleo::reunion::ESTADO_APAGADO;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
@@ -177,7 +178,11 @@ pub async fn reunion_escuchar(
     .await??;
     // La reunión se sigue en su propia ventana; si no abre, la reunión igual escucha.
     if let Err(e) = ventanas::mostrar_reunion(&app_ventana) {
-        eprintln!("reunión: no se pudo abrir la ventana: {e}");
+        crate::registro::anotar(
+            Nivel::Aviso,
+            Origen::Reunion,
+            &format!("no se pudo abrir la ventana: {e}"),
+        );
     }
     Ok(lector)
 }

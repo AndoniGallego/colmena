@@ -18,6 +18,16 @@ colmena.ps1 publicar    # baja el ZIP y su mensaje, deja el repo público igual 
 
 Los pasos de abajo siguen valiendo para hacerlo a mano.
 
+## Sin compilar: el instalador que arma la notebook
+
+La notebook puede armar el instalador firmado con `bash scripts/armar-instalador.sh` (lo deja en `data/actualizaciones/` y el back lo sirve). Para instalarlo la primera vez, sin Build Tools ni Rust en la PC:
+
+1. Abrí `https://<tu-maquina>.<tu-red>.ts.net:8444/api/app/actualizacion/instalador` en el navegador de la PC (no pide PIN) y guardá el `.exe`.
+2. Ejecutalo. Windows SmartScreen avisa que el programa no es conocido (el instalador no tiene certificado de Windows): **Más información → Ejecutar de todos modos**.
+3. Si la app ya estaba instalada (por ejemplo con `colmena.ps1 instalar`), el instalador la reemplaza y conserva la configuración.
+
+Desde ahí, las versiones nuevas llegan desde la bandeja: **Buscar actualización** (también chequea sola al arrancar). Instala la versión armada más nueva, verifica su firma y la app se vuelve a abrir. `colmena.ps1` y el ZIP siguen funcionando igual.
+
 ## 1. Build Tools de Visual Studio 2022
 
 Instalá las herramientas de compilación con la carga de trabajo de escritorio en C++ (trae MSVC y el SDK de Windows):
@@ -339,3 +349,36 @@ Marcá cuando pruebes cada ítem. Aviso: la app ya no trae una notebook por defe
 - [ ] **140.** Abrí vos los Subtítulos (en «Superpuesto»), tocá **Escuchar** y después **Terminar**: la cajita vuelve a quedar visible.
 - [ ] **141.** Con la cajita escondida en una reunión, cerrá Colmena desde el Administrador de tareas y volvé a abrirla: la cajita aparece de nuevo.
 - [ ] **142.** Igual que el 139 pero con los Subtítulos acoplados abajo (quedan encima de la barra de tareas): tampoco se esconde y sale el mismo aviso.
+
+Ítems 143 a 151: registro de la app.
+
+- [ ] **143.** Bandeja → **Abrir registro**: se abre la carpeta y el archivo de hoy tiene la línea `info app arranque v…`.
+- [ ] **144.** Con la notebook conectada, prendé y apagá el nudo en la bandeja: en menos de un minuto aparecen las líneas en `~/.local/share/orquestador/registro-app/AAAA-MM-DD.log` de la notebook (pedile a Claude que lo lea).
+- [ ] **145.** Sin conexión con la notebook (Wi-Fi apagado), prendé y apagá el nudo; volvé a conectar: las líneas llegan solas a la notebook, sin repetirse.
+- [ ] **146.** Sin conexión, anotá algo (prender el nudo), cerrá la app con **Salir**, abrila y conectá: las líneas de antes del cierre llegan igual.
+- [ ] **147.** Elegí un atajo ocupado por otro programa: queda `aviso atajos … ocupado: …` en el registro.
+- [ ] **148.** Abrí un entorno desde **Entornos** y cerralo; probá uno que falle (puerto caído): quedan las líneas `túnel … abierto/cerrado/falló`.
+- [ ] **149.** Hacé una guía con la pregunta "contraseña1234" y un Mostrame: buscá "contraseña1234" en el registro de la PC y en el de la notebook: no aparece. Tampoco aparecen textos de ventanas ni tu nombre de usuario de Windows.
+- [ ] **150.** Renombrá un archivo del registro de la PC a una fecha de hace 10 días y reiniciá la app: se borra. Uno de hace 5 días queda.
+- [ ] **151.** La app compila sin advertencias nuevas y la versión release no abre consola.
+
+Ítems 152 a 157: eventos de telemetría de la app y del notch. Antes de probar, publicá el front en la notebook y recién después instalá el ZIP: un notch viejo con la app nueva pierde eventos.
+
+- [ ] **152.** Abrí la app y esperá un minuto con la notebook conectada: en la telemetría de la notebook aparece un evento `arranque` de origen `app` con la versión de la app.
+- [ ] **153.** Prendé y apagá el nudo en la bandeja: llegan los eventos `nudo_prendido` y `nudo_apagado`.
+- [ ] **154.** Elegí un atajo ocupado por otro programa: llega `atajo_conflicto` con el nombre de la acción; con uno libre, `atajo_registrado`.
+- [ ] **155.** Abrí un entorno desde **Entornos**: llega `tunel_abierto` con los milisegundos que tardó; con uno que falle (puerto caído), `tunel_fallo`.
+- [ ] **156.** Sin conexión con la notebook, hacé varias acciones y volvé a conectar: los eventos llegan en el mismo envío que las líneas del registro, sin repetirse, y ninguno trae textos de ventanas, rutas ni direcciones.
+- [ ] **157.** Apagá el Wi-Fi unos segundos y volvelo a prender: llegan `desconectado` (código `red`) y, al volver, `conectado`; al abrir la app con conexión llega un `conectado` inicial.
+
+Ítems 158 a 166: actualizador. En la notebook, armá un instalador con `bash scripts/armar-instalador.sh` y instalalo como dice "Sin compilar". Después hacé un commit cualquiera y armá otro (la versión sale de la hora: dejá pasar al menos un minuto).
+
+- [ ] **158.** Abrí `https://<tu-maquina>.<tu-red>.ts.net:8444/api/app/actualizacion` en el navegador de la PC sin haber entrado a Colmena: devuelve un JSON con `version` y `platforms.windows-x86_64.url` apuntando a la misma dirección. Cualquier otra ruta de `/api/` sigue pidiendo el PIN.
+- [ ] **159.** Abrí la app con la notebook conectada: al ratito el ítem de la bandeja dice **Actualizar a la versión del DD/MM HH:MM** (la hora del segundo armado), sin haber tocado nada.
+- [ ] **160.** Tocá ese ítem: aparece la ventanita del instalador con la barra de progreso, sin preguntas; la app se cierra y se vuelve a abrir sola. En el registro de la app queda `info app arranque v0.AAAAMMDD.HHMM` con la versión nueva.
+- [ ] **161.** Con la versión al día, tocá **Buscar actualización**: dice **Buscando…** y después **Ya está al día** unos segundos, y vuelve a **Buscar actualización**.
+- [ ] **162.** Sin conexión con la notebook (Wi-Fi apagado), tocá **Buscar actualización**: vuelve a **Buscar actualización** y en el registro queda `aviso app no pude buscar la actualización: sin conexión con la notebook`, sin direcciones.
+- [ ] **163.** En la notebook, cambiá un byte del `.exe` de `data/actualizaciones/` (por ejemplo `printf x | dd of=<exe> bs=1 seek=1000 conv=notrunc`) y tocá el ítem: no instala nada, queda `aviso app no pude instalar la actualización: la firma no verifica` y el ítem vuelve a **Buscar actualización**. Volvé a armar para dejarlo sano.
+- [ ] **164.** En la notebook, editá `data/actualizaciones/ultima.json` y poné una `version` más alta que la real sin volver a firmar: al tocar el ítem no instala (`la firma no verifica`).
+- [ ] **165.** Con dos armados hechos, en `data/actualizaciones/` quedan solo los dos últimos `.exe` y `anterior.json` nombra el penúltimo.
+- [ ] **166.** Una app compilada en la PC con `colmena.ps1 instalar` (versión 0.1.0) también ve la actualización y se actualiza al instalador de la notebook.

@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import type { EstadoLector, LectorConectado } from '../lib/reunionPuente'
 import { mostrar, MENSAJE_MOSTRAR } from '../lib/mostrarPuente'
 import { emitir } from '../lib/notchPuente'
+import { anotarInvokeFallido, anotarNotch, mensajeDeError } from '../lib/registroPuente'
 
 /** El panel muestra y el estado guarda como mucho estas líneas, las más nuevas arriba. */
 export const LINEAS_VISIBLES = 30
@@ -233,7 +234,10 @@ export const postear = (ruta: string, cuerpo: unknown) => pedir('POST', ruta, cu
 function invocar(cmd: string): Promise<unknown> {
   const invoke = window.__TAURI__?.core?.invoke
   if (typeof invoke !== 'function') return Promise.reject(new Error('sin app'))
-  return invoke(cmd)
+  return invoke(cmd).catch((e: unknown) => {
+    anotarInvokeFallido(cmd)
+    throw e
+  })
 }
 
 function mensajeDe(e: unknown, porDefecto: string): string {
@@ -315,6 +319,7 @@ export async function mostrarAhora(pregunta: string): Promise<void> {
   mirandoDe = id
   mirando.value = 'capturando'
   if (typeof invoke !== 'function') {
+    anotarNotch('aviso', 'mostrar: fallo')
     errorReunion.value = MENSAJE_MOSTRAR.fallo
     mirando.value = null
     return
@@ -327,6 +332,7 @@ export async function mostrarAhora(pregunta: string): Promise<void> {
     mirando.value = yaTermino || mirandoDe !== id || reunion.value.reunion !== id || !enCurso(reunion.value) ? null : r.linea
     return
   }
+  anotarNotch('aviso', `mostrar: ${r.error}`)
   errorReunion.value = MENSAJE_MOSTRAR[r.error]
   mirando.value = null
   if (r.error === 'apagado') nudoPrendido.value = false
@@ -409,6 +415,7 @@ export async function escuchar(reposElegidos: string[], todos: boolean, tema = '
       copiloto: 'abriendo',
     })
   } catch (e) {
+    anotarNotch('error', `reunion: ${mensajeDeError(e)}`)
     errorReunion.value = mensajeDe(e, 'No pude empezar la reunión. Probá de nuevo.')
     return
   }
@@ -445,6 +452,7 @@ export async function tocar(linea: string): Promise<void> {
     const d = obj(await pedir('POST', '/api/reunion/tocar', { reunion: id, linea }))
     if (d?.estado === 'en_cola') marcarRespuesta(id, linea, 'en_cola')
   } catch (e) {
+    anotarNotch('error', `reunion: ${mensajeDeError(e)}`)
     errorReunion.value = mensajeDe(e, 'No pude mandar la pregunta al Copiloto.')
   }
 }
@@ -457,6 +465,7 @@ export async function descartar(linea: string): Promise<void> {
     await pedir('POST', '/api/reunion/descartar', { reunion: id, linea })
     reunion.value = aplicarEvento(reunion.value, 'reunion-descartada', { reunion: id, linea })
   } catch (e) {
+    anotarNotch('error', `reunion: ${mensajeDeError(e)}`)
     errorReunion.value =
       e instanceof ErrorHttp && e.status === 409
         ? 'El Copiloto está buscando esa línea. Esperá que termine para descartarla.'
@@ -501,6 +510,7 @@ export async function preguntarUltimo(): Promise<void> {
   try {
     await postear('/api/reunion/preguntar-ultimo', { reunion: id })
   } catch (e) {
+    anotarNotch('error', `reunion: ${mensajeDeError(e)}`)
     errorReunion.value = mensajeDe(e, 'No pude preguntar por lo último.')
   }
 }
@@ -512,6 +522,7 @@ async function cambiarPausa(ruta: 'pausar' | 'seguir', cmd: string): Promise<voi
   try {
     await postear(`/api/reunion/${ruta}`, { reunion: id })
   } catch (e) {
+    anotarNotch('error', `reunion: ${mensajeDeError(e)}`)
     errorReunion.value = mensajeDe(e, 'No pude cambiar la pausa.')
     return
   }
@@ -551,6 +562,7 @@ export async function terminar(sinInvoke = false): Promise<void> {
     lector?.descartar()
     await postear('/api/reunion/terminar', { reunion: id })
   } catch (e) {
+    anotarNotch('error', `reunion: ${mensajeDeError(e)}`)
     errorReunion.value = mensajeDe(e, 'No pude cerrar la reunión. Probá de nuevo.')
   } finally {
     cerrando = false

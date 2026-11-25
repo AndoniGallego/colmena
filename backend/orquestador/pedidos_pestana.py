@@ -30,6 +30,9 @@ class PedidosPestanaStore:
         self._ultimo: dict[str, float] = {}
         self._listeners: list = []
         self._descartes: list = []
+        self._registros: list = []
+        self._finales: list = []
+        self._finales_emitidos: set[str] = set()
         # Última lectura de otra sesión por el MCP, por session_id de la que lee: {"nombre", "ts"}.
         self._lecturas: dict[str, dict] = {}
         self._registro_descartes: dict[str, list[dict]] = {}
@@ -41,6 +44,37 @@ class PedidosPestanaStore:
     def on_descarte(self, fn) -> None:
         """fn(origen, motivo): un pedido no se va a abrir (fila_llena, cooldown, tope o vencido)."""
         self._descartes.append(fn)
+
+    def on_registro(self, fn) -> None:
+        """fn(entrada): cada pedido creado o descartado, con la vía (mcp o marca) y sin datos del pedido."""
+        self._registros.append(fn)
+
+    def on_final(self, fn) -> None:
+        """fn(item | None, origen, estado, motivo): una sola vez por pedido que terminó (abierto, rechazado,
+        vencido, descartado o cortado) y una vez por descarte que no dejó ítem."""
+        self._finales.append(fn)
+
+    def _final(self, item: dict | None, origen: dict, estado: str, motivo: str | None = None) -> None:
+        if item is not None:
+            if item["id"] in self._finales_emitidos:
+                return
+            self._finales_emitidos.add(item["id"])
+            motivo = motivo or item.get("motivo_final")
+        for fn in self._finales:
+            try:
+                fn(item, dict(origen), estado, motivo)
+            except Exception as exc:
+                log.warning("listener final de pedido_pestana falló: %s", type(exc).__name__)
+
+    def _registrar(self, origen: dict, accion: str, resultado: str) -> None:
+        entrada = {"pedido_accion": accion, "via": origen.get("via") or "marca",
+                   "pane_id": origen.get("pane_id") or "", "session_id": str(origen.get("session_id") or ""),
+                   "resultado": resultado}
+        for fn in self._registros:
+            try:
+                fn(dict(entrada))
+            except Exception as exc:
+                log.warning("registro de pedido_pestana falló: %s", type(exc).__name__)
 
     def _emit(self, pid: str, estado: str) -> None:
         for fn in self._listeners:
@@ -57,9 +91,16 @@ class PedidosPestanaStore:
             quien["via"] = origen["via"]
         return quien
 
-    def descartar(self, origen: dict, motivo: str) -> None:
-        """Un pedido que no llegó a crearse (p. ej. la terminal a cerrar no existe): se avisa igual al origen."""
-        self._descartar(self._quien(origen), motivo)
+    def descartar(self, origen: dict, motivo: str, *, pid: str | None = None) -> None:
+        """Avisa al origen. Sin `pid` (o desconocido) es un pedido que no llegó a crearse y cuenta como final;
+        con el `pid` de un ítem solo guarda el motivo si todavía no terminó: el final lo emite quien lo cierra."""
+        quien = self._quien(origen)
+        self._descartar(quien, motivo)
+        item = self._items.get(pid) if pid else None
+        if item is None:
+            self._final(None, quien, "descartado", motivo)
+        elif item["estado"] in ("pendiente", "lanzando"):
+            item["motivo_final"] = motivo
 
     def descartes_de(self, sid: str) -> list[dict]:
         limite = int(self.wall()) - DESCARTES_TTL
@@ -71,6 +112,7 @@ class PedidosPestanaStore:
         return [dict(d) for d in vivos]
 
     def _descartar(self, origen: dict, motivo: str) -> None:
+        self._registrar(origen, "", motivo)
         sid = origen.get("session_id") or ""
         if sid:
             fila = self._registro_descartes.setdefault(sid, [])
@@ -102,6 +144,7 @@ class PedidosPestanaStore:
         self._sacar_de_fila(item)
         self._emit(pid, "vencido")
         self._descartar(item.get("origen") or {}, motivo)
+        self._final(item, item.get("origen") or {}, "vencido", motivo)
 
     def _limpiar_vencidos(self) -> None:
         ahora = self.wall()
@@ -144,11 +187,13 @@ class PedidosPestanaStore:
         ahora = self.monotonic()
         if sid and cooldown and ahora - self._ultimo.get(sid, -COOLDOWN) < COOLDOWN:
             self._descartar(quien, "cooldown")
+            self._final(None, quien, "descartado", "cooldown")
             return None, "cooldown"
         self._limpiar_vencidos()
         if sid:
             if len(self._por_sesion.get(sid, [])) >= MAX_POR_SESION:
                 self._descartar(quien, "fila_llena")
+                self._final(None, quien, "descartado", "fila_llena")
                 return None, "fila_llena"
             if cooldown:
                 self._ultimo[sid] = ahora
@@ -189,6 +234,7 @@ class PedidosPestanaStore:
         self._items[pid] = item
         if sid:
             self._por_sesion.setdefault(sid, []).append(pid)
+        self._registrar(quien, accion or "abrir", "creado")
         self._emit(pid, "pendiente")
         return item, None
 
@@ -228,6 +274,7 @@ class PedidosPestanaStore:
         item["resultado"] = {"codigo": codigo, **extra}
         self._sacar_de_fila(item)
         self._emit(pid, "descartado")
+        self._final(item, item.get("origen") or {}, "descartado", codigo)
 
     def cancelar(self, pid: str) -> bool:
         """Cancelación desde la sesión que pidió (MCP tasks/cancel): solo si sigue pendiente. Nunca aprueba."""
@@ -238,6 +285,7 @@ class PedidosPestanaStore:
         item["resultado"] = {"codigo": "cancelado"}
         self._sacar_de_fila(item)
         self._emit(pid, "descartado")
+        self._final(item, item.get("origen") or {}, "descartado", "cancelado")
         return True
 
     def registrar_lectura(self, sid: str, nombre: str) -> None:
@@ -326,7 +374,7 @@ class PedidosPestanaStore:
         item["cierre"]["aviso_huella"] = huella
         return True
 
-    def marcar(self, pid: str, estado: Estado) -> dict | None:
+    def marcar(self, pid: str, estado: Estado, motivo: str | None = None) -> dict | None:
         self._limpiar_vencidos()
         item = self._items.get(pid)
         if not item:
@@ -339,7 +387,15 @@ class PedidosPestanaStore:
         item["estado"] = estado
         self._sacar_de_fila(item)
         self._emit(pid, estado)
+        self._final(item, item.get("origen") or {}, estado, motivo)
         return item
+
+    def cortar(self) -> int:
+        """Corte de Colmena: los pedidos que seguían pendientes o lanzando quedan como cortados."""
+        vivos = [it for it in self._items.values() if it["estado"] in ("pendiente", "lanzando")]
+        for item in vivos:
+            self._final(item, item.get("origen") or {}, "cortado")
+        return len(vivos)
 
     def tomar_para_lanzar(self, pid: str) -> bool:
         """Pendiente → lanzando, sin await en el medio: una segunda aprobación o un rechazo ven que ya no
@@ -350,7 +406,7 @@ class PedidosPestanaStore:
         item["estado"] = "lanzando"
         return True
 
-    def soltar_lanzamiento(self, pid: str, estado: str) -> None:
+    def soltar_lanzamiento(self, pid: str, estado: str, motivo: str | None = None) -> None:
         """Fin del lanzamiento: abierto, rechazado o de vuelta a pendiente (si ya venció, vence ahí)."""
         item = self._items.get(pid)
         if not item or item["estado"] != "lanzando":
@@ -360,6 +416,7 @@ class PedidosPestanaStore:
             item["estado"] = estado
             self._sacar_de_fila(item)
             self._emit(pid, estado)
+            self._final(item, item.get("origen") or {}, estado, motivo)
         elif item["vence"] <= self.wall():
             self._vencer(pid)
 

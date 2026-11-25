@@ -36,7 +36,7 @@ vi.mock('./NotchCaptura.vue', () => ({
 }))
 vi.mock('../../state/app', async () => {
   const { ref: r } = await import('vue')
-  return { auth: r('ready'), pcNudoActivo: r(false) }
+  return { auth: r('ready'), pcNudoActivo: r(false), boardState: r({ connection: 'connecting' }) }
 })
 const lista = vi.hoisted(() => ({ ref: null as null | { value: unknown[] } }))
 vi.mock('../../state/notas', async () => {

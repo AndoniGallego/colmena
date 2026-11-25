@@ -310,3 +310,42 @@ def test_enrutador_avisa_al_detector_en_herramientas_y_prompt():
         asyncio.run(enr.manejar(MensajeGancho(ev, "global", ids, {"tool_name": "Bash", "tool_use_id": "t"}),
                                 SimpleNamespace(cerrada=asyncio.Event())))
     assert [e for e, _ in vistos] == ["PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit"]
+
+
+def test_error_del_enrutador_loguea_traceback(caplog):
+    from types import SimpleNamespace
+
+    def rompe(msg, pane):
+        raise RuntimeError("x")
+
+    enr = Enrutador(SimpleNamespace(recibir=rompe), SimpleNamespace(), SimpleNamespace(board=None))
+    msg = MensajeGancho("Stop", "global", Ids(None, None, None, None, "sid-1"), {})
+    asyncio.run(enr.manejar(msg, SimpleNamespace(cerrada=asyncio.Event(), cerrar=lambda: None)))
+    rec = next(r for r in caplog.records if "enrutador no pudo manejar" in r.getMessage())
+    assert rec.exc_info and rec.exc_info[0] is RuntimeError
+
+
+def test_enrutador_pasa_stop_a_al_stop_y_tolera_errores():
+    from types import SimpleNamespace
+
+    vistos = []
+
+    class Permisos:
+        async def senal(self, sid, evento, tool_use_id):
+            pass
+
+    def armar(al_stop):
+        return Enrutador(SimpleNamespace(recibir=lambda msg, pane: False), Permisos(),
+                         SimpleNamespace(board=None), al_stop=al_stop)
+
+    ids = Ids(None, None, None, None, "sid-1")
+    conexion = SimpleNamespace(cerrada=asyncio.Event(), cerrar=lambda: None)
+    enr = armar(lambda msg: vistos.append(msg.evento))
+    for ev in ("PreToolUse", "Stop"):
+        asyncio.run(enr.manejar(MensajeGancho(ev, "global", ids, {}), conexion))
+    assert vistos == ["Stop"]
+
+    def rompe(msg):
+        raise RuntimeError("x")
+
+    asyncio.run(armar(rompe).manejar(MensajeGancho("Stop", "global", ids, {}), conexion))

@@ -32,7 +32,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use super::{Fuente, Mensaje, PedidoLector};
+use crate::registro;
 use crate::Estado;
+use colmena_nucleo::registro::{Nivel, Origen};
 
 const ESPERA_TICK: Duration = Duration::from_millis(1_000);
 const SIN_EVENTOS_MS: u64 = 5_000;
@@ -159,13 +161,21 @@ fn ruta_subtitulos() -> Option<std::path::PathBuf> {
 /// Lanza `LiveCaptions.exe`; `false` si no se pudo (la reunión sigue y el lector avisa "sin subtítulos").
 fn abrir_subtitulos() -> bool {
     let Some(ruta) = ruta_subtitulos() else {
-        eprintln!("reunión: no pude ubicar la carpeta de Windows para abrir los Subtítulos en vivo");
+        registro::anotar(
+            Nivel::Aviso,
+            Origen::Reunion,
+            "no pude ubicar la carpeta de Windows para abrir los Subtítulos en vivo",
+        );
         return false;
     };
     match std::process::Command::new(ruta).spawn() {
         Ok(_) => true,
         Err(e) => {
-            eprintln!("reunión: no pude abrir los Subtítulos en vivo: {e}");
+            registro::anotar(
+                Nivel::Aviso,
+                Origen::Reunion,
+                &format!("no pude abrir los Subtítulos en vivo: {e}"),
+            );
             false
         }
     }
@@ -656,7 +666,11 @@ pub(super) fn bucle(rx: Receiver<Mensaje>, tx: Sender<Mensaje>, app: AppHandle) 
         match CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
             Ok(a) => a,
             Err(e) => {
-                eprintln!("reunión: UI Automation no arrancó: {e}");
+                registro::anotar(
+                    Nivel::Error,
+                    Origen::Reunion,
+                    &format!("UI Automation no arrancó: {e}"),
+                );
                 return;
             }
         }

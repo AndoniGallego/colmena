@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-registro-pendiente"
+description = "Enables the registro_pendiente command without any pre-configured scope."
+commands.allow = ["registro_pendiente"]
+
+[[permission]]
+identifier = "deny-registro-pendiente"
+description = "Denies the registro_pendiente command without any pre-configured scope."
+commands.deny = ["registro_pendiente"]

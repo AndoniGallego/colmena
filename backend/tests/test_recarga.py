@@ -458,3 +458,57 @@ def test_dos_pedir_no_duplica_envio_mientras_lento():
         assert envios == ["g1:p1"]
 
     asyncio.run(run())
+
+
+def test_recarga_avisa_al_escribir_con_el_pane():
+    llamadas = []
+
+    async def mandar(pane, texto):
+        return None
+
+    async def run():
+        svc = RecargaService(
+            sesiones=lambda: _sesiones({"pane_id": "g1:p1", "kind": "claude", "estado": "idle"}),
+            mandar=mandar, marcar_silencio=lambda: None, al_escribir=llamadas.append,
+        )
+        await svc.pedir()
+        await svc.esperar_envios()
+
+    asyncio.run(run())
+    assert llamadas == ["g1:p1"]
+
+
+def test_recarga_que_falla_igual_marcaba_antes():
+    llamadas = []
+
+    async def mandar(pane, texto):
+        raise RuntimeError("caído")
+
+    async def run():
+        svc = RecargaService(
+            sesiones=lambda: _sesiones({"pane_id": "g1:p1", "kind": "claude", "estado": "idle"}),
+            mandar=mandar, marcar_silencio=lambda: None, al_escribir=llamadas.append,
+        )
+        await svc.pedir()
+        await svc.esperar_envios()
+
+    asyncio.run(run())
+    assert llamadas == ["g1:p1"]
+
+
+def test_recarga_marca_el_pane_antes_de_mandar():
+    orden = []
+
+    async def mandar(pane, texto):
+        orden.append("mandar")
+
+    async def run():
+        svc = RecargaService(
+            sesiones=lambda: _sesiones({"pane_id": "g1:p1", "kind": "claude", "estado": "idle"}),
+            mandar=mandar, marcar_silencio=lambda: None, al_escribir=orden.append,
+        )
+        await svc.pedir()
+        await svc.esperar_envios()
+
+    asyncio.run(run())
+    assert orden == ["g1:p1", "mandar"]

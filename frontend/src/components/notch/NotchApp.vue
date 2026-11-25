@@ -11,10 +11,11 @@ import {
 import { esCampoTextoNotch } from '../../lib/notchTeclado'
 import { guiaMontada } from '../../lib/notchGuia'
 import { crearPuente, escuchar as escucharApp } from '../../lib/notchPuente'
+import { crearReporteConexion, iniciarRegistroNotch } from '../../lib/registroPuente'
 import { accionAlTocarNotch, reunionViva } from '../../lib/notchReunionVentana'
 import { useNow } from '../../lib/time'
 import { vaciarCola } from '../../lib/notasCola'
-import { auth, pcNudoActivo } from '../../state/app'
+import { auth, boardState, pcNudoActivo } from '../../state/app'
 import { crearNota, pendientes } from '../../state/notas'
 import {
   abrirColmena,
@@ -209,6 +210,17 @@ watch(enVivo, (vivo, antes) => {
   if (vivo && antes === false) vaciarNotasPendientes()
 })
 
+// El WebSocket del tablero ya sabe si la notebook responde: 'connecting' no informa nada.
+const reportarConexion = crearReporteConexion()
+watch(
+  () => boardState.value.connection,
+  (c) => {
+    if (c === 'live') reportarConexion(true)
+    else if (c === 'reconnecting') reportarConexion(false)
+  },
+  { immediate: true },
+)
+
 let blurTimer: ReturnType<typeof setTimeout> | undefined
 
 function onBlur() {
@@ -239,9 +251,12 @@ function abrirDesdeAviso(sid: string) {
   cerrarAviso()
 }
 
+let detenerRegistro: () => void = () => {}
+
 onMounted(() => {
   document.documentElement.classList.add('notch')
   setPuente(crearPuente())
+  detenerRegistro = iniciarRegistroNotch()
   iniciarEscuchaNotas()
   // La ventana "Reunión" no tiene el lector: el cierre (que vuelca la cola de texto) lo hace el notch.
   void escucharApp('reunion-terminar-pedido', () => void terminarReunion())
@@ -253,6 +268,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  detenerRegistro()
   clearTimeout(capturaTimer)
   clearTimeout(guiaTimer)
   clearTimeout(blurTimer)

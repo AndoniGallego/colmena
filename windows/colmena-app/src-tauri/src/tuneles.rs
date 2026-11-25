@@ -10,7 +10,10 @@ use std::thread::JoinHandle;
 use std::os::windows::process::CommandExt;
 
 use colmena_nucleo::entornos::{EstadoTunel, FaseTunel, ultima_linea};
+use colmena_nucleo::registro::{Nivel, Origen};
 use colmena_nucleo::util::recortar_inicio;
+
+use crate::registro;
 
 const STDERR_MAX: usize = 4096;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -79,6 +82,10 @@ fn refrescar(
             lector_join,
         },
     }
+}
+
+fn anotar_cerrado(nombre: &str) {
+    registro::anotar(Nivel::Info, Origen::Tuneles, &format!("túnel {nombre} cerrado"));
 }
 
 fn push_stderr_tail(buf: &mut String, line: &str) {
@@ -443,6 +450,7 @@ impl Tuneles {
                 let _ = hijo.kill();
                 let _ = hijo.wait();
                 let _ = lector_join.join();
+                anotar_cerrado(nombre);
             }
             Entrada::Error { .. } => {}
         }
@@ -450,7 +458,7 @@ impl Tuneles {
 
     pub fn cerrar_todos(&self) {
         let mut mapa = self.inner.lock().unwrap();
-        for (_, ent) in mapa.drain() {
+        for (nombre, ent) in mapa.drain() {
             if let Entrada::Abierto {
                 mut hijo,
                 lector_join,
@@ -460,6 +468,7 @@ impl Tuneles {
                 let _ = hijo.kill();
                 let _ = hijo.wait();
                 let _ = lector_join.join();
+                anotar_cerrado(&nombre);
             }
         }
     }

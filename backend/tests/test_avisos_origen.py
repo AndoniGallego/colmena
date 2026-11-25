@@ -79,8 +79,10 @@ def test_textos_fijos_por_motivo():
         "cierre_cambio": "Colmena: no cerré lo que pediste porque cambió desde que lo pediste.",
         "cierre_no_hecho": "Colmena: no se cerró lo que pediste (falló o no terminó de guardar a tiempo). Si hace "
                            "falta, Ando lo cierra desde el tablero.",
-        "carpeta_colmena": "Colmena no abre pedidos en su propio repo: si hace falta, Ando lo abre a mano "
-                           "desde el tablero.",
+        "carpeta_colmena": "Colmena: es el repo de Colmena y no abre pedidos ahí. Pedile a Ando que la abra "
+                           "desde el tablero, o hacé el trabajo con ayudantes (subagentes).",
+        "carpeta_no_permitida": "Colmena: esa carpeta no está entre las que permite. No pruebes otra por tu "
+                                "cuenta: decile a Ando cuál querías o que la abra a mano desde el tablero.",
     }
 
 
@@ -302,3 +304,35 @@ def test_descarte_de_la_marca_sigue_avisando_con_el_store():
     store.descartar({**ORIGEN_SESION, "via": "mcp"}, "carpeta_colmena")
     a.correr()
     assert len(a.enviados) == 1
+
+
+from orquestador.avisos_origen import TEXTOS as _TEXTOS, texto_mcp
+
+
+def test_carpeta_colmena_dice_que_hacer():
+    t = texto_mcp("carpeta_colmena")
+    assert "repo de Colmena" in t and "tablero" in t and "subagentes" in t
+
+
+def test_carpeta_no_permitida_dice_que_hacer():
+    t = texto_mcp("carpeta_no_permitida")
+    assert "no está entre las que" in t and "decile a Ando" in t
+    assert "carpeta_no_permitida" in _TEXTOS
+
+
+def test_texto_mcp_sin_prefijo_colmena_ni_pestana():
+    t = texto_mcp("cooldown")
+    assert not t.startswith("Colmena:") and "pedido de pestaña" not in t and "Probá de nuevo" in t
+
+
+def test_tope_agrega_que_hacer():
+    assert "Esperá" in texto_mcp("tope")
+
+
+def test_motivo_desconocido_usa_fallback_con_el_codigo():
+    t = texto_mcp("algo_raro")
+    assert "algo_raro" in t and "decile a Ando" in t and t != "Colmena descartó el pedido."
+
+
+def test_todo_motivo_de_textos_tiene_texto_mcp_no_vacio():
+    assert all(texto_mcp(m).strip() for m in _TEXTOS)

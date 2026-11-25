@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/types'
 
 const correrComando = vi.fn()
-vi.mock('../state/app', () => ({ correrComando: (...a: unknown[]) => correrComando(...a) }))
+const telemetriaComandoNo = vi.fn()
+vi.mock('../state/app', () => ({
+  correrComando: (...a: unknown[]) => correrComando(...a),
+  telemetriaComandoNo: (...a: unknown[]) => telemetriaComandoNo(...a),
+}))
 
 const { default: ComandoCard } = await import('./ComandoCard.vue')
 const { olvidarComandos } = await import('../lib/comando')
@@ -20,6 +24,7 @@ const props = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   correrComando.mockReset()
+  telemetriaComandoNo.mockReset()
   olvidarComandos()
 })
 
@@ -46,8 +51,30 @@ describe('ComandoCard', () => {
   it('No lo deja Descartado sin llamar al servidor', async () => {
     const w = mount(ComandoCard, { props: props() })
     await w.find('button.no').trigger('click')
+    await vi.waitFor(() => expect(telemetriaComandoNo).toHaveBeenCalled())
     expect(correrComando).not.toHaveBeenCalled()
     expect(w.text()).toContain('Descartado')
+  })
+
+  it('No avisa al back con la clave hasheada', async () => {
+    telemetriaComandoNo.mockResolvedValue(undefined)
+    const w = mount(ComandoCard, { props: props() })
+    await w.find('button.no').trigger('click')
+    await vi.waitFor(() => expect(telemetriaComandoNo).toHaveBeenCalledTimes(1))
+    const [clave] = telemetriaComandoNo.mock.calls[0]
+    expect(clave).toMatch(/^[0-9a-f]{16}$/)
+    expect(JSON.stringify(telemetriaComandoNo.mock.calls)).not.toContain(LARGO)
+    expect(JSON.stringify(telemetriaComandoNo.mock.calls)).not.toContain('s1')
+  })
+
+  it('si el aviso falla la tarjeta queda descartada igual', async () => {
+    telemetriaComandoNo.mockRejectedValue(new Error('caído'))
+    const w = mount(ComandoCard, { props: props() })
+    await w.find('button.no').trigger('click')
+    await vi.waitFor(() => expect(telemetriaComandoNo).toHaveBeenCalledTimes(1))
+    await flushPromises()
+    expect(w.text()).toContain('Descartado')
+    expect(w.find('[role="alert"]').exists()).toBe(false)
   })
 
   it('un error del servidor se muestra y deja reintentar', async () => {

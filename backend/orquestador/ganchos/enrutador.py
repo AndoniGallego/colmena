@@ -25,12 +25,14 @@ class Enrutador:
         *,
         post_tool_use=None,
         al_evento=None,
+        al_stop=None,
     ) -> None:
         self.estados = estados
         self.permisos = permisos
         self.hub = hub
         self.post_tool_use = post_tool_use
         self.al_evento = al_evento
+        self.al_stop = al_stop
 
     async def manejar(self, msg: MensajeGancho, conexion: Conexion) -> None:
         try:
@@ -46,6 +48,11 @@ class Enrutador:
                     self.al_evento(msg, pane)
                 except Exception as exc:
                     _LOG.warning("detector de trabas falló: %s", type(exc).__name__)
+            if msg.evento == "Stop" and self.al_stop is not None:
+                try:
+                    self.al_stop(msg)
+                except Exception as exc:
+                    _LOG.warning("telemetría de cierres falló: %s", type(exc).__name__)
             if msg.evento != "PermissionRequest" and msg.ids.claude:
                 await self.permisos.senal(msg.ids.claude, msg.evento, msg.tool_use_id)
             pedido = None
@@ -63,6 +70,6 @@ class Enrutador:
                     await conexion.cerrada.wait()
         except Exception as exc:
             _LOG.warning(
-                "enrutador no pudo manejar %s: %s", msg.evento, type(exc).__name__
+                "enrutador no pudo manejar %s: %s", msg.evento, type(exc).__name__, exc_info=True
             )
             conexion.cerrar()

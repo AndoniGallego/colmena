@@ -1,8 +1,10 @@
+mod actualizador;
 mod atajos;
 mod bandeja;
 mod captura;
 mod entornos;
 mod nudo;
+mod registro;
 mod reunion;
 mod tuneles;
 mod uia;
@@ -11,6 +13,7 @@ mod ventanas;
 use colmena_nucleo::config::{escribir_config, leer_config, Config};
 use colmena_nucleo::notas_pendiente::AperturaNotas;
 use colmena_nucleo::posicion::Ancla;
+use colmena_nucleo::registro::{Nivel, Origen};
 use colmena_nucleo::validar::{
     es_url_local, mismo_origen, url_biblioteca, validar_aviso, validar_origen, validar_sesion,
     validar_tamano,
@@ -103,7 +106,7 @@ pub(crate) fn exige_notch_o_reunion(window: &WebviewWindow, estado: &Estado) -> 
     exige_ventana(window, estado, "notch").or_else(|_| exige_ventana(window, estado, "reunion"))
 }
 
-fn exige_notch(window: &WebviewWindow, estado: &Estado) -> Result<String, String> {
+pub(crate) fn exige_notch(window: &WebviewWindow, estado: &Estado) -> Result<String, String> {
     exige_ventana(window, estado, "notch")
 }
 
@@ -141,6 +144,10 @@ pub fn arrancar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
             .permission("allow-reunion-terminar")
             .permission("allow-reunion-estado")
             .permission("allow-reunion-mostrar-ventana")
+            .permission("allow-registro-pendiente")
+            .permission("allow-registro-enviado")
+            .permission("allow-registro-anotar")
+            .permission("allow-registro-evento")
             .permission("core:event:allow-listen")
             .permission("core:event:allow-emit"),
     )
@@ -181,8 +188,13 @@ pub fn arrancar(app: &AppHandle, estado: &Estado) -> Result<(), String> {
     bandeja::aplicar_arranque(app, &cfg);
     atajos::arrancar(app, &cfg.atajos);
     if let Err(e) = ventanas::crear_nudo(app) {
-        eprintln!("nudo: no se pudo preparar, queda apagado: {e}");
+        registro::anotar(
+            Nivel::Error,
+            Origen::Nudo,
+            &format!("no se pudo preparar, queda apagado: {e}"),
+        );
     }
+    actualizador::buscar(app, true);
     Ok(())
 }
 
@@ -320,6 +332,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -367,9 +380,22 @@ pub fn run() {
             reunion::reunion_seguir,
             reunion::reunion_terminar,
             reunion::reunion_estado,
-            reunion::reunion_mostrar_ventana
+            reunion::reunion_mostrar_ventana,
+            registro::registro_pendiente,
+            registro::registro_enviado,
+            registro::registro_anotar,
+            registro::registro_evento
         ])
         .setup(|app| {
+            if registro::iniciar(app.handle()).is_ok() {
+                let modo = if cfg!(debug_assertions) { "debug" } else { "release" };
+                registro::anotar(
+                    Nivel::Info,
+                    Origen::App,
+                    &format!("arranque v{} ({modo})", app.package_info().version),
+                );
+                registro::anotar_arranque();
+            }
             let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
             std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
             let ruta_config = config_dir.join("config.json");
@@ -402,6 +428,7 @@ pub fn run() {
 
             let handle = app.handle().clone();
             app.manage(reunion::arrancar_hilo(handle.clone()));
+            app.manage(actualizador::Actualizador::default());
             let para_listo = handle.clone();
             handle.listen(atajos::EVENTO_NOTCH_LISTO, move |_| {
                 atajos::notch_listo(&para_listo);

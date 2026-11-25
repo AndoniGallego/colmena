@@ -901,6 +901,10 @@ export function createMockApi(onUnauthorized: () => void): Api {
       await sleep(400)
       return { ok: true, comando: body.comando }
     },
+    async telemetriaComandoNo() {},
+    async marcarPropuesta(id, decision) {
+      return { id, estado: decision === 'ignorar' ? 'ignorada' : decision }
+    },
     async answerDialog(body) {
       need()
       await sleep(1400)

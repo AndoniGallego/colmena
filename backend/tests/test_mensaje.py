@@ -271,3 +271,73 @@ def test_origen_copiloto_valido():
 
     b = MensajeBody(id="cop-12345678", pane_id="w1:p1", texto="hola", origen="copiloto")
     assert b.origen == "copiloto"
+
+
+def _servicio(enchufe, tmp_path, llamadas):
+    from orquestador.mensaje import MensajeService
+    from orquestador.state import StateStore
+    return MensajeService(enchufe, StateStore(tmp_path), al_escribir=llamadas.append)
+
+
+def _cuerpo(origen, ident="abcdefgh"):
+    from orquestador.mensaje import MensajeBody
+    return MensajeBody(id=ident, pane_id="w1:p1", texto="hola", origen=origen, destino="Uno")
+
+
+def test_send_avisa_al_escribir_con_el_pane(enchufe, tmp_path):
+    llamadas = []
+    s = _servicio(enchufe, tmp_path, llamadas)
+    asyncio.run(s.execute(_cuerpo("mr-job")))
+    assert llamadas == ["w1:p1"]
+
+
+def test_send_que_falla_igual_marcaba_antes(enchufe, tmp_path):
+    from orquestador.enchufe import TerminalesError
+    llamadas = []
+    s = _servicio(enchufe, tmp_path, llamadas)
+
+    async def roto(*a, **k):
+        raise TerminalesError("caído")
+
+    enchufe.mandar_prompt = roto
+    with pytest.raises(Exception):
+        asyncio.run(s.execute(_cuerpo("mr-job")))
+    assert llamadas == ["w1:p1"]
+
+
+def test_send_de_ando_no_avisa_al_escribir(enchufe, tmp_path):
+    llamadas = []
+    s = _servicio(enchufe, tmp_path, llamadas)
+    asyncio.run(s.execute(_cuerpo("manual")))
+    assert llamadas == []
+
+
+def test_send_sigue_si_al_escribir_falla(enchufe, tmp_path):
+    from orquestador.mensaje import MensajeService
+    from orquestador.state import StateStore
+
+    def roto(pane):
+        raise RuntimeError("x")
+
+    s = MensajeService(enchufe, StateStore(tmp_path), al_escribir=roto)
+    assert asyncio.run(s.execute(_cuerpo("mr-job")))["ok"] is True
+
+
+def test_send_de_comentario_diff_no_avisa_al_escribir(enchufe, tmp_path):
+    llamadas = []
+    s = _servicio(enchufe, tmp_path, llamadas)
+    asyncio.run(s.execute(_cuerpo("comentario-diff")))
+    assert llamadas == []
+
+
+def test_send_marca_el_pane_antes_de_mandar_el_prompt(enchufe, tmp_path):
+    orden = []
+    s = _servicio(enchufe, tmp_path, orden)
+    original = enchufe.mandar_prompt
+
+    async def espiado(*a, **k):
+        orden.append("mandar")
+        return await original(*a, **k)
+    enchufe.mandar_prompt = espiado
+    asyncio.run(s.execute(_cuerpo("mr-job")))
+    assert orden == ["w1:p1", "mandar"]

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { MENSAJE_GUIA, pedirGuia, postGuia, salirGuia, siguienteGuia, type ErrorGuia, type RespuestaGuia } from '../lib/guiaPuente'
 import type { Invoke } from '../lib/nudoPuente'
+import { anotarNotch } from '../lib/registroPuente'
 import { modo } from './notch'
 import { enCurso, reunion } from './reunion'
 
@@ -140,6 +141,7 @@ export async function alAtajo(): Promise<void> {
 }
 
 function fallo(error: ErrorGuia, sigue = false): void {
+  anotarNotch('aviso', `guia: ${error}`)
   guia.value = { ...guia.value, estado: 'error', paso: 0, total: 0, texto: MENSAJE_GUIA[error], sigue }
 }
 

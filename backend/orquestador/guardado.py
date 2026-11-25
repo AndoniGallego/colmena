@@ -105,7 +105,8 @@ class GuardadoService:
 
     def __init__(self, cierres: CierreService, enchufe, locks, call_later: Optional[Callable] = None,
                  emit: Callable[[str, dict], None] = lambda event, data: None, spawn: Optional[Callable] = None,
-                 timeout: float = TIMEOUT):
+                 timeout: float = TIMEOUT, al_escribir: Callable[[str], None] = lambda pane: None):
+        self.al_escribir = al_escribir
         self.cierres = cierres
         self.enchufe = enchufe
         self.locks = locks
@@ -276,6 +277,10 @@ class GuardadoService:
 
     async def _pedir(self, pane: _Pane) -> None:
         try:
+            try:
+                self.al_escribir(pane.pane_id)
+            except Exception:
+                log.warning("al_escribir falló", exc_info=True)
             async with self.locks.get(pane.pane_id):
                 await self.enchufe.mandar_prompt(pane.pane_id, MENSAJE)
         except TerminalesError as exc:

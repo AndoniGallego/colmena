@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import socket
 import sys
 
@@ -201,6 +202,8 @@ def armar_mensaje(entrada: dict, environ: dict) -> dict | None:
             datos["message"] = msg
             recortado = recortado or rec
     elif evento == "Stop":
+        datos["stop_hook_active"] = entrada.get("stop_hook_active") is True
+        datos["tiene_estado"] = bool(re.search(r"^```estado\s*$", str(entrada.get("last_assistant_message") or ""), re.M))
         if "last_assistant_message" in entrada:
             msg, rec = recortar_texto(str(entrada["last_assistant_message"]), TOPE_MENSAJE_FINAL)
             datos["last_assistant_message"] = msg

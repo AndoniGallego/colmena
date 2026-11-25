@@ -221,7 +221,7 @@ class BoardHub:
                 try:
                     observer(previous, board)
                 except Exception as exc:
-                    log.warning("observer del board falló: %s", exc)
+                    log.warning("observer del board falló: %s", type(exc).__name__, exc_info=True)
         if changed or force:
             for queue in list(self.subscribers):
                 self._offer(queue, board)

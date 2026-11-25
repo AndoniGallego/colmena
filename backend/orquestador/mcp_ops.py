@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from .avisos_origen import texto_mcp
 from .mcp_canal import MODOS_NO_PERMITIDOS, ErrorCanal
 from .redaccion import redactar
 from .transcript import parse_items
@@ -235,7 +236,7 @@ class OpsAcciones:
         if item is None:
             if motivo in _ARGUMENTOS:
                 raise ErrorCanal("argumentos_invalidos", motivo)
-            raise ErrorCanal(motivo or "descartado", "Colmena descartó el pedido.")
+            raise ErrorCanal(motivo or "descartado", texto_mcp(motivo or "descartado"))
         return {"pedido_id": item["id"], "estado": "pendiente", "vence": item["vence"]}
 
     async def _desde_payload(self, ident: dict, data: dict) -> dict:

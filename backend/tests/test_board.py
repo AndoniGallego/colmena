@@ -341,3 +341,11 @@ def test_board_sin_detector_no_trae_traba(projects):
     hub = BoardHub(FakeTerminales.desde_snapshot(make_snapshot("working")), DigestService(projects))
     agent = asyncio.run(hub.refresh())["workspaces"][0]["tabs"][0]["agents"][0]
     assert "traba" not in agent
+
+
+def test_observer_que_falla_loguea_traceback(caplog, projects):
+    hub = BoardHub(FakeTerminales.desde_snapshot(make_snapshot("working"), poll=0.01), DigestService(projects))
+    hub.observers.append(lambda prev, b: (_ for _ in ()).throw(KeyError("k")))
+    asyncio.run(hub.refresh())
+    rec = next(r for r in caplog.records if "observer del board" in r.getMessage())
+    assert rec.exc_info and rec.exc_info[0] is KeyError

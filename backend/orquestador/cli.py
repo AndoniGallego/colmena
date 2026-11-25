@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import logging
 import getpass
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -233,10 +234,19 @@ def serve() -> int:
     mcp_socket = ruta_mcp(os.environ)
     if mcp_socket is None:
         log.warning("XDG_RUNTIME_DIR no definido; canal del MCP desactivado")
+    from .telemetria import Telemetria, TelemetriaHandler
+
+    telemetria = Telemetria(directory / "telemetria", activa=lambda: cfg.telemetria_activa)
+    telemetria_handler = None
+    if cfg.telemetria_activa:
+        telemetria_handler = TelemetriaHandler(telemetria)
+        log.addHandler(telemetria_handler)
     app = create_app(
         cfg,
         load_secret(directory),
         StateStore(directory),
+        telemetria=telemetria,
+        telemetria_handler=telemetria_handler,
         entrada_interna=False,
         ganchos_socket=ganchos_socket,
         recarga_socket=recarga_socket,
@@ -274,6 +284,51 @@ def _kit(ki, accion: str | None, dry_run: bool, check: bool) -> int:
     return ki.instalar_kit(ki.KIT_DIR, ki.REPO_ROOT / "deploy", d, modo, print, correr, datetime.now)
 
 
+class _SinEfectos:
+    def flush(self) -> None:
+        pass
+
+    def quitar_resumenes_viejos(self, ahora=None, dias: int = 90) -> int:
+        return 0
+
+
+def telemetria_resumen(semana: str | None, sin_aviso: bool, como_json: bool) -> int:
+    from .biblioteca import Library
+    from .push import PushService
+    from .telemetria import Telemetria
+    from .telemetria_resumen import PropuestasStore, ResumenSemanal, generar_resumen, semana_anterior
+
+    os.umask(0o077)
+    directory = data_dir()
+    cfg = load_config(directory)
+    ahora = datetime.now().astimezone()
+    objetivo = semana or semana_anterior(ahora.date())
+    tel = Telemetria(directory / "telemetria", activa=lambda: cfg.telemetria_activa)
+    store = PropuestasStore(directory / "telemetria" / "propuestas.json", wall=lambda: datetime.now(timezone.utc))
+    if sin_aviso:
+        biblioteca, push, handler = _SinEfectos(), None, _SinEfectos()
+    else:
+        biblioteca, push, handler = Library(cfg, directory, load_secret(directory)), PushService(directory), _SinEfectos()
+        push.avisos.registrar_kind("resumen")
+    try:
+        datos = asyncio.run(generar_resumen(directorio=tel.directorio, semana=objetivo, propuestas=store,
+                                            biblioteca=biblioteca, push=push, handler=handler, telemetria=tel,
+                                            ahora=ahora, avisar=not sin_aviso, guardar=not sin_aviso))
+    except ValueError:
+        print("Semana inválida: usá el formato AAAA-Wnn, por ejemplo 2026-W47", file=sys.stderr)
+        return 2
+    if semana is None and not sin_aviso:
+        ResumenSemanal(directory, lambda: "", lambda: [], lambda s: None).marcar(objetivo)
+    if como_json:
+        print(json.dumps(datos, ensure_ascii=False))
+        return 0
+    nuevas = datos["propuestas"]["nuevas"]
+    print(f"Semana {objetivo}: {len(nuevas)} propuestas nuevas")
+    for c in nuevas:
+        print(f"- {c['texto']}")
+    return 0
+
+
 def main() -> None:
     if sys.argv[1:2] == ["nudo"]:
         from .nudo_cli import main_nudo
@@ -283,7 +338,7 @@ def main() -> None:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["serve", "set-pin", "descargar-modelo", "ganchos", "instalar", "exportar", "recargar-sesiones", "ver", "kit"],
+        choices=["serve", "set-pin", "descargar-modelo", "ganchos", "instalar", "exportar", "recargar-sesiones", "ver", "kit", "telemetria"],
         default="serve",
     )
     parser.add_argument("accion", nargs="?")
@@ -295,6 +350,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--permitir-hallazgos", action="store_true")
+    parser.add_argument("--semana", default=None, help="semana ISO a resumir (telemetria resumen)")
+    parser.add_argument("--sin-aviso", action="store_true", help="no guarda en la Biblioteca ni avisa")
+    parser.add_argument("--json", dest="como_json", action="store_true")
     grupo_kit = parser.add_mutually_exclusive_group()
     grupo_kit.add_argument("--con-kit", dest="kit", action="store_const", const=True, default=None)
     grupo_kit.add_argument("--sin-kit", dest="kit", action="store_const", const=False)
@@ -315,6 +373,11 @@ def main() -> None:
         sys.exit(exportar(destino, args.permitir_hallazgos))
     if args.command == "kit":
         sys.exit(kit(args.accion, args.dry_run, args.check))
+    if args.command == "telemetria":
+        if args.accion != "resumen":
+            print("Acción requerida: resumen", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(telemetria_resumen(args.semana, args.sin_aviso, args.como_json))
     if args.command == "recargar-sesiones":
         sys.exit(recargar_sesiones())
     if args.command == "ver":

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { LibItem } from '../api/types'
 import { normalizeLibItem } from '../api/normalize'
 import {
-  reunionOf, groupIndex,
+  reunionOf, resumenOf, groupIndex,
   cardVariant, dayLabel, emptyFilters, diagramaOf, formatSize, groupByDay, insertNuevos, isFiltering, libQuery,
   matchesFilters, mergePage, pruebasOf, TYPE_GROUPS, KIND_LABEL, needsRenewal, neighbours, parseLibLink, pathLabel, safeClaudeUrl, shortcutFor,
   TOKEN_RENEW_MS, viewerKind, libIdsPorDiagrama, chunkIds, pickIds, quitadoToast, removeIds,
@@ -287,5 +287,26 @@ describe('reuniones', () => {
     const n = normalizeLibItem({ id: ID, kind: 'reunion', reunion_raw: null })
     expect(n?.reunion_raw).toBeNull()
     expect(n?.tiene_charla).toBe(false)
+  })
+})
+
+describe('resúmenes', () => {
+  const raw = JSON.stringify({ semana: '2026-W47', desde: '2026-11-16', hasta: '2026-11-22', resumen: {}, propuestas: { nuevas: [{ id: 'aaaaaaaaaaaa', texto: 'Algo' }] } })
+  it('tiene filtro, etiqueta, variante y visor propios', () => {
+    expect(TYPE_GROUPS[8]).toEqual({ key: '9', label: 'Resúmenes', tipo: ['resumen'] })
+    expect(KIND_LABEL.resumen).toBe('Resumen')
+    expect(shortcutFor({ key: '9' }, false)).toBe('type9')
+    expect(cardVariant(item({ kind: 'resumen', exists: false, copia: false }))).toBe('resumen')
+    expect(viewerKind(item({ kind: 'resumen' }))).toBe('resumen')
+  })
+  it('resumenOf lee uno válido y da null con vacío, roto o de otro tipo', () => {
+    expect(resumenOf(item({ kind: 'resumen', resumen_raw: raw }))?.propuestas.nuevas[0].id).toBe('aaaaaaaaaaaa')
+    expect(resumenOf(item({ kind: 'resumen', resumen_raw: '{roto' }))).toBeNull()
+    expect(resumenOf(item({ kind: 'resumen', resumen_raw: '' }))).toBeNull()
+    expect(resumenOf(item({ kind: 'resumen', resumen_raw: null }))).toBeNull()
+    expect(resumenOf(item({ kind: 'html', resumen_raw: raw }))).toBeNull()
+  })
+  it('normalize acepta kind resumen y conserva resumen_raw', () => {
+    expect(normalizeLibItem({ id: ID, kind: 'resumen', resumen_raw: raw })).toMatchObject({ kind: 'resumen', resumen_raw: raw })
   })
 })

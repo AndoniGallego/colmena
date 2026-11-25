@@ -468,7 +468,7 @@ export function normalizeCloseResult(raw: any): CloseResult {
   return { ok: raw?.ok !== false, sesiones, event: normalizeMessage(raw?.event), ...(aviso ? { aviso } : {}), ...(guardando ? { guardando } : {}), ...(copias.length ? { copias } : {}) }
 }
 
-const LIB_KINDS: LibKind[] = ['html', 'image', 'svg', 'gif', 'pdf', 'video', 'text', 'diagrama', 'pruebas', 'reunion', 'remoto', 'otro']
+const LIB_KINDS: LibKind[] = ['html', 'image', 'svg', 'gif', 'pdf', 'video', 'text', 'diagrama', 'pruebas', 'reunion', 'resumen', 'remoto', 'otro']
 
 const VIEWER_SRC = /^https:\/\/[^/?#\s]+\/v\/[0-9a-f]{32}\/\d{9,12}\/[A-Za-z0-9_-]{43}\/$/
 
@@ -506,6 +506,7 @@ export function normalizeLibItem(raw: any): LibItem | null {
     diagrama_raw: str(raw.diagrama_raw),
     pruebas_raw: str(raw.pruebas_raw),
     ...(raw.kind === 'reunion' ? { reunion_raw: strOrNull(raw.reunion_raw), tiene_charla: raw.tiene_charla === true } : {}),
+    ...(raw.kind === 'resumen' ? { resumen_raw: strOrNull(raw.resumen_raw) } : {}),
     evidencias: Object.fromEntries(Object.entries(raw.evidencias && typeof raw.evidencias === 'object' ? raw.evidencias : {}).filter((e): e is [string, string] => typeof e[1] === 'string')),
     src: viewerSrc(raw.src),
     ...(vecinos ? { vecinos } : {}),

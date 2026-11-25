@@ -9,7 +9,7 @@ Ando trabaja con Colmena: las sesiones corren en las terminales propias de Colme
 - Si tenés las herramientas `colmena_*`, usá esas (ver `colmena-mcp.md`); esta marca queda de respaldo.
 - Pedírselo a Colmena con la marca `[colmena-pestana]`, no con tmux ni otras herramientas.
 - Un único comando Bash, solo `echo` con comillas simples y el JSON en una sola línea (sin comillas simples adentro).
-- No se abre nada sin el toque del usuario: Colmena le muestra un pedido con Abrir/No (vence en 10 minutos). Decirle que le llegó un pedido para aprobar. Si la carpeta no es una de las que Colmena permite, no aparece nada: avisarle y sugerir abrirla a mano desde el tablero.
+- No se abre nada sin el toque del usuario: Colmena le muestra un pedido con Abrir/No (vence en 10 minutos). Decirle que le llegó un pedido para aprobar. Si la carpeta no es una de las que Colmena permite, a Ando no le llega nada y a vos te llega un aviso con el motivo: contárselo y sugerir abrirla a mano desde el tablero.
 
 Una pestaña de Claude (va al grupo de la sesión que pide):
 

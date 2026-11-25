@@ -25,7 +25,6 @@ import AvisosBell from './AvisosBell.vue'
 import UsoPlanPill from './UsoPlanPill.vue'
 import RollingNumber from './RollingNumber.vue'
 import { gsap, isSoft, ring, useGsap } from '../motion'
-import { useFocusTrap } from '../lib/focusTrap'
 import { useTopBarMenu } from './useTopBarMenu'
 import { ACCIONES_BARRA as AB } from '../lib/accionesBarra'
 import { vCartel } from '../lib/vCartel'
@@ -68,12 +67,7 @@ const {
   menuEl,
   menuPop,
   menuPos,
-  salirPopOpen,
-  salirBtnRef,
-  salirPopRef,
-  salirPos,
   toggleMenu,
-  toggleSalirPopover,
   onDoc,
   onKey,
   revoke,
@@ -81,15 +75,6 @@ const {
 } = useTopBarMenu(revokeAllSessions)
 /** refs usados en plantilla (vue-tsc no marca uso vía ref="") */
 void menuEl
-void salirBtnRef
-void salirPopRef
-const salirCancelBtn = ref<HTMLButtonElement | null>(null)
-const { onKeydown: salirTrapKeydown } = useFocusTrap(salirPopRef, salirPopOpen, {
-  onEscape: () => {
-    salirPopOpen.value = false
-  },
-  initial: () => salirCancelBtn.value,
-})
 const chipEls = new Map<string, HTMLElement>()
 const chipRef = (kind: string) => (el: unknown) => {
   if (el instanceof HTMLElement) chipEls.set(kind, el)
@@ -221,47 +206,7 @@ onBeforeUnmount(() => {
       </button>
       <button v-else class="icon-btn hit" aria-label="Buscar" @click="abrirPaleta"><Icon name="search" :size="16" /></button>
       <AvisosBell />
-      <button v-cartel="{ nombre: theme === 'dark' ? 'Tema claro' : 'Tema oscuro', desc: AB.tema.desc }" class="icon-btn hit" :aria-label="theme === 'dark' ? 'Tema claro' : 'Tema oscuro'" @click="toggleTheme($event)">
-        <Transition name="icon-swap" mode="out-in">
-          <Icon :key="theme" :name="theme === 'dark' ? 'sun' : 'moon'" :size="16" />
-        </Transition>
-      </button>
-      <template v-if="!compact && desktop">
-        <button v-cartel="AB.ajustes" type="button" class="icon-btn hit" aria-label="Ajustes" @click="openAjustes">
-          <Icon name="grid" :size="16" />
-        </button>
-        <button v-cartel="AB.entornos" type="button" class="icon-btn hit" aria-label="Entornos" @click="openEntornos">
-          <Icon name="monitor" :size="16" />
-        </button>
-        <button v-cartel="AB.kit" type="button" class="icon-btn hit" aria-label="Kit" @click="openKit">
-          <Icon name="hex" :size="16" />
-        </button>
-        <button v-cartel="AB.tareas" type="button" class="icon-btn hit" aria-label="Tareas programadas" @click="openTareas">
-          <Icon name="clock" :size="16" />
-        </button>
-        <button v-cartel="AB.limpiar" type="button" class="icon-btn hit" aria-label="Limpiar sesiones" @click="abrirLimpiezaSesiones()">
-          <Icon name="broom" :size="16" />
-        </button>
-        <div ref="salirBtnRef" class="menu-wrap salir-wrap">
-          <button v-cartel="AB.salir" type="button" class="icon-btn hit" aria-label="Salir de Colmena" @click="toggleSalirPopover">
-            <Icon name="power" :size="16" />
-          </button>
-          <Teleport to="body">
-            <Transition name="pop">
-              <div v-if="salirPopOpen" ref="salirPopRef" class="menu salir-pop" role="dialog" aria-modal="true" aria-label="Confirmar salida" :style="{ top: `${salirPos.top}px`, right: `${salirPos.right}px` }" @keydown="salirTrapKeydown">
-                <div class="confirm">
-                  <p>Salís de Colmena en todos tus dispositivos, este incluido, y vas a tener que poner el PIN de nuevo. Las terminales y las sesiones de Claude no se tocan.</p>
-                  <div class="confirm-actions">
-                    <button ref="salirCancelBtn" type="button" class="c-btn" :disabled="revoking" @click="salirPopOpen = false">Cancelar</button>
-                    <button type="button" class="c-btn danger" :disabled="revoking" @click="revoke">{{ revoking ? 'Saliendo…' : 'Salir' }}</button>
-                  </div>
-                </div>
-              </div>
-            </Transition>
-          </Teleport>
-        </div>
-      </template>
-      <div v-else ref="menuEl" class="menu-wrap">
+      <div ref="menuEl" class="menu-wrap">
         <button class="icon-btn hit" aria-label="Más opciones" aria-haspopup="menu" :aria-expanded="menuOpen" @click="toggleMenu">
           <Icon name="dots" :size="16" />
         </button>
@@ -271,6 +216,10 @@ onBeforeUnmount(() => {
             <button v-if="!confirming" class="item" role="menuitem" @click="menuOpen = false; openAjustes()">
               <Icon name="grid" :size="14" />
               <span class="item-txt">Ajustes<small>{{ AB.ajustes.desc }}</small></span>
+            </button>
+            <button v-if="!confirming" class="item" role="menuitem" @click="toggleTheme($event); menuOpen = false">
+              <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="14" />
+              <span class="item-txt">{{ theme === 'dark' ? 'Tema claro' : 'Tema oscuro' }}<small>{{ AB.tema.desc }}</small></span>
             </button>
             <button v-if="!confirming" class="item" role="menuitem" @click="menuOpen = false; openEntornos()">
               <Icon name="monitor" :size="14" />
@@ -493,6 +442,11 @@ onBeforeUnmount(() => {
 .conn[data-conn='reconnecting'] i,
 .conn[data-conn='connecting'] i {
   animation: blink 1s steps(2, jump-none) infinite;
+}
+.conn,
+.clock {
+  white-space: nowrap;
+  flex: none;
 }
 .clock {
   font-size: var(--t-md);
